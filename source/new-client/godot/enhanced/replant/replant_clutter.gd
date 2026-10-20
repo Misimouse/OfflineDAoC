@@ -20,6 +20,7 @@ var _building := Vector2i.ZERO
 var _job := {}
 var _tags_by_chunk := {}
 var _tag_cell := Vector2i(-1, -1)
+var _tag_shrub := false
 var _ready_image: Image
 var _ready_texture: ImageTexture
 const WORK_BUDGET_US := 6000
@@ -283,9 +284,9 @@ func _setup_replacement_shader() -> bool:
 	# UV2 is the stock sprite's wind metadata, not its atlas UV0. Pack cell coordinates in values exactly
 	# representable even as half floats; floor(UV2.x) recovers the unchanged top/bottom wind weight.
 	var code := SHADER.replace("UV2.x", "floor(UV2.x)")
-	code = code.replace("varying float fade;", "varying float fade;\nvarying vec2 replant_cell;\nuniform sampler2D replant_ready : filter_nearest, repeat_disable;\nuniform float replant_on = 1.0;")
-	code = code.replace("void vertex() {", "void vertex() {\n replant_cell = vec2(fract(UV2.x) * 2.0, (UV2.y - 0.5) / 256.0);")
-	code = code.replace("ALPHA = c.a * fade;", "ALPHA = c.a * fade * (1.0 - step(0.5, UV2.y) * texture(replant_ready, replant_cell).r * replant_on);")
+	code = code.replace("varying float fade;", "varying float fade;\nvarying vec2 replant_cell;\nvarying float replant_shrub;\nuniform sampler2D replant_ready : filter_nearest, repeat_disable;\nuniform float replant_on = 1.0;")
+	code = code.replace("void vertex() {", "void vertex() {\n replant_shrub = step(512.0, UV2.y);\n replant_cell = vec2(fract(UV2.x) * 2.0, (UV2.y - replant_shrub * 512.0 - 0.5) / 256.0);")
+	code = code.replace("ALPHA = c.a * fade;", "ALPHA = c.a * fade * (1.0 - step(0.5, UV2.y) * mix(texture(replant_ready, replant_cell).r, 1.0, replant_shrub) * replant_on);")
 	var shader := Shader.new()
 	shader.code = code
 	_material.shader = shader
@@ -296,7 +297,7 @@ func _setup_replacement_shader() -> bool:
 
 func _refresh_ready() -> void:
 	if _ready_image == null: return
-	_ready_image.fill(Color.BLACK)
+	# Remember replaced cells for this overlay session, even after their parcels unload.
 	for cells in chunk_cells.values():
 		for cell in cells: _ready_image.set_pixel(cell.x, cell.y, Color.WHITE)
 	_ready_texture.update(_ready_image)
@@ -304,18 +305,24 @@ func _refresh_ready() -> void:
 
 func _recount_removed() -> void:
 	removed_counts.clear()
-	for c in chunk_cells:
-		var tags: Dictionary = _tags_by_chunk.get(c, {})
-		for cell in chunk_cells[c]:
-			for item_name in tags.get(cell, {}):
-				removed_counts[item_name] = int(removed_counts.get(item_name, 0)) + int(tags[cell][item_name])
+	if not enhanced_enabled: return
+	for c in _tags_by_chunk:
+		var tags: Dictionary = _tags_by_chunk[c]
+		for cell in tags:
+			for item_name in tags[cell]:
+				# Unwanted shrubs stay hidden throughout the stock draw range, including unloaded
+				# replacement parcels. Low grass remains a fallback until its cell is ready.
+				if String(item_name).to_lower() in SHRUBS or (_ready_image != null and _ready_image.get_pixel(cell.x, cell.y).r > 0.5):
+					removed_counts[item_name] = int(removed_counts.get(item_name, 0)) + int(tags[cell][item_name])
 
 func _add_tuft(st: SurfaceTool, item: Dictionary, pos: Vector3, rng: RandomNumberGenerator) -> void:
 	_tag_cell = Vector2i(-1, -1)
+	_tag_shrub = false
 	var item_name := String(item.name).to_lower()
 	var replaceable: bool = item_name in LOW or (options.get("remove_shrubs", true) and item_name in SHRUBS)
 	if not plan.is_empty() and replaceable and sample_mask(Vector2(pos.x, pos.z)).r > 0:
 		_tag_cell = Vector2i(clampi(int(pos.x / float(zone.info.size_m) * 256), 0, 255), clampi(int(pos.z / float(zone.info.size_m) * 256), 0, 255))
+		_tag_shrub = item_name in SHRUBS
 		if not _tags_by_chunk[_building].has(_tag_cell): _tags_by_chunk[_building][_tag_cell] = {}
 		var tags: Dictionary = _tags_by_chunk[_building][_tag_cell]
 		tags[item.name] = int(tags.get(item.name, 0)) + 1
@@ -330,6 +337,8 @@ func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, u0: 
 	var tops := [0.0, 0.0, 1.0, 0.0, 1.0, 1.0]
 	var cell_x := (float(_tag_cell.x) + 0.5) / 512.0 if _tag_cell.x >= 0 else 0.0
 	var cell_z := float(_tag_cell.y + 1) if _tag_cell.y >= 0 else 0.0
+	# Integers 513..768 are exact in half floats; bit 512 marks only eligible unwanted shrubs.
+	if _tag_shrub: cell_z += 512.0
 	for i in 6:
 		st.set_color(tint)
 		st.set_uv(uvs[i])
@@ -361,6 +370,7 @@ func _clear_new() -> void:
 	chunk_cells.clear()
 	removed_counts.clear()
 	life_chunk = Vector2i(99999, 99999)
+	if _ready_image != null: _ready_image.fill(Color.BLACK)
 	_refresh_ready()
 
 func set_enhanced(value: bool) -> void:
