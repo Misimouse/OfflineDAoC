@@ -51,12 +51,17 @@ public partial class DaocClient : Node
 	// ---------------------------------------------------------------- connecting
 
 	// Connects and sends the handshake (the crypt key request announcing client 1.127).
-	public bool Open(string host)
+	public bool Open(string host) => OpenAt(host, Port);
+
+	// An explicit endpoint lets a development client use an isolated server beside a running game.
+	public bool OpenAt(string host, int port)
 	{
 		try
 		{
+			if (port < 1 || port > 65535)
+				throw new ArgumentOutOfRangeException(nameof(port), "Server port must be between 1 and 65535.");
 			_tcp = new TcpClient { NoDelay = true };
-			_tcp.Connect(host, Port);
+			_tcp.Connect(host, port);
 			_stream = _tcp.GetStream();
 		}
 		catch (Exception e)

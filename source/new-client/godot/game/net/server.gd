@@ -17,6 +17,7 @@ signal jumped(entry: Dictionary)                    # the server moved you insid
 
 var active := false                      # started by the launcher: the server is the game
 var host := "127.0.0.1"
+var server_port := 10300                 # --server-port for an isolated development server
 var account := ""
 var password := ""
 var client: Node = null                  # DaocClient (C#)
@@ -85,6 +86,9 @@ func _ready() -> void:
 		if a.begins_with("--server="):
 			host = a.split("=", true, 1)[1]
 			active = true
+		elif a.begins_with("--server-port="):
+			var value := a.split("=", true, 1)[1]
+			server_port = value.to_int() if value.is_valid_int() else -1
 		elif a.begins_with("--account="):
 			account = a.split("=", true, 1)[1]
 		elif a.begins_with("--password="):
@@ -94,6 +98,11 @@ func _ready() -> void:
 		elif a == "--custom-class=off":
 			custom_class = false
 	if not active:
+		return
+	if server_port < 1 or server_port > 65535:
+		active = false
+		last_error = "Server port must be between 1 and 65535."
+		push_error("[server] " + last_error)
 		return
 	var script = load("res://game/net/DaocClient.cs")
 	if script == null:
@@ -240,7 +249,7 @@ func _process(delta: float) -> void:
 func start() -> void:
 	if not active or client == null:
 		return
-	if client.call("Open", host):
+	if client.call("OpenAt", host, server_port):
 		client.call("Login", account, password)
 
 
