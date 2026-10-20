@@ -84,6 +84,9 @@ func run() -> void:
 	if not await until(func():return not is_instance_valid(current_scene.get("loading")), 30):
 		fail("La escena no ha terminado de retirar la pantalla de carga.")
 		return
+	var tree_trial = load("res://enhanced/trees/elm_trial.gd").new()
+	current_scene.add_child(tree_trial)
+	tree_trial.attach(current_scene.get("region"))
 	root.title = "DAoC Enhanced — Ardee LAB (copia de pruebas)"
 	ready = true
 	status("ready", "Ardee lista. Al salir se cerrará también el servidor de pruebas.")
