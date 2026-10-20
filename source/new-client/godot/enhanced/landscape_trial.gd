@@ -19,6 +19,7 @@ var motion_time := 0.0
 var patches: Array = []
 var site_index := 0
 var sites := [Vector2(1364, 1263), Vector2(1190, 1180)]
+var life: Array = []
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -32,7 +33,7 @@ func run() -> void:
 	root.size = Vector2i(1600, 900)
 	if args.has("4k"):
 		root.size = Vector2i(3840, 2160)
-	root.title = "Enhanced - Cobertura y ladera de Ardee"
+	root.title = "Enhanced - Flores, insectos y plantas altas"
 	Engine.max_fps = 0
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	world = Node3D.new()
@@ -52,7 +53,7 @@ func run() -> void:
 	sky.time_scale = 0
 	sky.storm_forced = 0
 	sky.set_process(false)
-	original_clutter = load("res://game/clutter.gd").new()
+	original_clutter = load("res://enhanced/selective_clutter.gd").new()
 	world.add_child(original_clutter)
 	original_clutter.setup(zone, cam)
 	await physics_frame
@@ -66,6 +67,10 @@ func run() -> void:
 		patch.build(zone, sites[site], Vector2(6.2, 9.7))
 		patch.set_active(false)
 		patches.append(patch)
+		var insects = load("res://enhanced/flower_insects.gd").new()
+		patch.add_child(insects)
+		insects.setup(patch, 207991 + site)
+		life.append(insects)
 	grass = patches[0]
 	var layer := CanvasLayer.new()
 	world.add_child(layer)
@@ -82,16 +87,25 @@ func run() -> void:
 	var buttons := HBoxContainer.new()
 	buttons.position = Vector2(20, 135)
 	layer.add_child(buttons)
-	for entry in [["A - Original", func():set_enabled(false)], ["B - Paisaje", func():set_enabled(true)], ["Pozo", func():set_site(0)], ["Ladera", func():set_site(1)], ["Cerca", func():set_view(0)], ["Jugando", func():set_view(1)], ["Conjunto", func():set_view(2)], ["Movimiento", func():motion = not motion], ["Viento", func():grass.animate = not grass.animate], ["Luz", func():toggle_light()], ["Salir", func():quit(0)]]:
+	for entry in [["A - Original", func():set_enabled(false)], ["B - Paisaje", func():set_enabled(true)], ["Pozo", func():set_site(0)], ["Ladera", func():set_site(1)], ["Cerca", func():set_view(0)], ["Jugando", func():set_view(1)], ["Conjunto", func():set_view(2)], ["Flores", func():set_view(3)], ["Movimiento", func():motion = not motion], ["Viento", func():grass.animate = not grass.animate], ["Insectos", func():life[site_index].visible = not life[site_index].visible], ["Luz", func():toggle_light()], ["Salir", func():quit(0)]]:
 		var button := Button.new()
 		button.text = entry[0]
-		button.custom_minimum_size = Vector2(118, 42)
+		button.custom_minimum_size = Vector2(100, 42)
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(entry[1])
 		buttons.add_child(button)
 	set_view(0)
 	set_enabled(true)
 	print("LANDSCAPE_LAB_READY resolution=", root.size)
+	if args.has("detail-capture"):
+		set_site(1)
+		set_view(3)
+		for frame in 90:
+			await process_frame
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png(output.path_join("detalle_insectos.png"))
+		quit(0)
+		return
 	if args.has("capture"):
 		await capture_and_measure()
 		if not args.has("keep-open"):
@@ -105,6 +119,7 @@ func set_enabled(value: bool) -> void:
 	for patch in patches:
 		patch.set_active(false)
 	grass.set_active(value)
+	original_clutter.set_cleanup(value, centre)
 	title.text = ("B - COBERTURA BAJA" if enabled else "A - ORIGINAL") + " | " + ["Pozo de Ardee: suelo mixto", "Ladera junto a Ardee: suelo verde original"][site_index] + "\nComparacion local, sin servidor. Pozo y Ladera cambian el entorno."
 
 func set_site(which: int) -> void:
@@ -124,9 +139,12 @@ func set_view(which: int) -> void:
 		cam.position = target + Vector3(1.5, 1.35, 4.5)
 	elif which == 1:
 		cam.position = target + Vector3(4.5, 1.7, 10.0)
-	else:
+	elif which == 2:
 		cam.position = target + Vector3(8, 9, 18)
-	cam.position.y = maxf(cam.position.y, zone.height_at(cam.position.x, cam.position.z) + 1.65)
+	else:
+		target = life[site_index].actors[0].node.position
+		cam.position = target + Vector3(0.5, 0.35, 0.85)
+	cam.position.y = maxf(cam.position.y, zone.height_at(cam.position.x, cam.position.z) + (0.4 if which == 3 else 1.65))
 	cam.look_at(target)
 
 func toggle_light() -> void:
@@ -141,6 +159,11 @@ func _process(delta: float) -> bool:
 		var target := Vector3(centre.x, h + 0.15, centre.y)
 		cam.position = target + Vector3(sin(motion_time) * 7, 1.7, cos(motion_time) * 7)
 		cam.position.y = maxf(cam.position.y, zone.height_at(cam.position.x, cam.position.z) + 1.65)
+		cam.look_at(target)
+	elif view_index == 3 and not life.is_empty():
+		var target: Vector3 = life[site_index].actors[0].node.position
+		cam.position = target + Vector3(0.5, 0.35, 0.85)
+		cam.position.y = maxf(cam.position.y, zone.height_at(cam.position.x, cam.position.z) + 0.4)
 		cam.look_at(target)
 	if stats != null:
 		stats.text = "%d FPS | %s | %d plantas | Viento: %s" % [Engine.get_frames_per_second(), str(root.size), grass.instances if enabled else 0, "si" if grass.animate else "pausado"]
@@ -179,6 +202,20 @@ func capture_and_measure() -> void:
 					push_error("Capture failed")
 					quit(4)
 					return
+		# Record actual routes and motion near flowers, with the cleaned scene active.
+		set_enabled(true)
+		for frame in 60:
+			await process_frame
+		var motion_before: Dictionary = life[site].snapshot()
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png(output.path_join(["pozo", "ladera"][site] + "_vuelo_antes.png"))
+		for frame in 120:
+			await process_frame
+		var motion_after: Dictionary = life[site].snapshot()
+		await RenderingServer.frame_post_draw
+		root.get_texture().get_image().save_png(output.path_join(["pozo", "ladera"][site] + "_vuelo_despues.png"))
+		var ecology_file := FileAccess.open(output.path_join(["pozo", "ladera"][site] + "_vida.json"), FileAccess.WRITE)
+		ecology_file.store_string(JSON.stringify({"before": motion_before, "after": motion_after, "removed_undergrowth": original_clutter.removed_counts, "preserved": "All original seed/tall grasses: filter only group 6 undergrowth within 26m"}, "\t"))
 		var prefix: String = ["pozo", "ladera"][site]
 		grass.coverage.save_png(output.path_join(prefix + "_mascara.png"))
 		var placement_file := FileAccess.open(output.path_join(prefix + "_plantas.json"), FileAccess.WRITE)

@@ -2,11 +2,19 @@
 
 ## Landscape extension
 
+### Flower life and selective cleanup (v4)
+
+`flower_insects.gd` adds three butterflies and two bees per patch. Actual transformed flower centres are the route anchors. Flights interpolate between nearby flowers (at most 2.6 m), with vertical bobbing, pauses, wing motion and culling beyond 20 m. Route sampling rejects clear masks and paths; isolated flowers get hovering rather than wandering. This is a client-only effect, with no server actors or sound. Routes and before/after positions are exported for validation. The Flores view follows a butterfly for inspection; Insectos toggles the effect.
+
+`selective_clutter.gd` subclasses the original clutter builder and filters six explicitly named group 6 undergrowth items within 26 m of the active site. Seed grasses, tall grasses, other groups, tree fixtures and world data are preserved. It consumes the original tuft RNG sequence on a discard surface before skipping the geometry, so following vegetation does not move. A zero-area triangle prevents the original builder from committing an empty chunk. A/B restores/filters the original clutter in memory; rebuilding it can cause a visible pause in this prototype. This is not a global deletion rule.
+
+The complete scene comparison includes the insects; their marginal frame cost has not been isolated. Dense vegetation still needs performance work. Existing engine rendering warnings are recorded with test results.
+
 ### Coverage and hillside trial (v3)
 
 The current harness has two independently selected sites: the well parcel and a nearby green slope at zone-local metres (1190, 1180). Two low-cover mesh variants add 4–11 cm foliage before scale variation. A separate random stream keeps the existing well plants exactly where they were. Low cover aligns with the terrain normal and respects the same mask and physics exclusions.
 
-The well keeps its local soil blend. The hillside has **zero terrain material overrides** and a greener foliage profile, with no dry tufts; its original ground is preserved. These are manually chosen site profiles, not automatic biome detection or verified regional transitions. Original ground clutter is still present in both A/B variants.
+The well keeps its local soil blend. The hillside has **zero terrain material overrides** and a greener foliage profile, with no dry tufts; its original ground is preserved. These are manually chosen site profiles, not automatic biome detection or verified regional transitions. Original ground clutter was retained in v3; v4 adds the selective cleanup described above.
 
 Buttons Pozo/Ladera select the site, A/B toggles the treatment, and the camera remains consistent within each comparison. Capture now measures both sites at two distances, A/B/B/A, 45 warmup and 120 measured frames per segment. Higher coverage adds GPU cost and is not approved for world-wide deployment.
 
