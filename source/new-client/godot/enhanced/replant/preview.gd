@@ -85,6 +85,13 @@ func run() -> void:
 			toggle(b)
 			for f in 100:
 				await process_frame
+			var settle_deadline := Time.get_ticks_msec() + 60000
+			while not clutter.is_settled() and Time.get_ticks_msec() < settle_deadline:
+				await process_frame
+			if not clutter.is_settled():
+				push_error("Vegetation did not finish preparing within the capture warmup")
+				quit(5)
+				return
 			var started := Time.get_ticks_usec()
 			for f in 120:
 				await process_frame
@@ -118,7 +125,7 @@ func _process(delta: float) -> bool:
 	var count := 0
 	for patch in clutter.chunk_plants.values():
 		if is_instance_valid(patch): count += int(patch.get_meta("instances", 0))
-	label.text = "%s | %s | %d plantas | %.0f FPS\nWASD mover · Q/E altura · Boton derecho mirar · Espacio A/B · Esc salir" % [zone.info.get("name", str(zone.info.id)), "B - Replantado" if enabled else "A - Original", count, Engine.get_frames_per_second()]
+	label.text = "%s | %s | %d plantas | %s | %.0f FPS\nWASD mover · Q/E altura · Boton derecho mirar · Espacio A/B · Esc salir" % [zone.info.get("name", str(zone.info.id)), "B - Replantado" if enabled else "A - Original", count, "Listo" if clutter.is_settled() else "Preparando parcelas", Engine.get_frames_per_second()]
 	return false
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
