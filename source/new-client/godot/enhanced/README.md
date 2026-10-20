@@ -1,5 +1,13 @@
 # Enhanced: Ardee grass laboratory
 
+## Landscape extension
+
+`landscape_trial.gd` / `landscape_patch.gd` extend the bounded experiment with seven plant types (fine/broad grass, dry tufts, clover, basal rosettes, white/yellow flowers). All meshes are deterministic procedural geometry. DAoC `h_grass` and `h_ground_scrub` textures are reused through one terrain material clone on patch 6_6. The shader source is extended in memory; original terrain resources remain unchanged.
+
+One 256x256 mask controls both local soil blending and plant coverage, with a soft irregular boundary, a cleared route from the well and a well exclusion. Its second channel gives continuous colour vigour variation. Physics queries reject placements whose first surface stands above the ground. The current placement mask is handcrafted for the parcel: original `grassmap`, `densemap` and terrain splat data were inspected, but are not yet the placement authority. Green/dry transitions across a whole zone remain unresolved.
+
+Launch the extension with `--script res://enhanced/landscape_trial.gd`; the same `--4k`, `--capture`, `--out` and `--keep-open` arguments apply. Capture uses 60 warmup and 120 measured frames per A/B/B/A segment. Both plants and local ground treatment toggle together. This is a graphics layout prototype with simple botanical meshes, not a finished photorealistic asset library or a full-game performance validation.
+
 Standalone graphical prototype based on OfflineDAoC tag v0.37c. It loads actual zone207 terrain, fixtures and sky, retaining the stock ground clutter in both A/B variants. No server is started or contacted. No original scene, model, UV, shader or terrain file is changed.
 
 `grass_patch.gd` builds a seeded patch of folded, tapered geometry blades as one MultiMesh. The prototype has varied heights/colours, anchored wind motion, an irregular feathered boundary, no cast shadows, and geometric distance reduction. It uses no raster texture or AI. Placement is deliberately limited to one experimental parcel near the Ardee well; this is not a production terrain mask, global vegetation system or replacement tree renderer.
