@@ -2,7 +2,9 @@
 
 ## Landscape extension
 
-`landscape_trial.gd` / `landscape_patch.gd` extend the bounded experiment with seven plant types (fine/broad grass, dry tufts, clover, basal rosettes, white/yellow flowers). All meshes are deterministic procedural geometry. DAoC `h_grass` and `h_ground_scrub` textures are reused through one terrain material clone on patch 6_6. The shader source is extended in memory; original terrain resources remain unchanged.
+`landscape_trial.gd` / `landscape_patch.gd` extend the bounded experiment with nine plant families and 25 geometry variants (fine/broad grass, dry tufts, clover, basal rosettes, white/yellow flowers, narrow-leaf herbs and small ferns). All meshes are deterministic procedural geometry. Variant selection does not consume the placement random stream: plant count and positions stay identical to the previous landscape trial. Some existing plants are replaced by the new families.
+
+Version 2 uses DAoC `h_soil` and `h_ground_scrub` textures at finer world scales through one terrain material clone on patch 6_6. It removes the large grass-photo base, mixes rotated soil samples to soften repetition, and brings ground and living foliage towards a shared muted olive palette. Petals preserve their colours; dry vegetation is dimmed separately. No resolution increase or AI processing is involved. The shader source is extended in memory; original terrain resources remain unchanged.
 
 One 256x256 mask controls both local soil blending and plant coverage, with a soft irregular boundary, a cleared route from the well and a well exclusion. Its second channel gives continuous colour vigour variation. Physics queries reject placements whose first surface stands above the ground. The current placement mask is handcrafted for the parcel: original `grassmap`, `densemap` and terrain splat data were inspected, but are not yet the placement authority. Green/dry transitions across a whole zone remain unresolved.
 

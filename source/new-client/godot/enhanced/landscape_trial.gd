@@ -29,7 +29,7 @@ func run() -> void:
 	root.size = Vector2i(1600, 900)
 	if args.has("4k"):
 		root.size = Vector2i(3840, 2160)
-	root.title = "Enhanced - Paisaje de Ardee"
+	root.title = "Enhanced - Paisaje de Ardee v2"
 	Engine.max_fps = 0
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	world = Node3D.new()
@@ -93,7 +93,7 @@ func run() -> void:
 func set_enabled(value: bool) -> void:
 	enabled = value
 	grass.set_active(value)
-	title.text = ("B - PAISAJE INTEGRADO" if enabled else "A - ORIGINAL") + " | Ardee, junto al pozo\nMismo escenario, hora 14:00. Parcela experimental; sin servidor."
+	title.text = ("B - SUELO Y PLANTAS v2" if enabled else "A - ORIGINAL") + " | Ardee, junto al pozo\nMismo escenario, hora 14:00. Parcela experimental; sin servidor."
 
 func set_view(which: int) -> void:
 	view_index = which
