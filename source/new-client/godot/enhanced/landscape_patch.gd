@@ -23,53 +23,8 @@ func build(zone: Node3D, _centre: Vector2, _radius: Vector2) -> void:
 	_build_mask()
 	if not green_profile:
 		_bind_ground(zone)
-	material = ShaderMaterial.new()
-	var shader := Shader.new()
-	shader.code = """
-shader_type spatial;
-render_mode cull_disabled;
-uniform float wind_clock = 0.0;
-uniform float green_profile = 0.0;
-varying float vigour;
-void vertex() {
-	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	float phase = wind_clock * 1.65 + wp.x * 0.65 + wp.z * 0.38;
-	float weight = clamp(VERTEX.y / 0.4, 0.0, 1.0);
-	VERTEX.x += sin(phase) * 0.026 * weight * weight;
-	VERTEX.z += cos(phase * 0.8) * 0.016 * weight * weight;
-	float shrink = 1.0 - smoothstep(35.0, 50.0, distance(wp, CAMERA_POSITION_WORLD));
-	VERTEX *= shrink;
-	vigour = INSTANCE_CUSTOM.r;
-}
-void fragment() {
-	// Keep living foliage in a shared olive palette; preserve flower petal colours.
-	float foliage = step(COLOR.r * 1.06, COLOR.g);
-	vec3 olive = mix(vec3(0.105, 0.135, 0.043), vec3(0.095, 0.165, 0.052), vigour);
-	olive = mix(olive, vec3(0.10, 0.215, 0.065), green_profile);
-	vec3 vegetation = mix(COLOR.rgb * 0.72, olive, 0.62);
-	ALBEDO = mix(COLOR.rgb, vegetation, foliage);
-	float straw = (1.0 - step(0.40, COLOR.r)) * step(COLOR.g, COLOR.r) * step(COLOR.b * 1.4, COLOR.g);
-	ALBEDO *= mix(1.0, 0.65, straw);
-	ROUGHNESS = 0.94;
-	SPECULAR = 0.12;
-	NORMAL = FRONT_FACING ? NORMAL : -NORMAL;
-}
-"""
-	material.shader = shader
-	material.set_shader_parameter("green_profile", 1.0 if green_profile else 0.0)
-	var meshes := {}
-	for variant in 3:
-		meshes["hierba_fina_%d" % variant] = _grass_mesh(0, variant)
-		meshes["hierba_ancha_%d" % variant] = _grass_mesh(1, variant)
-		meshes["matas_secas_%d" % variant] = _grass_mesh(2, variant)
-		meshes["treboles_%d" % variant] = _clover_mesh(variant)
-		meshes["rosetas_%d" % variant] = _rosette_mesh(variant)
-		meshes["margaritas_%d" % variant] = _flower_mesh(false, variant)
-		meshes["flores_amarillas_%d" % variant] = _flower_mesh(true, variant)
-	for variant in 2:
-		meshes["hojas_largas_%d" % variant] = _herb_mesh(variant)
-		meshes["helechos_%d" % variant] = _fern_mesh(variant)
-		meshes["tapiz_bajo_%d" % variant] = _low_cover_mesh(variant)
+	material = make_material(green_profile)
+	var meshes := make_catalog()
 	var positions := {}
 	var colours := {}
 	for species in meshes:
@@ -381,3 +336,56 @@ func _low_cover_mesh(variant: int) -> ArrayMesh:
 		_triangle(st, base - side * 0.012, middle - side * 0.014, tip, col)
 		_triangle(st, base + side * 0.012, tip, middle + side * 0.014, col * 1.08)
 	return _finish(st)
+
+func make_material(green: bool = true) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = """
+shader_type spatial;
+render_mode cull_disabled;
+uniform float wind_clock = 0.0;
+uniform float green_profile = 0.0;
+varying float vigour;
+void vertex() {
+	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	float phase = wind_clock * 1.65 + wp.x * 0.65 + wp.z * 0.38;
+	float weight = clamp(VERTEX.y / 0.4, 0.0, 1.0);
+	VERTEX.x += sin(phase) * 0.026 * weight * weight;
+	VERTEX.z += cos(phase * 0.8) * 0.016 * weight * weight;
+	float shrink = 1.0 - smoothstep(35.0, 50.0, distance(wp, CAMERA_POSITION_WORLD));
+	VERTEX *= shrink;
+	vigour = INSTANCE_CUSTOM.r;
+}
+void fragment() {
+	// Keep living foliage in a shared olive palette; preserve flower petal colours.
+	float foliage = step(COLOR.r * 1.06, COLOR.g);
+	vec3 olive = mix(vec3(0.105, 0.135, 0.043), vec3(0.095, 0.165, 0.052), vigour);
+	olive = mix(olive, vec3(0.10, 0.215, 0.065), green_profile);
+	vec3 vegetation = mix(COLOR.rgb * 0.72, olive, 0.62);
+	ALBEDO = mix(COLOR.rgb, vegetation, foliage);
+	float straw = (1.0 - step(0.40, COLOR.r)) * step(COLOR.g, COLOR.r) * step(COLOR.b * 1.4, COLOR.g);
+	ALBEDO *= mix(1.0, 0.65, straw);
+	ROUGHNESS = 0.94;
+	SPECULAR = 0.12;
+	NORMAL = FRONT_FACING ? NORMAL : -NORMAL;
+}
+"""
+	material.shader = shader
+	material.set_shader_parameter("green_profile", 1.0 if green else 0.0)
+	return material
+
+func make_catalog() -> Dictionary:
+	var meshes := {}
+	for variant in 3:
+		meshes["hierba_fina_%d" % variant] = _grass_mesh(0, variant)
+		meshes["hierba_ancha_%d" % variant] = _grass_mesh(1, variant)
+		meshes["matas_secas_%d" % variant] = _grass_mesh(2, variant)
+		meshes["treboles_%d" % variant] = _clover_mesh(variant)
+		meshes["rosetas_%d" % variant] = _rosette_mesh(variant)
+		meshes["margaritas_%d" % variant] = _flower_mesh(false, variant)
+		meshes["flores_amarillas_%d" % variant] = _flower_mesh(true, variant)
+	for variant in 2:
+		meshes["hojas_largas_%d" % variant] = _herb_mesh(variant)
+		meshes["helechos_%d" % variant] = _fern_mesh(variant)
+		meshes["tapiz_bajo_%d" % variant] = _low_cover_mesh(variant)
+	return meshes

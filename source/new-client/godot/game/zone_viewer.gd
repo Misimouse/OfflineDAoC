@@ -603,7 +603,7 @@ func _switch_audio() -> void:
 
 
 func _add_clutter(z: ZoneLoader) -> GroundClutter:
-	var c := GroundClutter.new()
+	var c: GroundClutter = load("res://enhanced/replant/replant_clutter.gd").new()
 	c.name = "GroundClutter"
 	z.add_child(c)
 	if not c.setup(z, player):

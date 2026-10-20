@@ -36,3 +36,6 @@
 # separate optional asset; they are not part of the editable source checkout.
 /tools/sluaghbinder/payload-v0.31b/
 /tools/sluaghbinder/patcher/
+
+# Local Enhanced lab configuration, overlays and session state.
+**/.enhanced-session/
