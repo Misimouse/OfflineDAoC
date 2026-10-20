@@ -38,12 +38,19 @@ func run() -> void:
 	# using the disposable account file, so its password never appears in a process argument or report.
 	server.host = config.host
 	server.server_port = int(config.port)
+	server.protocol_profile = String(config.get("profile", "offline"))
 	server.account = config.account
 	server.password = config.password
 	server.active = true
 	server._ready()
+	server.client.Realm.connect(func(realm_id: int):report["realm_reply"] = realm_id)
 	server.start()
-	if not await until(func():return server.logged and not server.characters_in("hib").is_empty(), 30):
+	if not await until(func():return server.logged, 30):
+		fail("login_timeout")
+		return
+	# Select Hibernia as the normal realm screen does; LAB must not prefetch another realm and assign it.
+	if server.protocol_profile == "lab": server.request_characters("hib")
+	if not await until(func():return not server.characters_in("hib").is_empty(), 30):
 		fail("login_or_character_list_timeout")
 		return
 	report.checks.append("normal_server_autoload_logged_in")
@@ -61,6 +68,15 @@ func run() -> void:
 		return
 	var warmup := Time.get_ticks_msec() + 20000
 	while Time.get_ticks_msec() < warmup: await process_frame
+	if config.get("dismiss_startup_dialogs", false):
+		# Disposable LAB account only: decline its startup teleport, then hide the welcome text for the A/B.
+		var declined := 0
+		for button in root.find_children("*", "Button", true, false):
+			if button.is_visible_in_tree() and button.text == "DECLINE":
+				button.pressed.emit()
+				declined += 1
+		if scene.ui.windows.has("info"): scene.ui.windows.info.hide()
+		report.startup_dialogs = {"declined": declined, "info_window_hidden": true}
 	var photos: Array = []
 	for enabled in [false, true]:
 		for clutter in scene.clutters.values():
@@ -111,6 +127,10 @@ func write_report() -> void:
 
 func fail(reason: String) -> void:
 	report.errors.append(reason)
+	report.server_state = {"logged": server.logged, "allowed_realm": server.allowed_realm,
+		"asking": server._asking, "profile": server.protocol_profile,
+		"character_realms": server.characters.keys(), "raw_packets": server.raw_seen,
+		"last_error": server.last_error}
 	if not output.is_empty(): write_report()
 	if server.client != null: server.client.Close()
 	quit(3)

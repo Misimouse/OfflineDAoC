@@ -13,6 +13,9 @@ func run() -> void:
 	var port: int = server.get("server_port")
 	var has_client: bool = server.get("client") != null
 	var ok: bool = port == int(expected.port) and active == (expected.active == "true") and has_client == (expected.client == "true")
+	if expected.has("profile"):
+		ok = ok and server.protocol_profile == expected.profile
+		if has_client: ok = ok and server.client.ProtocolProfile == expected.profile
 	if expected.get("error", "false") == "true":
 		ok = ok and not String(server.get("last_error")).is_empty()
 	print("ENDPOINT_ARGUMENT_CHECK ", JSON.stringify({"ok": ok, "port": port, "active": active, "client_created": has_client}))

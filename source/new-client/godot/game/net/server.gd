@@ -18,6 +18,7 @@ signal jumped(entry: Dictionary)                    # the server moved you insid
 var active := false                      # started by the launcher: the server is the game
 var host := "127.0.0.1"
 var server_port := 10300                 # --server-port for an isolated development server
+var protocol_profile := "offline"       # --server-profile=lab for the separate DOLSharp LAB
 var account := ""
 var password := ""
 var client: Node = null                  # DaocClient (C#)
@@ -91,6 +92,8 @@ func _ready() -> void:
 			server_port = value.to_int() if value.is_valid_int() else -1
 		elif a.begins_with("--account="):
 			account = a.split("=", true, 1)[1]
+		elif a.begins_with("--server-profile="):
+			protocol_profile = a.split("=", true, 1)[1]
 		elif a.begins_with("--password="):
 			password = a.split("=", true, 1)[1]
 		elif a == "--no-world":
@@ -102,6 +105,11 @@ func _ready() -> void:
 	if server_port < 1 or server_port > 65535:
 		active = false
 		last_error = "Server port must be between 1 and 65535."
+		push_error("[server] " + last_error)
+		return
+	if protocol_profile not in ["offline", "lab"]:
+		active = false
+		last_error = "Unknown server protocol profile."
 		push_error("[server] " + last_error)
 		return
 	var script = load("res://game/net/DaocClient.cs")
@@ -116,6 +124,7 @@ func _ready() -> void:
 	var lk = JSON.parse_string(FileAccess.get_file_as_string(LOOKS_FILE)) if FileAccess.file_exists(LOOKS_FILE) else null
 	_looks = lk if lk is Dictionary else {}
 	client = script.new()
+	client.SetProtocolProfile(protocol_profile)
 	client.name = "DaocClient"
 	add_child(client)
 	client.LoggedIn.connect(_on_logged_in)
@@ -124,7 +133,7 @@ func _ready() -> void:
 		logged = false
 		playing = false
 		disconnected.emit(why))
-	client.Realm.connect(func(r: int): allowed_realm = r)
+	client.Realm.connect(_on_allowed_realm)
 	client.Characters.connect(_on_characters)
 	client.World.connect(_on_world)
 	client.Packet.connect(_on_raw)
@@ -263,8 +272,26 @@ func _on_logged_in(acc: String, srv: String) -> void:
 	logged = true
 	account = acc
 	logged_in.emit(acc)
+	_refresh_character_lists()
+
+
+func _refresh_character_lists() -> void:
+	if protocol_profile == "lab":
+		# LAB may lock an account to its saved realm. Probing Albion first can return Hibernia's list
+		# under an unexpected request, or even assign a new account's realm before the player chooses.
+		if not selected.is_empty():
+			request_characters(String(selected.realm))
+		else:
+			client.RequestCharacters(0)
+		return
 	for r in ["alb", "mid", "hib"]:                       # every realm's list (the realm screen shows the counts)
 		request_characters(r)
+
+
+func _on_allowed_realm(realm_id: int) -> void:
+	allowed_realm = realm_id
+	if protocol_profile == "lab" and logged and REALM_KEYS.has(realm_id):
+		request_characters(String(REALM_KEYS[realm_id]))
 
 
 ## Asks the server for a realm's characters ("alb" / "mid" / "hib"); characters_ready(realm) when they arrive.
@@ -296,7 +323,7 @@ func _on_characters(realm_id: int, list: Array) -> void:
 	var key := _asking if _asking != "" else String(REALM_KEYS.get(realm_id, ""))
 	if not list.is_empty():                                 # the characters' own realm decides
 		key = String(REALM_KEYS.get(int(list[0].get("realm", 0)), key))
-	if key == _asking:
+	if key == _asking or protocol_profile == "lab":
 		_asking = ""
 	_pump.call_deferred()
 	if key == "":
@@ -742,19 +769,16 @@ func _on_world_inner(kind: String, d: Dictionary) -> void:
 						get_tree().quit()
 				characters_ready.connect(func(_r): leave.call(), CONNECT_ONE_SHOT)
 				get_tree().create_timer(3.0).timeout.connect(leave)
-				for r in ["alb", "mid", "hib"]:
-					request_characters(r)
+				_refresh_character_lists()
 			else:
 				# back to the character screen: the lists asked again, as the old client did - the ones from the login
 				# showed where you were then (owner 2026-10-13: still "Vale of Mularn" after a teleport to West Skona)
-				for r in ["alb", "mid", "hib"]:
-					request_characters(r)
+				_refresh_character_lists()
 				# and again once the server has saved you: it sends Quit before it saves (QuitTimer.Quit), so the
 				# first lists can still hold the old level (owner 2026-10-14: a level 2 showed level 1)
 				get_tree().create_timer(2.5).timeout.connect(func():
 					if logged and not playing:
-						for r in ["alb", "mid", "hib"]:
-							request_characters(r))
+						_refresh_character_lists())
 				get_tree().change_scene_to_file("res://game/pregame.tscn")
 			return
 	world.emit(kind, d)

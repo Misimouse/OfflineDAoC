@@ -38,6 +38,10 @@ func run() -> void:
 	output = String(config.get("report", ""))
 	report.endpoint = {"host": config.host, "port": config.port}
 	client = load("res://game/net/DaocClient.cs").new()
+	if not client.SetProtocolProfile(String(config.get("profile", "offline"))):
+		finish("invalid_protocol_profile")
+		return
+	report.profile = client.ProtocolProfile
 	root.add_child(client)
 	client.LoggedIn.connect(func(_account: String, _server: String):logged = true)
 	client.LoginFailed.connect(func(code: int):login_code = code)
@@ -83,6 +87,7 @@ func run() -> void:
 			finish("character_creation_failed")
 			return
 		report.steps.append("synthetic_character_created")
+		report.character_count = characters.size()
 	if config.get("enter_world", false):
 		if characters.is_empty():
 			finish("no_character")
@@ -118,6 +123,9 @@ func run() -> void:
 			while Time.get_ticks_msec() < reply_deadline: await process_frame
 			report.interaction = {"npc": target.name, "messages": messages.slice(prior_messages),
 				"trainer_replies": int(world_events.get("trainer", 0)) - prior_trainer}
+			if config.get("expect_interaction_reply", false) and messages.size() == prior_messages and int(report.interaction.trainer_replies) == 0:
+				finish("npc_interaction_no_reply")
+				return
 			report.steps.append("npc_interaction_requested")
 		if config.has("move_zone"):
 			var moved := {"x": float(position.x) + 80, "y": float(position.y), "z": float(position.z)}

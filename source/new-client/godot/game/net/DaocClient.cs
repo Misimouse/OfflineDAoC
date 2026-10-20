@@ -40,6 +40,15 @@ public partial class DaocClient : Node
 	ushort _sequence;
 	public int SessionId;
 	public string Account = "";
+	public string ProtocolProfile { get; private set; } = "offline";
+
+	// Select before connecting: the LAB's 1.127 handler uses different creation field boundaries.
+	public bool SetProtocolProfile(string profile)
+	{
+		if (IsOpen || (profile != "offline" && profile != "lab")) return false;
+		ProtocolProfile = profile;
+		return true;
+	}
 	readonly ConcurrentQueue<int> _wantRealms = new();   // the realms asked for, in order (each overview answers one)
 	int _lastRealm;
 
@@ -135,16 +144,27 @@ public partial class DaocClient : Node
 		w.Byte(1);                                    // operation: create
 		w.Byte(0);                                    // customize type
 		w.Bytes(new byte[2]);
-		w.Bytes(new byte[15]);                        // location, class and race names (the server skips them)
+		// LAB reads three little-endian length-prefixed empty strings; Offline skips fifteen bytes.
+		w.Bytes(new byte[ProtocolProfile == "lab" ? 12 : 15]);
 		w.Byte((byte)(int)c["class_id"]);
 		w.Byte((byte)realm);
 		w.Byte((byte)(((int)c["race"] & 0x1F) | ((int)c["gender"] << 7)));
 		w.ShortLE((ushort)(int)c["model"]);
 		var stats = (Godot.Collections.Array)c["stats"];  // STR DEX CON QUI INT PIE EMP CHA
 		for (int i = 0; i < 8; i++) w.Byte((byte)(int)stats[i]);
-		w.Bytes(new byte[43]);
-		w.Byte((byte)(int)stats[2]);                  // constitution again
-		w.Byte(0);
+		if (ProtocolProfile == "lab")
+		{
+			w.Bytes(new byte[40]);
+			w.Byte(0);                                // automatic starting region
+			w.Bytes(new byte[3]);
+			w.Byte((byte)(int)stats[2]);                // LAB's NewConstitution follows the region/padding
+		}
+		else
+		{
+			w.Bytes(new byte[43]);
+			w.Byte((byte)(int)stats[2]);
+			w.Byte(0);
+		}
 		Send(0xFF, w);
 	}
 
@@ -158,7 +178,7 @@ public partial class DaocClient : Node
 		w.Bytes(new byte[20]);                        // custom mode, face bytes, mood (none for a deletion)
 		w.Byte(3);                                    // operation: delete
 		w.Bytes(new byte[3]);
-		w.Bytes(new byte[15]);
+		w.Bytes(new byte[ProtocolProfile == "lab" ? 12 : 15]);
 		w.Bytes(new byte[2]);                         // class, realm (none for a deletion)
 		w.Bytes(new byte[3]);
 		w.Bytes(new byte[8]);
