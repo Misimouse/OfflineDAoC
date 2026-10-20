@@ -13,19 +13,23 @@ var bounds := Rect2(1357, 1252, 14, 22)
 var centre := Vector2(1364, 1263)
 var noise := FastNoiseLite.new()
 var plant_positions := {}
+var green_profile := false
+var low_cover_instances := 0
 
 func build(zone: Node3D, _centre: Vector2, _radius: Vector2) -> void:
 	noise.seed = 207348
 	noise.frequency = 0.33
 	noise.fractal_octaves = 3
 	_build_mask()
-	_bind_ground(zone)
+	if not green_profile:
+		_bind_ground(zone)
 	material = ShaderMaterial.new()
 	var shader := Shader.new()
 	shader.code = """
 shader_type spatial;
 render_mode cull_disabled;
 uniform float wind_clock = 0.0;
+uniform float green_profile = 0.0;
 varying float vigour;
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -41,6 +45,7 @@ void fragment() {
 	// Keep living foliage in a shared olive palette; preserve flower petal colours.
 	float foliage = step(COLOR.r * 1.06, COLOR.g);
 	vec3 olive = mix(vec3(0.105, 0.135, 0.043), vec3(0.095, 0.165, 0.052), vigour);
+	olive = mix(olive, vec3(0.10, 0.215, 0.065), green_profile);
 	vec3 vegetation = mix(COLOR.rgb * 0.72, olive, 0.62);
 	ALBEDO = mix(COLOR.rgb, vegetation, foliage);
 	float straw = (1.0 - step(0.40, COLOR.r)) * step(COLOR.g, COLOR.r) * step(COLOR.b * 1.4, COLOR.g);
@@ -51,6 +56,7 @@ void fragment() {
 }
 """
 	material.shader = shader
+	material.set_shader_parameter("green_profile", 1.0 if green_profile else 0.0)
 	var meshes := {}
 	for variant in 3:
 		meshes["hierba_fina_%d" % variant] = _grass_mesh(0, variant)
@@ -63,6 +69,7 @@ void fragment() {
 	for variant in 2:
 		meshes["hojas_largas_%d" % variant] = _herb_mesh(variant)
 		meshes["helechos_%d" % variant] = _fern_mesh(variant)
+		meshes["tapiz_bajo_%d" % variant] = _low_cover_mesh(variant)
 	var positions := {}
 	var colours := {}
 	for species in meshes:
@@ -110,6 +117,31 @@ void fragment() {
 		var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
 		positions[species].append(Transform3D(basis, Vector3(p.x, h - 0.006, p.y)))
 		colours[species].append(Color(m.g, 0, 0, 1))
+	# Infill has its own RNG so established tall plants and flowers keep their positions.
+	var low_rng := RandomNumberGenerator.new()
+	low_rng.seed = 2078731
+	for i in 19000:
+		var p := bounds.position + Vector2(low_rng.randf(), low_rng.randf()) * bounds.size
+		var m := sample_mask(p)
+		if low_rng.randf() > m.r * 0.85:
+			continue
+		var h: float = zone.height_at(p.x, p.y)
+		if h < float(zone.water_level_at(p.x, p.y)) + 0.05:
+			continue
+		var query := PhysicsRayQueryParameters3D.create(Vector3(p.x, h + 12, p.y), Vector3(p.x, h - 0.4, p.y))
+		var hit: Dictionary = zone.get_world_3d().direct_space_state.intersect_ray(query)
+		if not hit.is_empty() and float(hit.position.y) > h + 0.12:
+			continue
+		var species := "tapiz_bajo_%d" % (i % 2)
+		# Follow the slope using the same height field as the rendered terrain.
+		var dx: float = (zone.height_at(p.x + 0.2, p.y) - zone.height_at(p.x - 0.2, p.y)) / 0.4
+		var dz: float = (zone.height_at(p.x, p.y + 0.2) - zone.height_at(p.x, p.y - 0.2)) / 0.4
+		var normal := Vector3(-dx, 1, -dz).normalized()
+		var aligned := Basis(Quaternion(Vector3.UP, normal)) * Basis(Vector3.UP, low_rng.randf() * TAU)
+		aligned = aligned.scaled(Vector3.ONE * low_rng.randf_range(0.8, 1.25))
+		positions[species].append(Transform3D(aligned, Vector3(p.x, h - 0.005, p.y)))
+		colours[species].append(Color(m.g, 0, 0, 1))
+		low_cover_instances += 1
 	for species in meshes:
 		var mesh: ArrayMesh = meshes[species]
 		var mm := MultiMesh.new()
@@ -148,6 +180,8 @@ func _build_mask() -> void:
 			fill *= smoothstep(0.70, 1.65, absf(p.y - path_z))
 			fill *= smoothstep(3.5, 4.8, p.distance_to(Vector2(1353.6, 1260.8)))
 			var vigour := clampf(0.53 + noise.get_noise_2d(p.x * 0.45 + 150, p.y * 0.45) * 0.75, 0.18, 0.85)
+			if green_profile:
+				vigour = maxf(vigour, 0.65)
 			coverage.set_pixel(x, z, Color(fill, vigour, 0, 1))
 	mask_texture = ImageTexture.create_from_image(coverage)
 
@@ -330,4 +364,20 @@ func _fern_mesh(variant: int) -> ArrayMesh:
 			for sign_value in [-1, 1]:
 				var leaflet: Vector3 = (side * float(sign_value) + direction * 0.5).normalized()
 				_leaf(st, base, leaflet, 0.045 * (1.0 - t * 0.65), 0.008, Color(0.11, 0.23, 0.05))
+	return _finish(st)
+
+func _low_cover_mesh(variant: int) -> ArrayMesh:
+	var st := _start()
+	# Seven broad, short, curved blades: 14 triangles per tuft, no alpha texture.
+	for blade in 7:
+		var a := float(blade) * 2.399 + variant * 0.7
+		var outward := Vector3(cos(a), 0, sin(a))
+		var side := outward.cross(Vector3.UP)
+		var base := outward * (0.015 + (blade % 3) * 0.02)
+		var height := 0.045 + (blade % 4) * 0.015 + variant * 0.015
+		var tip := base + Vector3.UP * height + outward * (0.07 + variant * 0.025)
+		var middle := (base + tip) * 0.5 + Vector3.UP * 0.018
+		var col := Color(0.115, 0.215, 0.052)
+		_triangle(st, base - side * 0.012, middle - side * 0.014, tip, col)
+		_triangle(st, base + side * 0.012, tip, middle + side * 0.014, col * 1.08)
 	return _finish(st)
