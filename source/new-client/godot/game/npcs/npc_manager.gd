@@ -559,6 +559,7 @@ var _prep_task := -1
 var _prep_jobs := {}                         # what the running task loads: key -> [kind, arg]
 var _prep_out := {}                          # its results (the worker's own until the task is done)
 var _prep_next := {}                         # what views waiting now need, for the next task
+var _preparing_shutdown := false
 static var _metas := {}                      # race prefix -> figure.json (for a figure's look and textures)
 static var _prep_failed := {}                # jobs whose file failed to load (not queued again)
 
@@ -632,6 +633,7 @@ func _prep_needs(s: NpcState) -> Dictionary:
 
 ## The finished task's files into the caches; the next task started with what views wait for now.
 func _prep_start() -> void:
+	if _preparing_shutdown: return
 	if _prep_task >= 0:
 		if not WorkerThreadPool.is_task_completed(_prep_task):
 			return
@@ -688,6 +690,21 @@ static func _prep_run(jobs: Dictionary, out: Dictionary) -> void:
 			"helm": out[k] = Fig3Figure.pack_helm(String(job[1]))
 			"weapon": out[k] = WeaponModels.pack(String(job[1]))
 			"fx": out[k] = NifScene.pack_copy(String(job[1]))
+
+
+## Keep the main/render loops alive while a worker finishes; blocking in _exit_tree can deadlock a loader.
+func prepare_shutdown() -> void:
+	_preparing_shutdown = true
+	set_process(false)
+	set_physics_process(false)
+	if _prep_task >= 0:
+		while not WorkerThreadPool.is_task_completed(_prep_task):
+			await get_tree().process_frame
+		WorkerThreadPool.wait_for_task_completion(_prep_task)
+		_prep_task = -1
+	_prep_next.clear()
+	_prep_jobs.clear()
+	_prep_out.clear()
 
 
 func _exit_tree() -> void:

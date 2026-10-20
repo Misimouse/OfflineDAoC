@@ -289,6 +289,20 @@ func load_around(p: Vector3) -> void:
 	_loading_now = false
 
 
+## Drain the current streaming job before the scene is removed, without blocking the render loop.
+func prepare_shutdown() -> void:
+	set_process(false)
+	set_physics_process(false)
+	if _task >= 0:
+		while not WorkerThreadPool.is_task_completed(_task):
+			await get_tree().process_frame
+		WorkerThreadPool.wait_for_task_completion(_task)
+		_task = -1
+	if _built:
+		_built.free()
+		_built = null
+
+
 func _exit_tree() -> void:
 	if _task >= 0:
 		WorkerThreadPool.wait_for_task_completion(_task)
