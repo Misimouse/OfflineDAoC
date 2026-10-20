@@ -23,6 +23,13 @@ var _tag_cell := Vector2i(-1, -1)
 var _tag_shrub := false
 var _ready_image: Image
 var _ready_texture: ImageTexture
+var allow_generation := false # Only the offline preparation tool may calculate placements.
+var _available_chunks := {}
+var _unprepared_chunks := {}
+var cache_plan_file := ""
+var cache_namespace := ""
+var cache_hits := 0
+var cache_misses := 0
 const WORK_BUDGET_US := 6000
 const STATE := "res://.enhanced-session/replant"
 const LOW := ["grass clump 1", "grass clump 2", "small plant", "brown small plant", "brown grass clump 2", "grass clump new", "grass clump", "scrubby grass", "brown small leafy weed 1"]
@@ -84,6 +91,7 @@ func setup(z: ZoneLoader, follow: Node3D) -> bool:
 		palette = load("res://enhanced/landscape_patch.gd").new()
 		meshes = palette.make_catalog()
 		plant_material = palette.make_material(true)
+		_setup_cache(file)
 		if not _setup_replacement_shader():
 			plan.clear()
 		return true
@@ -157,7 +165,7 @@ func should_plant(c: Vector2i) -> bool:
 		return false
 	var p := to_local(viewer.global_position)
 	var centre := Vector2i(floori(p.x / CHUNK_M), floori(p.z / CHUNK_M))
-	return enhanced_enabled and density_mult > 0 and radius_m > 0 and absi(c.x - centre.x) <= 1 and absi(c.y - centre.y) <= 1
+	return enhanced_enabled and density_mult > 0 and radius_m > 0 and not _unprepared_chunks.has(c) and absi(c.x - centre.x) <= 1 and absi(c.y - centre.y) <= 1
 
 func is_settled() -> bool:
 	if plan.is_empty() or viewer == null: return true
@@ -178,7 +186,80 @@ func _build_chunk(c: Vector2i) -> MeshInstance3D:
 	if not plan.is_empty(): _recount_removed()
 	return mi
 
+# Cached placements contain no objects/scripts. Changing the plan, generator, terrain loader,
+# model geometry, density or engine invalidates them. This cache never modifies source assets.
+func _setup_cache_from_settings() -> void:
+	_setup_cache(cache_plan_file)
+
+func _setup_cache(plan_file: String) -> void:
+	cache_plan_file = plan_file
+	var signature := FileAccess.get_sha256(plan_file) + str(density_mult) + str(Engine.get_version_info().hash)
+	for script in ["res://enhanced/replant/replant_clutter.gd", "res://enhanced/landscape_patch.gd", "res://game/zone_loader.gd"]:
+		signature += FileAccess.get_sha256(script)
+	var files := DirAccess.get_files_at(zone.dir.path_join("models"))
+	files.sort()
+	for file in files:
+		if file.get_extension() in ["gltf", "bin", "json"]:
+			signature += file + FileAccess.get_sha256(zone.dir.path_join("models").path_join(file))
+	cache_namespace = str(int(zone.info.id)) + "_" + signature.sha256_text().left(24)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STATE.path_join("cache")))
+	_available_chunks.clear()
+	_unprepared_chunks.clear()
+	for name in DirAccess.get_files_at(STATE.path_join("cache")):
+		if name.begins_with(cache_namespace + "_") and name.ends_with(".bin"):
+			var parts := name.trim_suffix(".bin").split("_")
+			if parts.size() == 4: _available_chunks[Vector2i(int(parts[2]),int(parts[3]))] = true
+
+func _cache_path(c: Vector2i) -> String:
+	return STATE.path_join("cache").path_join("%s_%d_%d.bin" % [cache_namespace, c.x, c.y])
+
+func _read_cached(c: Vector2i) -> Dictionary:
+	var path := _cache_path(c)
+	if not FileAccess.file_exists(path): return {}
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null or file.get_length() > 4 * 1024 * 1024: return {}
+	var data = file.get_var(false)
+	if not data is Dictionary or data.get("key") != cache_namespace or data.get("chunk") != c: return {}
+	if not data.get("positions") is Dictionary or not data.get("cells") is Dictionary: return {}
+	var count := 0
+	for key in data.positions:
+		var positions = data.positions[key]
+		if not meshes.has(key) or not positions is Array: return {}
+		count += positions.size()
+		for transform in positions:
+			if not transform is Transform3D or not transform.is_finite(): return {}
+	for cell in data.cells:
+		if not cell is Vector2i or cell.x < 0 or cell.y < 0 or cell.x >= 256 or cell.y >= 256: return {}
+	if count != data.get("accepted") or count > clampi(int(options.get("chunk_budget", 20000)), 500, 30000): return {}
+	return data
+
+func _write_cached(job: Dictionary) -> void:
+	var path := _cache_path(job.c)
+	var file := FileAccess.open(path + ".tmp", FileAccess.WRITE)
+	if file == null: return # A read-only cache must not prevent play.
+	file.store_var({"key": cache_namespace, "chunk": job.c, "positions": job.positions, "cells": job.cells, "accepted": job.accepted}, false)
+	file.close()
+	DirAccess.rename_absolute(ProjectSettings.globalize_path(path + ".tmp"), ProjectSettings.globalize_path(path))
+	# At most 256 prepared parcels across all zones/versions (each file is bounded above).
+	var folder := STATE.path_join("cache")
+	var files: Array[String] = []
+	for name in DirAccess.get_files_at(folder):
+		if name.ends_with(".bin"): files.append(name)
+	if files.size() > 256:
+		files.sort_custom(func(a, b):return FileAccess.get_modified_time(folder.path_join(a)) < FileAccess.get_modified_time(folder.path_join(b)))
+		for i in files.size() - 256: DirAccess.remove_absolute(ProjectSettings.globalize_path(folder.path_join(files[i])))
+
 func _start_job(c: Vector2i) -> void:
+	var cached := _read_cached(c)
+	if cached.is_empty() and not allow_generation:
+		cache_misses += 1
+		_unprepared_chunks[c] = true
+		_available_chunks.erase(c)
+		if _chunks.has(c):
+			_chunks[c].queue_free()
+			_chunks.erase(c)
+			_tags_by_chunk.erase(c)
+		return # Keep stock vegetation here; never calculate thousands of physics queries while playing.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = hash(Vector3i(int(zone.info.id), c.x, c.y))
 	var patch := Node3D.new()
@@ -189,7 +270,12 @@ func _start_job(c: Vector2i) -> void:
 	_job = {"c": c, "rng": rng, "patch": patch, "positions": {}, "cells": {}, "accepted": 0, "i": 0,
 		"attempts": mini(40000, int(CHUNK_M * CHUNK_M * float(options.get("density", 24)) * density_mult)),
 		"limit": clampi(int(options.get("chunk_budget", 20000)), 500, 30000), "stage": 0,
-		"species": [], "group": 0, "upload": 0, "mm": null}
+		"species": [], "group": 0, "upload": 0, "mm": null, "cached": false}
+	if not cached.is_empty():
+		cache_hits += 1
+		_job.merge({"positions": cached.positions, "cells": cached.cells, "accepted": cached.accepted, "stage": 1, "species": cached.positions.keys(), "cached": true}, true)
+	else:
+		cache_misses += 1
 
 func _generate_candidate(job: Dictionary) -> void:
 	var rng: RandomNumberGenerator = job.rng
@@ -267,6 +353,7 @@ func _advance_job() -> void:
 	chunk_plants[c] = _job.patch
 	chunk_cells[c] = _job.cells
 	_job.patch.visible = true
+	if not _job.cached: _write_cached(_job)
 	_job.clear()
 	_refresh_ready()
 
@@ -320,7 +407,7 @@ func _add_tuft(st: SurfaceTool, item: Dictionary, pos: Vector3, rng: RandomNumbe
 	_tag_shrub = false
 	var item_name := String(item.name).to_lower()
 	var replaceable: bool = item_name in LOW or (options.get("remove_shrubs", true) and item_name in SHRUBS)
-	if not plan.is_empty() and replaceable and sample_mask(Vector2(pos.x, pos.z)).r > 0:
+	if not plan.is_empty() and replaceable and (allow_generation or _available_chunks.has(Vector2i(floori(pos.x / CHUNK_M), floori(pos.z / CHUNK_M)))) and sample_mask(Vector2(pos.x, pos.z)).r > 0:
 		_tag_cell = Vector2i(clampi(int(pos.x / float(zone.info.size_m) * 256), 0, 255), clampi(int(pos.z / float(zone.info.size_m) * 256), 0, 255))
 		_tag_shrub = item_name in SHRUBS
 		if not _tags_by_chunk[_building].has(_tag_cell): _tags_by_chunk[_building][_tag_cell] = {}
@@ -380,6 +467,7 @@ func set_enhanced(value: bool) -> void:
 
 func apply_settings() -> void:
 	super.apply_settings()
+	if not plan.is_empty(): _setup_cache_from_settings()
 	_tags_by_chunk.clear()
 	_clear_new()
 

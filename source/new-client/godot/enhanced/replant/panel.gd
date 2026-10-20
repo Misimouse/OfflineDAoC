@@ -74,8 +74,9 @@ func run() -> void:
 	zones.item_selected.connect(select_zone)
 	left.add_child(zones)
 	button(left, "Actualizar inventario", func():job(["--scan"]))
-	button(left, "Preparar esta zona", func():prepare(false))
-	button(left, "Preparar toda Hibernia", func():prepare(true))
+	button(left, "Preparar mapa de esta zona", func():prepare(false))
+	button(left, "Preparar mapas de Hibernia", func():prepare(true))
+	button(left, "Preparar plantas de Ardee", prepare_resources)
 	var middle := VBoxContainer.new()
 	middle.custom_minimum_size = Vector2(580, 640)
 	body.add_child(middle)
@@ -84,7 +85,7 @@ func run() -> void:
 	map.picked.connect(pick)
 	middle.add_child(map)
 	var legend := Label.new()
-	legend.text = "Verde: pradera  ·  Ocre: seco  ·  Turquesa: sotobosque\nOscuro: conservar original  ·  Rojo: exclusion manual\nClic: punto de vista  ·  Clic derecho: excluir circulo"
+	legend.text = "Verde: pradera  Ã‚Â·  Ocre: seco  Ã‚Â·  Turquesa: sotobosque\nOscuro: conservar original  Ã‚Â·  Rojo: exclusion manual\nClic: punto de vista  Ã‚Â·  Clic derecho: excluir circulo"
 	middle.add_child(legend)
 	var right := VBoxContainer.new()
 	right.custom_minimum_size = Vector2(365, 640)
@@ -97,7 +98,7 @@ func run() -> void:
 	insects = check(right, "Mariposas y abejas entre flores", true)
 	wind = check(right, "Movimiento con viento", true)
 	var preserve := Label.new()
-	preserve.text = "Siempre: conservar plantas altas y suelo original.\nSe carga a medida que exploras. El limite de plantas afecta al rendimiento.\nAgua, roca y nieve conservan su vegetacion."
+	preserve.text = "Siempre: conservar plantas altas y suelo original.\nEl juego carga plantas ya preparadas. El limite de plantas afecta al rendimiento.\nAgua, roca y nieve conservan su vegetacion."
 	preserve.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(preserve)
 	button(right, "Borrar exclusiones de esta zona", clear_exclusions)
@@ -246,3 +247,20 @@ func preview() -> void:
 	var args := ["--path", ProjectSettings.globalize_path("res://"), "--audio-driver", "Dummy", "--script", "res://enhanced/replant/preview.gd", "--", "--bundle=" + bundle, "--zone=" + str(selected), "--x=" + str(preview_point.x), "--z=" + str(preview_point.y)]
 	OS.create_process(OS.get_executable_path(), PackedStringArray(args))
 	status.text = "Vista 3D abierta. A/B mantiene la misma camara y luz; espacio alterna. La instalacion original no cambia."
+
+func prepare_resources() -> void:
+	if working or bundle.is_empty(): return
+	if selected != 207:
+		status.text = "Preparacion de plantas: piloto en Ardee. Las demas zonas conservan sus plantas originales."
+		return
+	var progress:=ProjectSettings.globalize_path(STATE.path_join("job.json"))
+	write_json(progress,{"status":"working","message":"Preparando plantas de Ardee fuera del juego..."})
+	var result:=ProjectSettings.globalize_path(STATE.path_join("prepared_ardee.json"))
+	var args:=["--headless","--render-thread","safe","--path",ProjectSettings.globalize_path("res://"),"--script","res://enhanced/replant/bake_check.gd","--","--bundle="+bundle,"--out="+result,"--status="+progress]
+	pid=OS.create_process(OS.get_executable_path(),PackedStringArray(args))
+	if pid<0:
+		status.text="No se pudo abrir el preparador de plantas."
+		return
+	working=true
+	for b in controls:b.disabled=true
+	status.text="Preparando plantas de Ardee. No hace falta abrir el juego."

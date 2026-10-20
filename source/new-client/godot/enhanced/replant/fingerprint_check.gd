@@ -34,6 +34,7 @@ func run() -> void:
 	await physics_frame
 	await physics_frame
 	var clutter = load("res://enhanced/replant/replant_clutter.gd").new()
+	clutter.allow_generation = true
 	clutter.override_bundle = args.get("bundle", "")
 	zone.add_child(clutter)
 	if not clutter.setup(zone, viewer) or clutter.plan.is_empty():
@@ -56,7 +57,7 @@ func run() -> void:
 		quit(4)
 		return
 	clutter.set_process(false)
-	var result := {"chunks": {}, "instances": 0, "checks": checks, "npc_pick_volumes": 12 if args.get("npc-picks", "") == "true" else 0}
+	var result := {"chunks": {}, "instances": 0, "checks": checks, "cache_hits": clutter.cache_hits, "cache_misses": clutter.cache_misses, "npc_pick_volumes": 12 if args.get("npc-picks", "") == "true" else 0}
 	for c in clutter.chunk_plants:
 		var context := HashingContext.new()
 		context.start(HashingContext.HASH_SHA256)

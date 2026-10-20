@@ -125,7 +125,7 @@ func _process(delta: float) -> bool:
 	var count := 0
 	for patch in clutter.chunk_plants.values():
 		if is_instance_valid(patch): count += int(patch.get_meta("instances", 0))
-	label.text = "%s | %s | %d plantas | %s | %.0f FPS\nWASD mover · Q/E altura · Boton derecho mirar · Espacio A/B · Esc salir" % [zone.info.get("name", str(zone.info.id)), "B - Replantado" if enabled else "A - Original", count, "Listo" if clutter.is_settled() else "Preparando parcelas", Engine.get_frames_per_second()]
+	label.text = "%s | %s | %d plantas | %s | %.0f FPS\nWASD mover Â· Q/E altura Â· Boton derecho mirar Â· Espacio A/B Â· Esc salir" % [zone.info.get("name", str(zone.info.id)), "B - Replantado" if enabled else "A - Original", count, ("Falta preparar plantas" if clutter.cache_misses > 0 else ("Listo" if clutter.is_settled() else "Cargando plantas")), Engine.get_frames_per_second()]
 	return false
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
