@@ -125,6 +125,8 @@ func sample() -> Dictionary:
 		for index in zone.info.fixtures.size():
 			var fixture=zone.info.fixtures[index]
 			var local=Vector3(fixture.pos[0],fixture.pos[1],fixture.pos[2])
+			var elm_review=controllers.get("elm_review_stand.gd")
+			if elm_review!=null and elm_review.hides_fixture(zone,local):continue
 			var position=zone.to_global(local)
 			var distance=origin.distance_to(position)
 			if distance>350.0:continue

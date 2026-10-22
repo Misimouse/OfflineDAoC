@@ -18,8 +18,16 @@ func run() -> void:
 	var trees=load("res://enhanced/trees/elm_trial.gd").new();world.add_child(trees)
 	assert(trees.configure() and trees.apply_zone(zone))
 	var stand=load("res://enhanced/trees/elm_review_stand.gd").new();world.add_child(stand)
+	var taa_before:=root.use_taa
 	assert(stand.attach(region,trees))
-	assert(stand.rows.size()==2 and stand.hidden.size()==2)
+	assert(stand.rows.size()==2 and stand.hidden.size()>=2)
+	assert(stand.hidden.size()==stand.hidden_positions.size()*2)
+	var hidden_parts:int=stand.hidden.size()
+	var cleared_trees:int=stand.hidden_positions.size()
+	if stand.config.get("temporal_aa",false):
+		assert(root.use_taa)
+		stand.toggle_leaf_smoothing();assert(not root.use_taa)
+		stand.toggle_leaf_smoothing();assert(root.use_taa)
 	trees.set_enabled(false)
 	await process_frame
 	await process_frame
@@ -41,11 +49,12 @@ func run() -> void:
 		root.get_texture().get_image().save_png(out.path_join("mapa_olmo%d.png"%(index+1)))
 	var positions=stand.rows.duplicate(true)
 	stand.restore()
+	assert(root.use_taa==taa_before)
 	assert(stand.rows.is_empty() and stand.hidden.is_empty())
 	stand.apply_zone(zone)
-	assert(stand.rows.size()==2 and stand.hidden.size()==2)
+	assert(stand.rows.size()==2 and stand.hidden.size()>=2)
 	stand.restore();trees.restore();region.free()
 	var file:=FileAccess.open(out.path_join("stand_checks.json"),FileAccess.WRITE)
-	file.store_string(JSON.stringify({"two_models":true,"well_old_parts_hidden":2,"collision_count_unchanged":true,"restoration_and_reload":true,"inspector_destinations":positions},"  "));file.close()
+	file.store_string(JSON.stringify({"two_models":true,"hidden_old_tree_parts":hidden_parts,"cleared_tree_count":cleared_trees,"temporal_aa_restored":true,"collision_count_unchanged":true,"restoration_and_reload":true,"inspector_destinations":positions},"  "));file.close()
 	print("ELM_STAND_CHECK_OK")
 	quit()
