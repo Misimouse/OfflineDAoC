@@ -116,7 +116,11 @@ func run() -> void:
 	if not args.has("capture"):return
 	var out:=String(args.out)
 	DirAccess.make_dir_recursive_absolute(out)
-	report={"fixture":"207:1109","replacement_count":1,"original_triangles":266,"new_triangles":30162,"physics_unchanged":true,"original_restoration":true,"viewport":[root.size.x,root.size.y],"measurements":[],"note":"Standalone rendered zone, no server/NPCs. Timings may include another running game; not a forest performance benchmark."}
+	var reference_triangles:=266
+	if args.has("reference-manifest"):
+		var reference:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(String(args["reference-manifest"])))
+		reference_triangles=int(reference.get("triangles",0))
+	report={"fixture":"207:1109","replacement_count":1,"original_triangles":reference_triangles,"new_triangles":int(trial.manifest.triangles),"reference_manifest":args.get("reference-manifest","stock model"),"physics_unchanged":true,"original_restoration":true,"viewport":[root.size.x,root.size.y],"measurements":[],"note":"Standalone rendered zone, no server/NPCs. Timings may include another running game; not a forest performance benchmark."}
 	for view in views:
 		place_camera(view)
 		for frame in 40:await process_frame
