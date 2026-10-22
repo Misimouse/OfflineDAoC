@@ -89,6 +89,10 @@ func run() -> void:
 	var tree_trial = load("res://enhanced/trees/elm_trial.gd").new()
 	current_scene.add_child(tree_trial)
 	tree_trial.attach(current_scene.get("region"))
+	if FileAccess.file_exists("res://.enhanced-session/elm_trial/review_stand.json"):
+		var elm_review=load("res://enhanced/trees/elm_review_stand.gd").new()
+		current_scene.add_child(elm_review)
+		elm_review.attach(current_scene.get("region"),tree_trial)
 	var paths_trial = load("res://enhanced/terrain/paths_pbr.gd").new()
 	current_scene.add_child(paths_trial)
 	paths_trial.attach(current_scene.get("region"))

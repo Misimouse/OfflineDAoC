@@ -20,16 +20,16 @@ func toggle(show_candidate:bool) -> void:
 		reference_anchor.transform=trial.replacement.transform
 		reference_anchor.add_child(load(String(data.scene)).instantiate())
 		trial.get_parent().add_child(reference_anchor)
-		root.title="Elm2 - Comparacion con el olmo actual"
+		root.title=String(args.get("candidate-label","Elm2 propuesto"))+" - Comparacion con el olmo actual"
 	# Keep the stock slot hidden while switching between the two private trees.
 	trial.set_enabled(true)
 	trial.replacement.visible=show_candidate
 	reference_anchor.visible=not show_candidate
-	label.text=("B - ELM2 PROPUESTO" if show_candidate else "A - OLMO ACTUAL CORREGIDO")+" | Mismo lugar, escala y luz"
+	label.text=("B - "+String(args.get("candidate-label","Elm2 propuesto")) if show_candidate else "A - OLMO ACTUAL CORREGIDO")+" | Mismo lugar, escala y luz"
 	for button in label.get_parent().get_children():
 		if button is HBoxContainer:
 			button.get_child(0).text="A - Olmo actual"
-			button.get_child(1).text="B - Elm2 propuesto"
+			button.get_child(1).text="B - "+String(args.get("candidate-label","Elm2 propuesto"))
 
 func _input(event:InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:

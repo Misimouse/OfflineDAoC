@@ -48,12 +48,14 @@ var dungeon := false                   # zone.json "dungeon": no sky, sun, day/n
 ## you moved - "without modifying all shadows across the whole game"). Measured there at a running pace
 ## (tests/shadow_flicker_probe.gd, the shadow term alone): the default splits 0.1 / 0.2 / 0.5 jumped 25.9 of 7200
 ## sampled pixels a step, 0.06 / 0.15 / 0.4 jumped 1.6 (edges about a fifth softer). Every other zone keeps Godot's.
-const ZONE_SHADOW_SPLITS := {181: [0.06, 0.15, 0.4]}
+const ZONE_SHADOW_SPLITS := {181: [0.06, 0.15, 0.4], 207: [0.06, 0.15, 0.4]}
 const DEFAULT_SHADOW_SPLITS := [0.1, 0.2, 0.5]
 ## ... and a bigger shadow map there (owner 2026-10-15, after the splits: "there's still shadow flickering" under the
 ## canopy): the project's 2048 atlas holds the 4 cascades at 1024 each, coarser than the leaf cut-outs whose shadows
 ## shimmer as the cascades follow you; 4096 doubles every cascade's texels in that zone alone.
-const ZONE_SHADOW_ATLAS := {181: 4096}
+# Connacht elm review: the isolated moving-camera shadow probe reduced large ratio
+# jumps from 268 to 203 / 97,920 pairs; average variation remained similar.
+const ZONE_SHADOW_ATLAS := {181: 4096, 207: 4096}
 var _shadow_zone := -1
 
 

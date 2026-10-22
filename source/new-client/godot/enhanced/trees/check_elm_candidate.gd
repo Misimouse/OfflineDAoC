@@ -33,12 +33,14 @@ func _initialize() -> void:
 			var before:BaseMaterial3D=src.get_active_material(surface)
 			var after:BaseMaterial3D=dst.get_active_material(surface)
 			var a:=before.albedo_texture.get_image()
+			if args.has("bark") and String(src.name).begins_with("Tronco"):
+				a=Image.load_from_file(String(args.bark).path_join("bark_colour.jpg"))
 			var b:=after.albedo_texture.get_image()
 			a.clear_mipmaps();b.clear_mipmaps()
 			a.convert(Image.FORMAT_RGBA8);b.convert(Image.FORMAT_RGBA8)
 			assert(a.get_data()==b.get_data())
 		assert(normals==vertices)
-		results.append({"part":dst.name,"vertices":vertices,"normals":normals,"same_geometry_and_uv":true,"original_texture_pixels_preserved":true})
+		results.append({"part":dst.name,"vertices":vertices,"normals":normals,"same_geometry_and_uv":true,"expected_texture_pixels_preserved":true,"original_texture_pixels_preserved":not(args.has("bark") and String(src.name).begins_with("Tronco"))})
 	var zone=load("res://game/zone_loader.gd").new()
 	zone.dir="res://content/zones/zone207"
 	zone.info=JSON.parse_string(FileAccess.get_file_as_string(zone.dir+"/zone.json"))

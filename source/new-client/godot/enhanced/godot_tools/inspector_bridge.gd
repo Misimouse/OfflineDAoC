@@ -157,6 +157,17 @@ func sample() -> Dictionary:
 				row["note"]="Tierra y grava usan materiales nuevos de caminos: se enlazan sus mapas actuales, no los atlas que quedan ocultos."
 			objects.append(row)
 	var npcs=viewer.get("npcs")
+	var review=controllers.get("elm_review_stand.gd")
+	if review!=null and is_instance_valid(review.display) and review.display.visible:
+		for item in review.rows:
+			var row:Dictionary=item.duplicate(true)
+			var p:=Vector3(row.position[0],row.position[1],row.position[2])
+			if is_instance_valid(review.bound_zone):p=review.bound_zone.to_global(p)
+			row["position"]=[p.x,p.y,p.z]
+			if origin.distance_to(p)>350.0:continue
+			row["distance_m"]=origin.distance_to(p)
+			row["in_camera"]=in_view(camera,p+Vector3.UP*3)
+			objects.append(row)
 	if npcs!=null:
 		for npc in npcs.active.values():
 			if not is_instance_valid(npc):continue
