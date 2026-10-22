@@ -16,7 +16,7 @@ func _initialize() -> void:
 	var candidate:Node3D=load(String(manifest.scene)).instantiate()
 	var source_parts:=original.find_children("*","MeshInstance3D",true,false)
 	var fixed_parts:=candidate.find_children("*","MeshInstance3D",true,false)
-	assert(source_parts.size()==2 and fixed_parts.size()==2)
+	assert(source_parts.size()>=2 and fixed_parts.size()==source_parts.size())
 	var results:Array=[]
 	for index in source_parts.size():
 		var src:MeshInstance3D=source_parts[index]
