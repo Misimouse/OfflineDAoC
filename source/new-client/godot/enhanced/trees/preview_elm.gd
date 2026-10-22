@@ -8,6 +8,7 @@ var label:Label
 var pivot:=Vector3(1395.2,130.0875,1302.4)
 var angle:=0
 var report:Dictionary={}
+var views:=3
 
 func _initialize() -> void:
 	Engine.max_fps=60
@@ -18,6 +19,7 @@ func _initialize() -> void:
 	run.call_deferred()
 
 func run() -> void:
+	views=5 if args.has("repair-review") else 3
 	root.size=Vector2i(1440,900)
 	root.title="DAoC Enhanced - Un olmo en Ardee - Comparacion A/B"
 	var world:=Node3D.new()
@@ -103,7 +105,7 @@ func run() -> void:
 	var controls:=HBoxContainer.new()
 	controls.position=Vector2(20,55)
 	layer.add_child(controls)
-	for entry in [["A - Original",func():toggle(false)],["B - Olmo nuevo",func():toggle(true)],["Otra vista",func():place_camera((angle+1)%3)],["Salir",func():quit()]]:
+	for entry in [["A - Original",func():toggle(false)],["B - Olmo nuevo",func():toggle(true)],["Otra vista",func():place_camera((angle+1)%views)],["Salir",func():quit()]]:
 		var button:=Button.new()
 		button.text=entry[0]
 		button.custom_minimum_size=Vector2(160,38)
@@ -115,7 +117,7 @@ func run() -> void:
 	var out:=String(args.out)
 	DirAccess.make_dir_recursive_absolute(out)
 	report={"fixture":"207:1109","replacement_count":1,"original_triangles":266,"new_triangles":30162,"physics_unchanged":true,"original_restoration":true,"viewport":[root.size.x,root.size.y],"measurements":[],"note":"Standalone rendered zone, no server/NPCs. Timings may include another running game; not a forest performance benchmark."}
-	for view in 3:
+	for view in views:
 		place_camera(view)
 		for frame in 40:await process_frame
 		var deadline:=Time.get_ticks_msec()+20000
@@ -145,10 +147,10 @@ func run() -> void:
 
 func place_camera(view:int) -> void:
 	angle=view
-	var offset:Vector3=[Vector3(48,9,62),Vector3(-58,7,40),Vector3(17,2,22)][view]
+	var offset:Vector3=[Vector3(48,9,62),Vector3(-58,7,40),Vector3(17,2,22),Vector3(5,2.5,7),Vector3(3.5,3.5,4.8)][view]
 	cam.position=pivot+offset
 	cam.position.y=maxf(cam.position.y,zone.height_at(cam.position.x,cam.position.z)+2.5)
-	cam.look_at(pivot+Vector3.UP*(16 if view<2 else 22))
+	cam.look_at(pivot+Vector3.UP*([16.0,16.0,22.0,0.8,3.5][view]))
 
 func toggle(enabled:bool) -> void:
 	trial.set_enabled(enabled)
@@ -158,7 +160,7 @@ func _input(event:InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_ESCAPE:quit()
 		if event.keycode==KEY_SPACE and trial!=null:toggle(not trial.enabled)
-		if event.keycode==KEY_TAB and cam!=null:place_camera((angle+1)%3)
+		if event.keycode==KEY_TAB and cam!=null:place_camera((angle+1)%views)
 
 func fixture_signature() -> String:
 	var context:=HashingContext.new()

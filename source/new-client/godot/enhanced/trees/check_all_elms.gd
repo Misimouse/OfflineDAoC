@@ -3,10 +3,12 @@ extends SceneTree
 var zone
 var trial
 var out:=""
+var manifest:="res://.enhanced-session/elm_trial/bundles/all_connacht_20261021/manifest.json"
 
 func _initialize() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--out="):out=arg.trim_prefix("--out=")
+		if arg.begins_with("--manifest="):manifest=arg.trim_prefix("--manifest=")
 	call_deferred("run")
 
 func fixtures() -> String:
@@ -51,7 +53,7 @@ func run() -> void:
 	var shapes:=physics()
 	trial=load("res://enhanced/trees/elm_trial.gd").new()
 	world.add_child(trial)
-	trial.override_manifest="res://.enhanced-session/elm_trial/bundles/all_connacht_20261021/manifest.json"
+	trial.override_manifest=manifest
 	assert(trial.configure())
 	var start:=Time.get_ticks_usec()
 	assert(trial.apply_zone(zone))

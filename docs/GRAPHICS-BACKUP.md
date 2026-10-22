@@ -9,7 +9,7 @@ are kept separate. This graphics branch is still based on the 0.37c client, not 
 | Feature | Runtime / source | Current status |
 |---|---|---|
 | Water | `enhanced/terrain/water_trial.gd`, `water_trial.gdshader`, preparation/build scripts | User accepted the natural waves; opacity deferred to final corrections |
-| Elms | `enhanced/trees/elm_trial.gd`, `prepare_elm.gd` | User-supplied tree used for all 661 Connacht elm placements; bark/leaves/LOD refinement remains |
+| Elms | `enhanced/trees/elm_trial.gd`, `prepare_elm.gd` | Shared 661-tree model repaired for root contact and photographed bark; owner visual review, foliage and LOD refinement remain |
 | Ground and paths | `enhanced/terrain/paths_pbr.gd`, `paths_pbr.gdshader` | Four-patch material trial; broader soil redistribution remains |
 | Monoliths and ivy | `enhanced/terrain/stone_ivy_trial.gd`, build/prepare scripts, shaders | Geometry trial accepted; stone and leaf textures need final refinement |
 | Replanting | `enhanced/replant`, `landscape_patch.gd` | Reversible Hibernia plans; active and most recent prepared plans differ |
@@ -19,6 +19,10 @@ The matching GLB, PNGs, baked Godot scenes/meshes, active manifests and imported
 Ardee images are archived privately in **Misimouse/DAoC-Godot-Remasters**, under
 `graphics/zone207/snapshot-20261022`. They are not missing because art is unfinished:
 work in progress is backed up with its status explicitly recorded.
+
+The subsequent elm correction is kept separately in `graphics/zone207/elm-repair-20261022`,
+with its new scene, bark maps, checksums and prior activation for rollback.
+See [ELM-REPAIR-20261022.md](ELM-REPAIR-20261022.md) for the measured root gap and checks.
 
 This public code branch excludes converted stock game content, binaries, credentials,
 accounts, played databases, logs and private activation folders. The private archive has
