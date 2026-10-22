@@ -31,11 +31,16 @@ func _initialize() -> void:
 			for normal in arrays[Mesh.ARRAY_NORMAL]:assert(absf(normal.length()-1.0)<0.02)
 			assert(arrays[Mesh.ARRAY_TANGENT].size()==arrays[Mesh.ARRAY_VERTEX].size()*4)
 			var before:BaseMaterial3D=src.get_active_material(surface)
-			var after:BaseMaterial3D=dst.get_active_material(surface)
+			var after:Material=dst.get_active_material(surface)
 			var a:=before.albedo_texture.get_image()
 			if args.has("bark") and String(src.name).begins_with("Tronco"):
 				a=Image.load_from_file(String(args.bark).path_join("bark_colour.jpg"))
-			var b:=after.albedo_texture.get_image()
+			var expected_texture:Texture2D
+			if after is ShaderMaterial:
+				assert(String(src.name).begins_with("Tronco") and args.has("bark"))
+				expected_texture=after.get_shader_parameter("bark_colour")
+			else:expected_texture=after.albedo_texture
+			var b:=expected_texture.get_image()
 			a.clear_mipmaps();b.clear_mipmaps()
 			a.convert(Image.FORMAT_RGBA8);b.convert(Image.FORMAT_RGBA8)
 			assert(a.get_data()==b.get_data())

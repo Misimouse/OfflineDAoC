@@ -4,6 +4,11 @@ var reference_anchor:Node3D
 
 func place_camera(view:int) -> void:
 	angle=view
+	if args.has("leaf-review") and (view==1 or view==2):
+		# Close views are essential: distant crown silhouettes hide bad twig routes.
+		cam.position=pivot+(Vector3(9,9,7) if view==1 else Vector3(11,18,9))
+		cam.look_at(pivot+(Vector3(3,12,2) if view==1 else Vector3(8,19,6)))
+		return
 	var offset:Vector3=[Vector3(34,11,32),Vector3(24,11,24),Vector3(18,10,20),Vector3(5,2.5,7),Vector3(3.5,3.5,4.8)][view]
 	cam.position=pivot+offset
 	cam.position.y=maxf(cam.position.y,zone.height_at(cam.position.x,cam.position.z)+2.5)
