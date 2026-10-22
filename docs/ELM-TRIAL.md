@@ -1,5 +1,17 @@
 # Single elm visual trial in Ardee
 
+## Expanded experimental trial: all Connacht elms (21 October)
+
+The owner requested replacing every elm to assess distance/loading before fixing art. An optional manifest scope `all_zone_elms` replaces **326 Elm + 335 Elm2 = 661** existing zone207 fixtures. The two stock variants have different textures and non-identical geometry; they now share the supplied prototype, with each original placement, yaw and scale preserved. Other species and zones are untouched. This remains a loading/appearance experiment, not final art approval.
+
+Before any original slot is hidden, the controller verifies both stock model hashes, zone/scene hashes, both fixture counts and every corresponding instance transform. Any incomplete match keeps originals. The two shared replacement meshes are batched along the existing model/cell groups (648 batches for this zone), retaining original draw distances and fade mode. The private nested batches follow view-distance setting changes. No per-frame plant/tree generation or added fixtures are involved. Source art and physics remain unchanged. Ctrl+F9 toggles all 661; cleanup/unload restores their original transforms exactly.
+
+`enhanced/trees/check_all_elms.gd` runs an offline rendered route with original/new trees. Checks passed for full restoration, unchanged collision, view-distance changes, region unload/reload and rejecting an incomplete fixture count without hiding originals. In this local run the actual saved display resolution was **3840×2054**: original mean frame time 16.65ms, new 21.99ms (approximately 60 versus 45 FPS), new p95 27.18ms and one maximum of 179.98ms. Building replacement batches took 86.57ms. These are standalone scene measurements without server/NPCs and are not a gameplay or whole-world performance guarantee. Prototype ground contact, bark, foliage, internal shadow flicker and missing distance LODs are deliberately still pending.
+
+The LAB enables existing developer keys only after validating its isolated connection profile; Ctrl+F6 toggles client flight. The old single-fixture manifest remains available. Private activation/backup, rendered report and guarded rollback commands live outside Git in the workspace's `outputs/Prueba_olmos_Connacht_20261021`. `Restaurar_originales.cmd` disables this expanded trial; `Volver_a_un_solo_olmo.cmd` restores the previous activation. Both take effect on next LAB entry and refuse to overwrite a different newer activation.
+
+## Original single-fixture trial
+
 The owner supplied `Olmo_DAoC_Enhanced (2).zip` on 21 October. Its GLB has 30,162 triangles in two meshes/materials (bark and alpha-cut foliage); it is a user-supplied prototype, not the previously rejected Meshy candidate. Supplied Python is retained as source data and is not executed. No external download or generation is required.
 
 `enhanced/trees/prepare_elm.gd` imports the GLB through Godot, adds a Z-up to Y-up wrapper, uniformly matches the stock elm's above-origin height and saves a private PackedScene with mipmapped textures. The received GLB and PNGs are unchanged. The scene, source hash, stock/zone hashes, bounds and uniform scale are recorded under ignored `.enhanced-session/elm_trial/bundles/user_20261021`.

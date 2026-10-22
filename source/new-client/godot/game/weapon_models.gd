@@ -128,6 +128,9 @@ static func pack(path: String) -> PackedScene:
 	if doc.append_from_file(ProjectSettings.globalize_path(path), state) != OK:
 		return null
 	var scene := doc.generate_scene(state)
+	var forge_script := "res://enhanced/godot_tools/forge_overrides.gd"
+	if FileAccess.file_exists(forge_script):
+		load(forge_script).new().apply_gltf(scene, path)
 	var packed := PackedScene.new()
 	var ok := packed.pack(scene) == OK
 	scene.free()

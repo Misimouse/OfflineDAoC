@@ -60,6 +60,15 @@ static func texture_dir(texture_set := "x4plus") -> String:
 ## A figure texture: the GPU-compressed copy (tools/compress_textures.gd: BC7 with mipmaps, a quarter of the memory, no
 ## decode; owner 2026-10-10: the game crawled for a minute after loading while the 4x skins were decoded), else the png.
 static func load_texture(dir: String, key: String) -> Texture2D:
+	# Resolve approved Godot candidates before the optional compressed cache.
+	if dir.contains("/x4plus"):
+		var forge_script := "res://enhanced/godot_tools/forge_overrides.gd"
+		if FileAccess.file_exists(forge_script):
+			var forge = load(forge_script).new()
+			var source := "%s/%s.png" % [dir, key]
+			var candidate: String = forge.resolve_file(source)
+			if candidate != source:
+				return forge.texture(candidate)
 	var bc := "%s_bc/%s.res" % [dir, key]
 	if ResourceLoader.exists(bc):
 		var cimg := ResourceLoader.load(bc, "Image") as Image
@@ -81,6 +90,9 @@ static func pack_helm(path: String) -> PackedScene:
 	if doc.append_from_file(ProjectSettings.globalize_path(path), st) != OK:
 		return null
 	var scene := doc.generate_scene(st)
+	var forge_script := "res://enhanced/godot_tools/forge_overrides.gd"
+	if FileAccess.file_exists(forge_script):
+		load(forge_script).new().apply_gltf(scene, path)
 	var packed := PackedScene.new()
 	var ok := packed.pack(scene) == OK
 	scene.free()

@@ -45,6 +45,8 @@ func run() -> void:
 	if server.active or server.client != null:
 		fail("Ya existe otra conexión en este cliente.")
 		return
+	# This isolated developer LAB needs the client's existing Ctrl+F6 flight control.
+	root.get_node("BootSettings").set("dev", true)
 	server.host = config.host
 	server.server_port = int(config.port)
 	server.protocol_profile = "lab"
@@ -87,6 +89,19 @@ func run() -> void:
 	var tree_trial = load("res://enhanced/trees/elm_trial.gd").new()
 	current_scene.add_child(tree_trial)
 	tree_trial.attach(current_scene.get("region"))
+	var paths_trial = load("res://enhanced/terrain/paths_pbr.gd").new()
+	current_scene.add_child(paths_trial)
+	paths_trial.attach(current_scene.get("region"))
+	var stone_ivy_trial = load("res://enhanced/terrain/stone_ivy_trial.gd").new()
+	current_scene.add_child(stone_ivy_trial)
+	stone_ivy_trial.attach(current_scene.get("region"))
+	var water_trial = load("res://enhanced/terrain/water_trial.gd").new()
+	current_scene.add_child(water_trial)
+	water_trial.attach(current_scene.get("region"))
+	if not current_scene.get_meta("enhanced_inspector_bridge",false):
+		var inspector_bridge = load("res://enhanced/godot_tools/inspector_bridge.gd").new()
+		current_scene.add_child(inspector_bridge)
+		inspector_bridge.attach(current_scene)
 	root.title = "DAoC Enhanced — Ardee LAB (copia de pruebas)"
 	ready = true
 	status("ready", "Ardee lista. Al salir se cerrará también el servidor de pruebas.")

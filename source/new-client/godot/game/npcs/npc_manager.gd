@@ -247,7 +247,10 @@ func instance_model(path: String) -> Node3D:
 		prof_parse_us += Time.get_ticks_usec() - tp
 		prof_parsed += 1
 	var ps: PackedScene = _scenes[path]
-	return ps.instantiate() as Node3D if ps else null
+	var instance := ps.instantiate() as Node3D if ps else null
+	if instance != null and FileAccess.file_exists("res://.enhanced-session/godot_tools/active.json"):
+		load("res://enhanced/godot_tools/forge_overrides.gd").new().apply_gltf(instance,path)
+	return instance
 
 
 static func _pack_model(path: String) -> PackedScene:

@@ -1,5 +1,5 @@
 extends Node
-## One reversible visual replacement in the existing fixture batches. No physics or DB changes.
+## Reversible elm visual trials in existing fixture batches. No physics or DB changes.
 const STATE:="res://.enhanced-session/elm_trial"
 var override_manifest:=""
 var manifest:Dictionary={}
@@ -9,6 +9,8 @@ var replacement:Node3D
 var bound_zone:ZoneLoader
 var error:=""
 var status_label:Label
+var batch_links:Array=[]
+var last_view_mult:=-1.0
 
 func read_json(path:String) -> Dictionary:
 	var f:=FileAccess.open(path,FileAccess.READ)
@@ -28,6 +30,12 @@ func configure() -> bool:
 	if FileAccess.get_sha256(String(manifest.get("scene","")))!=manifest.get("scene_sha256",""):return false
 	if FileAccess.get_sha256("res://content/zones/zone207/zone.json")!=manifest.get("zone_sha256",""):return false
 	if FileAccess.get_sha256("res://content/zones/zone207/models/helm.gltf")!=manifest.get("stock_sha256",""):return false
+	if manifest.get("scope", "single") == "all_zone_elms":
+		var specs = manifest.get("models", [])
+		if not specs is Array or specs.size()!=2:return false
+		for i in 2:
+			if specs[i].get("file", "") != ["models/helm.gltf", "models/helm2.gltf"][i]:return false
+			if FileAccess.get_sha256("res://content/zones/zone207/"+String(specs[i].file))!=specs[i].get("sha256", ""):return false
 	return true
 
 func attach(region:RegionWorld) -> void:
@@ -50,6 +58,7 @@ func attach(region:RegionWorld) -> void:
 func apply_zone(zone:ZoneLoader) -> bool:
 	if int(zone.info.get("id",-1))!=207:return false
 	if is_instance_valid(bound_zone):return bound_zone==zone
+	if manifest.get("scope", "single") == "all_zone_elms":return apply_all_elms(zone)
 	var fixture:Dictionary={}
 	for f in zone.info.fixtures:
 		if int(f.get("id",-1))==int(manifest.fixture):fixture=f;break
@@ -107,6 +116,93 @@ func apply_zone(zone:ZoneLoader) -> bool:
 	print("ELM_TRIAL_APPLIED fixture=207:1109 originals=1 new_tree=1 triangles=",manifest.triangles)
 	return true
 
+func apply_all_elms(zone:ZoneLoader) -> bool:
+	var matches:Array=[]
+	var references:Array=[]
+	# Match every fixture before hiding anything. These two stock meshes have identity local transforms.
+	for spec in manifest.models:
+		var model_index:=-1
+		for i in zone.info.models.size():
+			if zone.info.models[i].file==spec.file:model_index=i;break
+		if model_index<0:return false
+		var model:Dictionary=zone.info.models[model_index]
+		var expected:Dictionary={}
+		for f in zone.info.fixtures:
+			if int(f.m)!=model_index:continue
+			if f.has("basis"):return false
+			var at:=Vector3(f.pos[0],f.pos[1],f.pos[2])
+			if expected.has(at):return false
+			expected[at]=Transform3D(Basis(Vector3.UP,deg_to_rad(float(f.yaw))).scaled(Vector3.ONE*float(f.scale)),at)
+		if expected.size()!=int(spec.count):return false
+		var seen:Dictionary={}
+		for child in zone.get_children():
+			if not child is MultiMeshInstance3D or not String(child.name).begins_with(String(model.name)+"_"):continue
+			references.append(child)
+			for i in child.multimesh.instance_count:
+				var transform:Transform3D=child.multimesh.get_instance_transform(i)
+				if not expected.has(transform.origin) or seen.has(transform.origin):return false
+				if not transform.is_equal_approx(expected[transform.origin]):return false
+				seen[transform.origin]=true
+				matches.append({"node":child,"index":i,"transform":transform})
+		if seen.size()!=expected.size():return false
+	if matches.size()!=int(manifest.total):return false
+	var packed=load(String(manifest.scene))
+	if not packed is PackedScene:return false
+	var asset:Node3D=packed.instantiate()
+	var anchor:=Node3D.new()
+	anchor.name="Enhanced_Elms_Connacht"
+	anchor.add_child(asset)
+	var parts:Array=[]
+	for node in asset.find_children("*","MeshInstance3D",true,false):
+		var relative:=Transform3D.IDENTITY
+		var parent:Node=node
+		while parent!=anchor:
+			if parent is Node3D:relative=parent.transform*relative
+			parent=parent.get_parent()
+		parts.append({"mesh":node.mesh,"transform":relative,"name":String(node.name)})
+	if parts.size()!=2:
+		anchor.free()
+		return false
+	var links:Array=[]
+	for reference in references:
+		for part in parts:
+			var mm:=MultiMesh.new()
+			mm.transform_format=MultiMesh.TRANSFORM_3D
+			mm.mesh=part.mesh
+			mm.instance_count=reference.multimesh.instance_count
+			for i in mm.instance_count:
+				mm.set_instance_transform(i,reference.multimesh.get_instance_transform(i)*part.transform)
+			var batch:=MultiMeshInstance3D.new()
+			batch.name=String(reference.name)+"_"+String(part.name)
+			batch.multimesh=mm
+			batch.visibility_range_end=reference.visibility_range_end
+			batch.visibility_range_end_margin=reference.visibility_range_end_margin
+			batch.visibility_range_fade_mode=reference.visibility_range_fade_mode
+			batch.set_meta("base_far",reference.get_meta("base_far"))
+			anchor.add_child(batch)
+			links.append({"batch":batch,"reference":reference})
+	anchor.remove_child(asset)
+	asset.free()
+	zone.add_child(anchor)
+	originals=matches
+	batch_links=links
+	replacement=anchor
+	bound_zone=zone
+	last_view_mult=-1.0
+	_process(0.0)
+	set_enabled(enabled)
+	print("ELM_TRIAL_APPLIED zone=207 originals=",matches.size()," new_trees=",matches.size()," batches=",links.size()," triangles_per_tree=",manifest.triangles)
+	return true
+
+func _process(_delta:float) -> void:
+	# ZoneLoader.apply_view updates direct children. Mirror that setting for the private nested batches.
+	if batch_links.is_empty() or last_view_mult==ZoneLoader.view_mult:return
+	last_view_mult=ZoneLoader.view_mult
+	for link in batch_links:
+		if not is_instance_valid(link.batch) or not is_instance_valid(link.reference):continue
+		link.batch.visibility_range_end=link.reference.visibility_range_end
+		link.batch.visibility_range_end_margin=link.reference.visibility_range_end_margin
+
 func set_enabled(value:bool) -> void:
 	enabled=value
 	for original in originals:
@@ -115,7 +211,7 @@ func set_enabled(value:bool) -> void:
 		if value:transform.basis=Basis(Vector3.ZERO,Vector3.ZERO,Vector3.ZERO)
 		original.node.multimesh.set_instance_transform(int(original.index),transform)
 	if is_instance_valid(replacement):replacement.visible=value
-	if is_instance_valid(status_label):status_label.text="Olmo: %s | Ctrl+F9: comparar"%("nuevo"if value else"original")
+	if is_instance_valid(status_label):status_label.text="Olmos (%d): %s | Ctrl+F9: comparar"%[originals.size(),"nuevos"if value else"originales"]
 
 func _input(event:InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.ctrl_pressed and event.keycode==KEY_F9 and is_instance_valid(replacement):
@@ -126,6 +222,7 @@ func restore(keep_choice:bool=false) -> void:
 	var choice:=enabled
 	set_enabled(false)
 	originals.clear()
+	batch_links.clear()
 	if is_instance_valid(replacement):replacement.queue_free()
 	replacement=null
 	bound_zone=null

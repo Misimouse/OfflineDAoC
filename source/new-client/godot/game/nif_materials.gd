@@ -9,6 +9,7 @@ extends RefCounted
 
 const SLOTS := ["base", "dark", "detail", "decal", "glow", "gloss", "tex1", "tex2", "env"]
 
+var _approved_paths: Dictionary = {}
 var texture_set := "x4plus"
 var env_strength := 1.0          # how strong the environment-map reflections are (zone_loader: Tuscaran Glacier)
 var use_material_light := false     # pregame scenes: keep the material's ambient darkness (spec mat_light), as the client
@@ -21,6 +22,11 @@ var _textures := {}                 # "set/name" -> Texture2D
 func _init(folders: Dictionary, initial_set: String) -> void:
 	_folders = folders
 	texture_set = initial_set if folders.has(initial_set) else folders.keys()[0]
+	if FileAccess.file_exists("res://.enhanced-session/validated_zone207/active.json") and String(folders.get("x4plus", "")).replace("\\", "/").contains("/zone207/textures/"):
+		_approved_paths = load("res://enhanced/validated_textures.gd").new(folders, initial_set).approved
+	if FileAccess.file_exists("res://.enhanced-session/godot_tools/active.json"):
+		var forge = load("res://enhanced/godot_tools/forge_overrides.gd").new()
+		_approved_paths.merge(forge.for_folders(folders), true)
 
 
 static var WEB := RegEx.create_from_string("(?i)spiderweb|cob_crnr|cobweb")
@@ -102,6 +108,8 @@ func _bind_textures(mat: ShaderMaterial) -> void:
 
 
 func _path(tex_name: String) -> String:
+	if texture_set == "x4plus" and _approved_paths.has(tex_name):
+		return String(_approved_paths[tex_name])
 	var path := String(_folders[texture_set]).path_join(tex_name + ".png")
 	if not FileAccess.file_exists(path) and _folders.has("original"):
 		path = String(_folders["original"]).path_join(tex_name + ".png")   # not upscaled yet: use the client's own
