@@ -17,6 +17,7 @@ func attach(region) -> bool:
 		path=pointer.manifest
 	manifest=JSON.parse_string(FileAccess.get_file_as_string(path))
 	if FileAccess.get_sha256(manifest.scene)!=manifest.sha256:return false
+	if manifest.has("bindstone_scene") and FileAccess.get_sha256(manifest.bindstone_scene)!=manifest.bindstone_sha256:return false
 	for file in manifest.stock_hashes:
 		if FileAccess.get_sha256("res://content/zones/zone207/models/"+String(file))!=manifest.stock_hashes[file]:return false
 	region.zone_added.connect(apply_zone);region.zone_removing.connect(func(zone):
@@ -34,10 +35,20 @@ func apply_zone(zone) -> void:
 		if not name_string.begins_with("Shroom Ring_") and not (name_string.begins_with("Bindstone_") and child.multimesh.mesh.get_aabb().size.y<1.0):continue
 		for index in child.multimesh.instance_count:plans.append({"node":child,"index":index,"transform":child.multimesh.get_instance_transform(index)})
 	if plans.size()!=9:pending.free();push_error("Expected nine mushroom rings; stock retained");return
+	var stone_packed:PackedScene
+	if manifest.has("bindstone_scene"):
+		stone_packed=load(String(manifest.bindstone_scene))
+		var stones:Array=[]
+		for child in zone.get_children():
+			if child is MultiMeshInstance3D and String(child.name).begins_with("Bindstone_") and child.multimesh.mesh.get_aabb().size.y>1.0:
+				for index in child.multimesh.instance_count:stones.append({"node":child,"index":index,"transform":child.multimesh.get_instance_transform(index)})
+		if stones.size()!=6:pending.free();push_error("Expected six bindstone parts; originals retained");return
+		plans.append_array(stones)
 	for fixture in zone.info.fixtures:
 		var file:String=zone.info.models[int(fixture.m)].file.get_file()
 		if not manifest.rings.has(file):continue
 		var holder:=Node3D.new();holder.transform=Transform3D(Basis(Vector3.UP,deg_to_rad(float(fixture.yaw))).scaled(Vector3.ONE*float(fixture.scale)),Vector3(fixture.pos[0],fixture.pos[1],fixture.pos[2]));pending.add_child(holder)
+		if file=="hbindstone.gltf" and stone_packed!=null:holder.add_child(stone_packed.instantiate())
 		for component in manifest.rings[file]:
 			var model:Node3D=packed.instantiate();var lo:Vector3=Vector3(component.minimum[0],component.minimum[1],component.minimum[2]);var hi:=Vector3(component.maximum[0],component.maximum[1],component.maximum[2]);var size:=hi-lo
 			model.scale=Vector3(size.x/2.92,size.y/2.65,size.z/2.92);model.position=Vector3(component.center[0],0,component.center[2]);holder.add_child(model);mushrooms.append(model)

@@ -151,6 +151,8 @@ func sample() -> Dictionary:
 			if mushroom_controller!=null and mushroom_controller.bound_zone==zone and String(model.file).get_file() in ["hbindstone.gltf","h-shroomring.gltf"]:
 				row["image_files"]=[mushroom_controller.manifest.texture,mushroom_controller.manifest.stem_texture]
 				row["note"]="Setas nuevas redondeadas con textura de sombrero y pie. La piedra de vinculación conserva su modelo y grabados."
+				if mushroom_controller.manifest.has("bindstone_scene") and String(model.file).get_file()=="hbindstone.gltf":
+					row["model_file"]="";row["image_files"].append_array([mushroom_controller.manifest.marble,mushroom_controller.manifest.glyph]);row["note"]="Piedra de vinculación de mármol mate con emblema celta tallado en relieve y setas de color atenuado. Materiales actuales de la prueba local."
 				if String(model.file).get_file()=="h-shroomring.gltf":row["model_file"]=""
 			objects.append(row)
 		var here=zone.to_local(origin)

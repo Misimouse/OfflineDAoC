@@ -24,6 +24,7 @@ func configure() -> bool:
 	manifest=JSON.parse_string(FileAccess.get_file_as_string(path))
 	if manifest.get("zone",-1)!=207 or manifest.get("models",[]).size()!=11:return false
 	if FileAccess.get_sha256("res://content/zones/zone207/zone.json")!=manifest.get("zone_sha256",""):return false
+	if manifest.get("terrain_conform",false) and FileAccess.get_sha256(manifest.elm_bark)!=manifest.elm_bark_sha256:return false
 	for item in manifest.models:
 		if FileAccess.get_sha256(item.scene)!=item.scene_sha256:return false
 		if FileAccess.get_sha256("res://content/zones/zone207/"+String(item.file))!=item.stock_sha256:return false
@@ -80,7 +81,12 @@ func apply_zone(zone) -> bool:
 			planted.append({"id":int(fixture.id),"file":String(plan.spec.file),"holder":holder,"asset":asset,"meshes":meshes,"far":plan.far})
 	if planted.size()!=int(manifest.total):pending.free();planted.clear();return false
 	zone.add_child(pending);anchor=pending;originals=slots;bound_zone=zone
-	if manifest.get("terrain_extensions",false):
+	if manifest.get("terrain_conform",false):
+		root_extensions=load("res://enhanced/trees/terrain_root_conform.gd").new()
+		root_extensions.setup(zone,String(manifest.elm_bark))
+		for tree in planted:
+			if tree.file!="models/hlog.gltf":root_extensions.apply(tree.asset,tree.file)
+	elif manifest.get("terrain_extensions",false):
 		root_extensions=load("res://enhanced/trees/terrain_root_extensions.gd").new()
 		for tree in planted:
 			if tree.file!="models/hlog.gltf":tree.meshes.append_array(root_extensions.apply(tree.asset,zone))
