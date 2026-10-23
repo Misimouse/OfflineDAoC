@@ -170,7 +170,23 @@ func sample() -> Dictionary:
 				row["image_files"]=[]
 				for spec in paths.manifest.maps:row.image_files.append(String(spec.path))
 				row["note"]="Tierra y grava usan materiales nuevos de caminos: se enlazan sus mapas actuales, no los atlas que quedan ocultos."
+			var patterns=controllers.get("ground_patterns.gd")
+			if patterns!=null and patterns.bound_zone==zone and patterns.manifest.get("patches",[]).has(key):
+				row["image_files"]=[]
+				if patterns.enabled:
+					row["texture_names"]=[];row["image_files"]=patterns.image_files();row["note"]="Patrones nuevos con distribución original y transición suave en el borde de la prueba. Ctrl+F10 compara."
+				else:
+					row.texture_names.erase("h_soil");row.texture_names.erase("h_tinypebbles")
+					for spec in patterns.legacy.manifest.maps:row.image_files.append(String(spec.path))
+					row["note"]="Comparación: suelo anterior con tierra y grava aprobadas."
 			objects.append(row)
+	var ground_patterns=controllers.get("ground_patterns.gd")
+	if ground_patterns!=null and is_instance_valid(ground_patterns.bound_zone):
+		for point in [{"name":"Suelo: Ardee","x":1357.425,"z":1258.15},{"name":"Suelo: ladera","x":1100.0,"z":1090.0},{"name":"Suelo: hierba pedregosa","x":1316.0,"z":1148.0}]:
+			var zone=ground_patterns.bound_zone
+			var p:Vector3=zone.to_global(Vector3(point.x,zone.height_at(point.x,point.z),point.z))
+			if origin.distance_to(p)>350:continue
+			objects.append({"id":"review:ground:"+String(point.name),"name":point.name,"model":"Patrones de suelo","kind":"Suelo de prueba","zone":207,"model_file":"","image_files":ground_patterns.image_files(),"position":[p.x,p.y,p.z],"distance_m":origin.distance_to(p),"in_camera":in_view(camera,p),"note":"Prueba de terreno Ardee/laderas con distribución original. Ctrl+F10 compara con el suelo anterior."})
 	var mushrooms=controllers.get("mushroom_trial.gd")
 	if mushrooms!=null and is_instance_valid(mushrooms.display):
 		for item in mushrooms.rows:
