@@ -172,9 +172,10 @@ func sample() -> Dictionary:
 				row["note"]="Tierra y grava usan materiales nuevos de caminos: se enlazan sus mapas actuales, no los atlas que quedan ocultos."
 			var patterns=controllers.get("ground_patterns.gd")
 			if patterns!=null and patterns.bound_zone==zone and patterns.manifest.get("patches",[]).has(key):
+				row["terrain_diagnostic"]=patterns.diagnostic()
 				row["image_files"]=[]
-				if patterns.enabled:
-					row["texture_names"]=[];row["image_files"]=patterns.image_files();row["note"]="Patrones nuevos con distribución original y transición suave en el borde de la prueba. Ctrl+F10 compara."
+				if patterns.enabled and patterns.was_blend:
+					row["texture_names"]=[];row["image_files"]=patterns.image_files();row["note"]="Terreno cargado: %s; material nuevo en %d/%d sectores. Ctrl+F10 compara."%[row.terrain_diagnostic.revision,row.terrain_diagnostic.replacement_meshes,row.terrain_diagnostic.bound_meshes]
 				else:
 					row.texture_names.erase("h_soil");row.texture_names.erase("h_tinypebbles")
 					for spec in patterns.legacy.manifest.maps:row.image_files.append(String(spec.path))

@@ -60,8 +60,22 @@ func apply_zone(zone) -> bool:
 		bindings.append({"mesh":baseline.mesh,"baseline":baseline.replacement,"replacement":mat})
 	if bindings.size()!=4:restore();return false
 	bound_zone=zone;was_blend=true;set_enabled(enabled);print("GROUND_PATTERNS_APPLIED patches=4 distribution=source geometry=unchanged");return true
+func diagnostic() -> Dictionary:
+	var actual:=0
+	var actual_shaders:Array=[]
+	for binding in bindings:
+		if not is_instance_valid(binding.mesh):continue
+		var material=binding.mesh.material_override
+		if material==binding.replacement:actual+=1
+		if material is ShaderMaterial and material.shader!=null:
+			var path:String=material.shader.resource_path
+			if not actual_shaders.has(path):actual_shaders.append(path)
+	return {"revision":manifest.get("revision","first-pilot"),"atlas_format":manifest.get("atlas_format","rgba8"),"enabled":enabled,"blend_mode":was_blend,"replacement_meshes":actual,"bound_meshes":bindings.size(),"actual_shaders":actual_shaders}
 func update_label() -> void:
-	if is_instance_valid(label):label.text="Terreno: %s | Ctrl+F10: comparar"%["patrones Ardee y laderas" if enabled else "suelo anterior"]
+	if not is_instance_valid(label):return
+	var state=diagnostic()
+	var revision:String={"first-pilot":"R1","stochastic-all-tiled-surfaces":"R2","smooth-source-masks":"R3"}.get(state.revision,String(state.revision))
+	label.text="Terreno: %s | %s | material %d/%d | Ctrl+F10: comparar"%[revision,"nuevo" if enabled and was_blend else "anterior",state.replacement_meshes,state.bound_meshes]
 func set_enabled(value:bool) -> void:
 	enabled=value
 	for binding in bindings:

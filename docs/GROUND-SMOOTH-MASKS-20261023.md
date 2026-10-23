@@ -11,3 +11,7 @@ Comprobaciones del renderizador aislado: igualdad de mallas y colisiones, 1404 e
 Próxima apertura de LAB: `.enhanced-session/ground_patterns/smooth_masks_20261023/manifest.json`. Ctrl+F10 conserva la comparación con el terreno anterior al primer piloto. `work/seal_smooth_ground.py undo` recupera el puntero exacto de la segunda revisión y se niega a sobrescribir una activación posterior. Recursos y capturas se archivan en privado local; sin publicación.
 
 Diagnóstico completo: `outputs/Diagnostico_Cuadricula_20261023`. Comparaciones y verificaciones: `outputs/Suelos_Mezclas_Suaves_20261023` del espacio de trabajo. El archivo privado depende de `ground-antitiling-20261023` y, a través de él, del primer piloto. Fuera de estos cuatro sectores no se corrige el terreno.
+
+## Rechazo visual del propietario — 22:24
+
+El propietario confirma con nuevas capturas que los cuadrados siguen prácticamente igual. La revisión NO está validada y el defecto principal permanece pendiente. Las mejoras observadas en el renderizador aislado no demostraron resolver su caso. Se añade diagnóstico de la revisión cargada, modo de terreno y shaders realmente aplicados en Inspector; LAB muestra R1/R2/R3 y el número de sectores con el material nuevo. Comprobado con el puntero activo: R3, RGBAH, shader smooth y 4/4 sectores; comparación anterior y modo pintado reportan 0 sectores nuevos. No se cambian recursos del terreno en este paso ni se inicia el juego. Es instrumentación para aislar la discrepancia, no otra corrección visual.
