@@ -1,5 +1,7 @@
 # R5: remate del suelo de Ardee y laderas
 
+Estado posterior: R5 fue rechazada por el propietario por introducir surcos. Se sustituye por R6, basada en R4, con filtrado del grano fino por tamaño de píxel. Véase `GROUND-R6-NO-FURROWS-20261024.md`. Este documento conserva el historial de R5; sus pruebas aisladas no constituyeron una aprobación visual real.
+
 El propietario valora R4 como prácticamente perfecta, pero pide resolver ahora los pequeños encajes y cuadros restantes, antes de plantas/césped/arena. Esta revisión completa el remate técnico del material base de la prueba; no se remite a una lista de tareas futuras.
 
 Dos causas corregidas: el detalle de tierra/grava restaba siempre el mip 6, que a distancia podía ser MÁS FINO que la muestra visible y reintroducir marcas/aliasing; ahora se calcula el tamaño de muestreo deformado y la muestra restada siempre es más gruesa. Además, la variación de color y la deformación procedían de una rejilla de ruido interpolado: se sustituye por un campo analítico suave en tres direcciones oblicuas, sin celdas cuadradas ni bordes de interpolación. Se calcula la matriz exacta de derivadas de la deformación, compartida por color, rugosidad y normales; se conserva el grano y el tono medio de R4.
