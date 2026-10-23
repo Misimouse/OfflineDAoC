@@ -48,7 +48,7 @@ func apply_zone(zone) -> bool:
 	if int(zone.info.id)!=207:return false
 	if is_instance_valid(bound_zone):return bound_zone==zone
 	if not legacy.apply_zone(zone):return false
-	var shader:=load("res://enhanced/terrain/ground_patterns.gdshader")
+	var shader=load(manifest.get("shader_path","res://enhanced/terrain/ground_patterns.gdshader"))
 	for baseline in legacy.bindings:
 		var mat:=ShaderMaterial.new();mat.shader=shader
 		for key in ["tile_tex","base_tex","base_tiles","layer_tex","layer_tiles","layer_tileable","layer_count","weights0","weights1","patch_index","patches","far_fade_m","soil_index","gravel_index","soil_colour","soil_normal","soil_roughness","gravel_colour","gravel_normal","gravel_roughness","soil_tiles","gravel_tiles","normal_strength","normal_fade_m"]:mat.set_shader_parameter(key,baseline.replacement.get_shader_parameter(key))
