@@ -147,6 +147,11 @@ func sample() -> Dictionary:
 					if target.has("sculpt"):
 						row["model_file"]="";row["kind"]="Roca nueva";row["note"]="Malla preparada de piedra. El material incrustado se conserva; no se ofrece la textura del monolito antiguo."
 					else:row["note"]="Edificio con hiedra 3D aparte. La lista enlaza el modelo base; la hiedra preparada no se confunde con su capa antigua."
+			var mushroom_controller=controllers.get("mushroom_trial.gd")
+			if mushroom_controller!=null and mushroom_controller.bound_zone==zone and String(model.file).get_file() in ["hbindstone.gltf","h-shroomring.gltf"]:
+				row["image_files"]=[mushroom_controller.manifest.texture,mushroom_controller.manifest.stem_texture]
+				row["note"]="Setas nuevas redondeadas con textura de sombrero y pie. La piedra de vinculación conserva su modelo y grabados."
+				if String(model.file).get_file()=="h-shroomring.gltf":row["model_file"]=""
 			objects.append(row)
 		var here=zone.to_local(origin)
 		if here.x>=0 and here.z>=0 and here.x<float(zone.info.size_m) and here.z<float(zone.info.size_m):
@@ -163,6 +168,13 @@ func sample() -> Dictionary:
 				for spec in paths.manifest.maps:row.image_files.append(String(spec.path))
 				row["note"]="Tierra y grava usan materiales nuevos de caminos: se enlazan sus mapas actuales, no los atlas que quedan ocultos."
 			objects.append(row)
+	var mushrooms=controllers.get("mushroom_trial.gd")
+	if mushrooms!=null and is_instance_valid(mushrooms.display):
+		for item in mushrooms.rows:
+			var row:Dictionary=item.duplicate(true)
+			var p:Vector3=mushrooms.bound_zone.to_global(Vector3(row.position[0],row.position[1],row.position[2]))
+			row.position=[p.x,p.y,p.z];row.distance_m=origin.distance_to(p);row.in_camera=in_view(camera,p+Vector3.UP*4)
+			if row.distance_m<350:objects.append(row)
 	var npcs=viewer.get("npcs")
 	var review=controllers.get("elm_review_stand.gd")
 	if review!=null and is_instance_valid(review.display) and review.display.visible:

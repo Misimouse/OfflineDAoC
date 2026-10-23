@@ -8,7 +8,8 @@ func foliage_lods(arrays:Array,group:int,needle:bool) -> Dictionary:
 	var block:int=indices.size()/groups
 	assert(block*groups==indices.size())
 	var result:Dictionary={};var added:=0
-	for stride in [2,8,32,128]:added+=ceili(float(groups)/stride)*group
+	var strides:Array=[2,6,16,32] if needle and args.has("dense") else [2,8,32,128]
+	for stride in strides:added+=ceili(float(groups)/stride)*group
 	for channel in [Mesh.ARRAY_VERTEX,Mesh.ARRAY_NORMAL,Mesh.ARRAY_TEX_UV,Mesh.ARRAY_TEX_UV2,Mesh.ARRAY_COLOR]:
 		if arrays[channel]!=null:arrays[channel]=arrays[channel].duplicate();arrays[channel].resize(positions.size()+added)
 	if arrays[Mesh.ARRAY_TANGENT]!=null:
@@ -16,7 +17,7 @@ func foliage_lods(arrays:Array,group:int,needle:bool) -> Dictionary:
 	var offset:=positions.size()
 	var errors:=[.025,.09,.30,.80]
 	for level in 4:
-		var stride:int=[2,8,32,128][level]
+		var stride:int=strides[level]
 		var target:=PackedInt32Array();target.resize(ceili(float(groups)/stride)*block)
 		var cursor:=0
 		for leaf in range(0,groups,stride):
@@ -29,7 +30,8 @@ func foliage_lods(arrays:Array,group:int,needle:bool) -> Dictionary:
 			for k in group:
 				var delta:Vector3=positions[start+k]-center
 				if needle:
-					var along:=axis*delta.dot(axis);delta=along*(1.0+.055*level)+(delta-along)*sqrt(float(stride))
+					var along:=axis*delta.dot(axis)
+					delta=along*(minf(sqrt(float(stride))*.75,3.0) if args.has("dense") else (1.0+.055*level))+(delta-along)*sqrt(float(stride))
 				else:delta*=scale
 				arrays[Mesh.ARRAY_VERTEX][offset+k]=center+delta
 				for channel in [Mesh.ARRAY_NORMAL,Mesh.ARRAY_TEX_UV,Mesh.ARRAY_TEX_UV2,Mesh.ARRAY_COLOR]:

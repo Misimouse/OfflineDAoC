@@ -13,6 +13,7 @@ var previous_taa:=false
 var previous_msaa:int=0
 var smoothing_changed:=false
 var lod_clock:=0.0
+var root_extensions
 func configure() -> bool:
 	var path:=override_manifest
 	if path.is_empty():
@@ -79,6 +80,10 @@ func apply_zone(zone) -> bool:
 			planted.append({"id":int(fixture.id),"file":String(plan.spec.file),"holder":holder,"asset":asset,"meshes":meshes,"far":plan.far})
 	if planted.size()!=int(manifest.total):pending.free();planted.clear();return false
 	zone.add_child(pending);anchor=pending;originals=slots;bound_zone=zone
+	if manifest.get("terrain_extensions",false):
+		root_extensions=load("res://enhanced/trees/terrain_root_extensions.gd").new()
+		for tree in planted:
+			if tree.file!="models/hlog.gltf":tree.meshes.append_array(root_extensions.apply(tree.asset,zone))
 	previous_taa=get_viewport().use_taa;previous_msaa=get_viewport().msaa_3d
 	get_viewport().use_taa=true;get_viewport().msaa_3d=maxi(previous_msaa,Viewport.MSAA_4X) as Viewport.MSAA;smoothing_changed=true
 	last_view=-1;_process(0);set_enabled(enabled)
@@ -121,6 +126,7 @@ func _input(event:InputEvent) -> void:
 func restore() -> void:
 	var choice:=enabled;set_enabled(false);enabled=choice
 	originals.clear();planted.clear()
+	root_extensions=null
 	if is_instance_valid(anchor):anchor.queue_free()
 	anchor=null;bound_zone=null
 	if smoothing_changed:
