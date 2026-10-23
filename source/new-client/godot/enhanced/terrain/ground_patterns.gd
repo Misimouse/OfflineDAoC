@@ -74,7 +74,7 @@ func diagnostic() -> Dictionary:
 func update_label() -> void:
 	if not is_instance_valid(label):return
 	var state=diagnostic()
-	var revision:String={"first-pilot":"R1","stochastic-all-tiled-surfaces":"R2","smooth-source-masks":"R3","continuous-soil-detail":"R4"}.get(state.revision,String(state.revision))
+	var revision:String={"first-pilot":"R1","stochastic-all-tiled-surfaces":"R2","smooth-source-masks":"R3","continuous-soil-detail":"R4","terrain-finish-r5":"R5"}.get(state.revision,String(state.revision))
 	label.text="Terreno: %s | %s | material %d/%d | Ctrl+F10: comparar"%[revision,"nuevo" if enabled and was_blend else "anterior",state.replacement_meshes,state.bound_meshes]
 func set_enabled(value:bool) -> void:
 	enabled=value
