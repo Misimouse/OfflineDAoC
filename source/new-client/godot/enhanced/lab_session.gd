@@ -86,13 +86,20 @@ func run() -> void:
 	if not await until(func():return not is_instance_valid(current_scene.get("loading")), 30):
 		fail("La escena no ha terminado de retirar la pantalla de carga.")
 		return
-	var tree_trial = load("res://enhanced/trees/elm_trial.gd").new()
-	current_scene.add_child(tree_trial)
-	tree_trial.attach(current_scene.get("region"))
-	if FileAccess.file_exists("res://.enhanced-session/elm_trial/review_stand.json"):
-		var elm_review=load("res://enhanced/trees/elm_review_stand.gd").new()
-		current_scene.add_child(elm_review)
-		elm_review.attach(current_scene.get("region"),tree_trial)
+	var forest_population=load("res://enhanced/trees/forest_population.gd").new()
+	var forest_ready:=false
+	if forest_population.configure():
+		current_scene.add_child(forest_population)
+		forest_ready=forest_population.attach(current_scene.get("region"))
+	if not forest_ready:
+		forest_population.queue_free()
+		var tree_trial = load("res://enhanced/trees/elm_trial.gd").new()
+		current_scene.add_child(tree_trial)
+		tree_trial.attach(current_scene.get("region"))
+		if FileAccess.file_exists("res://.enhanced-session/elm_trial/review_stand.json"):
+			var elm_review=load("res://enhanced/trees/elm_review_stand.gd").new()
+			current_scene.add_child(elm_review)
+			elm_review.attach(current_scene.get("region"),tree_trial)
 	var paths_trial = load("res://enhanced/terrain/paths_pbr.gd").new()
 	current_scene.add_child(paths_trial)
 	paths_trial.attach(current_scene.get("region"))

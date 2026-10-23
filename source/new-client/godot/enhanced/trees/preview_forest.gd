@@ -51,7 +51,7 @@ func run() -> void:
 			normal_count+=arrays[Mesh.ARRAY_NORMAL].size()
 			var material:ShaderMaterial=mesh.mesh.surface_get_material(surface)
 			assert(material.shader.code.contains("SPECULAR=0.0") and material.shader.code.contains("ROUGHNESS=0.98"))
-	assert(visible_meshes==(2 if manifest.variant in ["grove","stump","log"] else 1))
+	assert(visible_meshes==(3 if manifest.get("root_plate",false) else (2 if manifest.variant in ["grove","stump","log"] else 1)))
 	var cam:=Camera3D.new();world.add_child(cam);cam.make_current();cam.far=1500;cam.fov=55
 	var sky=load("res://game/sky_system.gd").new();world.add_child(sky);sky.setup(zone,cam,"x4plus");sky.set_hour(14);sky.time_scale=0;sky.set_process(false)
 	var layer:=CanvasLayer.new();world.add_child(layer);var label:=Label.new();layer.add_child(label);label.position=Vector2(20,20);label.add_theme_font_size_override("font_size",22)

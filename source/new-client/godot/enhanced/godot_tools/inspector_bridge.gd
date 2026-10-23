@@ -135,6 +135,11 @@ func sample() -> Dictionary:
 			var trees=controllers.get("elm_trial.gd")
 			if trees!=null and trees.enabled and trees.bound_zone==zone and String(model.name).to_lower().begins_with("elm"):
 				row["model_file"]="";row["kind"]="Árbol nuevo";row["note"]="Modelo de olmo preparado. Su imagen está incrustada; no se ofrece el atlas del árbol antiguo como si fuera el visible."
+			var forest=controllers.get("forest_population.gd")
+			if forest!=null and forest.bound_zone==zone:
+				var replacement_file:String=forest.model_file_for(String(model.file))
+				if not replacement_file.is_empty():
+					row["model_file"]=replacement_file;row["kind"]="Árbol nuevo";row["note"]="Modelo aprobado replantado. Las escenas del juego incluyen el material detallado y niveles de detalle por distancia."
 			var stone=controllers.get("stone_ivy_trial.gd")
 			if stone!=null and stone.get("manifest") is Dictionary:
 				for target in stone.manifest.get("targets",[]):
