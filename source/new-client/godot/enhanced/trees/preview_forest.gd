@@ -9,7 +9,7 @@ func run() -> void:
 	Engine.max_fps=60;root.size=Vector2i(1440,1000);root.use_taa=true;root.msaa_3d=Viewport.MSAA_4X
 	var manifest:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(args.manifest))
 	assert(FileAccess.get_sha256(manifest.scene)==manifest.scene_sha256)
-	var spec:Dictionary={"grove":{"file":"models/holdgrove.gltf","fixture":146,"height":44.1452,"label":"GROVE | Conifera"},"dead":{"file":"models/hdeadtree.gltf","fixture":480,"height":20.2895,"label":"DEATH | Copa de invierno"},"bare":{"file":"models/hbareskny.gltf","fixture":1428,"height":23.1138,"label":"BARE | Seco retorcido"}}[String(manifest.variant)]
+	var spec:Dictionary={"grove":{"file":"models/holdgrove.gltf","fixture":146,"height":44.1452,"label":"GROVE | Conifera"},"dead":{"file":"models/hdeadtree.gltf","fixture":480,"height":20.2895,"label":"DEATH | Copa de invierno"},"bare":{"file":"models/hbareskny.gltf","fixture":1428,"height":23.1138,"label":"BARE | Seco retorcido"},"stump":{"file":"models/hstumpy.gltf","fixture":1286,"height":2.24,"label":"STUMP | Raices y anillos"},"log":{"file":"models/hlog.gltf","fixture":366,"height":4.0,"label":"LOG | Tronco caido"}}[String(manifest.variant)]
 	var world:=Node3D.new();root.add_child(world)
 	var zone=load("res://game/zone_loader.gd").new();world.add_child(zone);zone.load_zone("res://content/zones/zone207","blend","x4plus")
 	await physics_frame
@@ -51,13 +51,15 @@ func run() -> void:
 			normal_count+=arrays[Mesh.ARRAY_NORMAL].size()
 			var material:ShaderMaterial=mesh.mesh.surface_get_material(surface)
 			assert(material.shader.code.contains("SPECULAR=0.0") and material.shader.code.contains("ROUGHNESS=0.98"))
-	assert(visible_meshes==(2 if manifest.variant=="grove" else 1))
+	assert(visible_meshes==(2 if manifest.variant in ["grove","stump","log"] else 1))
 	var cam:=Camera3D.new();world.add_child(cam);cam.make_current();cam.far=1500;cam.fov=55
 	var sky=load("res://game/sky_system.gd").new();world.add_child(sky);sky.setup(zone,cam,"x4plus");sky.set_hour(14);sky.time_scale=0;sky.set_process(false)
 	var layer:=CanvasLayer.new();world.add_child(layer);var label:=Label.new();layer.add_child(label);label.position=Vector2(20,20);label.add_theme_font_size_override("font_size",22)
 	label.add_theme_color_override("font_shadow_color",Color.BLACK);label.add_theme_constant_override("shadow_outline_size",5)
 	DirAccess.make_dir_recursive_absolute(args.out)
 	var views:Array=[{"offset":Vector3(52,28,58) if manifest.variant=="grove" else Vector3(27,12,31),"look":Vector3.UP*float(spec.height)*.5},{"offset":Vector3(2.5,3,3),"look":Vector3(0,3,0)},{"offset":Vector3(10,14,8),"look":Vector3(4,14,1)}]
+	if manifest.variant=="stump":views=[{"offset":Vector3(5.2,3.4,6.3),"look":Vector3(0,1,0)},{"offset":Vector3(2.0,4.5,2.5),"look":Vector3(0,2,0)},{"offset":Vector3(2.5,1.3,2.5),"look":Vector3(0,.65,0)}]
+	if manifest.variant=="log":views=[{"offset":Vector3(20,12,22),"look":Vector3(0,1,-5)},{"offset":Vector3(2.5,3.5,-19.5),"look":Vector3(0,1,-15.4)},{"offset":Vector3(7,4,8),"look":Vector3(0,1,4)}]
 	for view_index in views.size():
 		cam.position=at+views[view_index].offset;cam.position.y=maxf(cam.position.y,zone.height_at(cam.position.x,cam.position.z)+2);cam.look_at(at+views[view_index].look)
 		for enabled in [false,true]:
