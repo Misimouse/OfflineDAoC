@@ -43,7 +43,7 @@ func texture(path:String) -> ImageTexture:
 	var image:=Image.load_from_file(path);assert(image!=null);image.generate_mipmaps();var result:=ImageTexture.create_from_image(image);resources[path]=result;return result
 func atlas(path:String) -> ImageTexture:
 	if resources.has(path):return resources[path]
-	var image:=Image.create_from_data(manifest.atlas_size,manifest.atlas_size,false,Image.FORMAT_RGBA8,FileAccess.get_file_as_bytes(path));assert(image!=null);image.generate_mipmaps();var result:=ImageTexture.create_from_image(image);resources[path]=result;return result
+	var image:=Image.create_from_data(manifest.atlas_size,manifest.atlas_size,false,Image.FORMAT_RGBAH if manifest.get("atlas_format","")=="rgba16f" else Image.FORMAT_RGBA8,FileAccess.get_file_as_bytes(path));assert(image!=null);image.generate_mipmaps();var result:=ImageTexture.create_from_image(image);resources[path]=result;return result
 func apply_zone(zone) -> bool:
 	if int(zone.info.id)!=207:return false
 	if is_instance_valid(bound_zone):return bound_zone==zone
