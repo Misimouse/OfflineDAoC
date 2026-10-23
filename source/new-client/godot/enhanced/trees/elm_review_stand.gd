@@ -1,5 +1,5 @@
 extends Node
-## Two labelled review trees in LAB only. Never edits fixtures, stock content or physics.
+## Labelled review trees in LAB only. Never edits fixtures, stock content or physics.
 var config_path:="res://.enhanced-session/elm_trial/review_stand.json"
 var config:Dictionary={}
 var bound_zone
@@ -9,6 +9,8 @@ var hidden_positions:Dictionary={}
 var rows:Array=[]
 var tree_controller
 var previous_taa:=false
+var previous_msaa:int=0
+var smoothing_enabled:=true
 var taa_changed:=false
 var smoothing_layer:CanvasLayer
 var smoothing_label:Label
@@ -72,7 +74,9 @@ func apply_zone(zone) -> void:
 	display=anchor;bound_zone=zone;rows=prepared
 	if config.get("temporal_aa",false):
 		previous_taa=get_viewport().use_taa
-		get_viewport().use_taa=true
+		previous_msaa=get_viewport().msaa_3d
+		smoothing_enabled=true
+		apply_smoothing()
 		taa_changed=true
 		smoothing_layer=CanvasLayer.new()
 		add_child(smoothing_layer)
@@ -96,6 +100,7 @@ func restore() -> void:
 	display=null;bound_zone=null
 	if taa_changed:
 		get_viewport().use_taa=previous_taa
+		get_viewport().msaa_3d=previous_msaa as Viewport.MSAA
 		taa_changed=false
 	if is_instance_valid(smoothing_layer):smoothing_layer.queue_free()
 	smoothing_layer=null;smoothing_label=null
@@ -105,8 +110,13 @@ func hides_fixture(zone,at:Vector3) -> bool:
 
 func toggle_leaf_smoothing() -> void:
 	if not taa_changed:return
-	get_viewport().use_taa=not get_viewport().use_taa
+	smoothing_enabled=not smoothing_enabled
+	apply_smoothing()
 	update_smoothing_label()
+
+func apply_smoothing() -> void:
+	get_viewport().use_taa=smoothing_enabled
+	get_viewport().msaa_3d=(maxi(previous_msaa,Viewport.MSAA_4X) if smoothing_enabled else previous_msaa) as Viewport.MSAA
 
 func update_smoothing_label() -> void:
 	if is_instance_valid(smoothing_label):
