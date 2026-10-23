@@ -51,7 +51,7 @@ func apply_zone(zone) -> void:
 		title.visibility_range_end=100.0
 		title.modulate=Color(1.0,0.9,0.25)
 		anchor.add_child(title)
-		prepared.append({"id":"review:"+String(item.id),"name":String(item.label).replace("\n"," "),"position":[at.x,at.y,at.z],"model":String(item.id),"kind":"Árbol de prueba","zone":207,"model_file":"","note":"Ejemplar de revisión LAB, sin cambiar colisiones. Modelo y materiales preparados; no usar atlas del árbol antiguo."})
+		prepared.append({"id":"review:"+String(item.id),"name":String(item.label).replace("\n"," "),"position":[at.x,at.y,at.z],"model":String(item.id),"kind":"Árbol de prueba","zone":207,"model_file":String(item.get("model_file","")),"note":"Ejemplar de revisión LAB, sin cambiar colisiones. Modelo y materiales preparados; no usar atlas del árbol antiguo."})
 	# Clear only the private elm visuals around the review pair, reversibly, in LAB.
 	for record in tree_controller.originals:
 		var at:Vector3=record.transform.origin
