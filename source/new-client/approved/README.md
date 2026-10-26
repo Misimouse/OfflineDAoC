@@ -3,6 +3,7 @@
 `connacht-20261026` is the owner's approved visual checkpoint, including the canvas, fence,
 Muire entrance and night effects approved on 26 October. It contains the runtime profiles,
 textures, scenes, generated geometry, shaders and supporting source assets needed by those profiles.
+The snapshot contains 1,244 runtime files, including the 73 previously approved Connacht texture overrides (about 2.17 GiB compressed / 2.77 GiB installed).
 It does not include accounts, passwords, databases, saves, logs, Godot import caches or a game server.
 
 ## Build and install from a checkout

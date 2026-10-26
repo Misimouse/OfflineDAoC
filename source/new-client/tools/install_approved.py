@@ -82,6 +82,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix='approved-art-') as staging:
         staged = Path(staging)
         for row in manifest['files']:
+            # A matching existing file already passed the full hash preflight above.
+            if destination(project, row['path']).exists():
+                continue
             packed = b''.join((PACKAGE / 'blobs' / part).read_bytes() for part in row['parts'])
             data = zlib.decompress(packed)
             if len(data) != row['size'] or digest(data) != row['sha256']:

@@ -4172,6 +4172,606 @@
       ]
     },
     {
+      "path": ".enhanced-session/validated_zone207/active.json",
+      "sha256": "49d1e0ed40789e3daf4a266aac4b6d0dbbba5bb19ac91b3f4d5fac8145039a08",
+      "size": 177,
+      "parts": [
+        "49d1e0ed40789e3daf4a266aac4b6d0dbbba5bb19ac91b3f4d5fac8145039a08.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/manifest.json",
+      "sha256": "3340754de25c1f6aa0417aa047965b300c5136b1448a01fb429e98d6cf1b948f",
+      "size": 40616,
+      "parts": [
+        "3340754de25c1f6aa0417aa047965b300c5136b1448a01fb429e98d6cf1b948f.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/bcamcornerblock.png",
+      "sha256": "b30ae07afcc3c5d0c1c07a9a31ffe63b2ee1a0cc9016665b0528bd9527f354c4",
+      "size": 5368972,
+      "parts": [
+        "b30ae07afcc3c5d0c1c07a9a31ffe63b2ee1a0cc9016665b0528bd9527f354c4.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/clover_whiteflowers.png",
+      "sha256": "f6a85569a3e65c400150c7297fbe67762cea8dcb4f9fa017786672bb5934ad07",
+      "size": 13247722,
+      "parts": [
+        "f6a85569a3e65c400150c7297fbe67762cea8dcb4f9fa017786672bb5934ad07.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/elfgate.png",
+      "sha256": "dba6ded3de51013291929c685214f45756e52bd5ab725209eade3cfefd39f192",
+      "size": 6311926,
+      "parts": [
+        "dba6ded3de51013291929c685214f45756e52bd5ab725209eade3cfefd39f192.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/elfstuff.png",
+      "sha256": "1d7eea2652875d6ac22dc44616cfb4f02279394096317c08218fcda8e082651a",
+      "size": 808390,
+      "parts": [
+        "1d7eea2652875d6ac22dc44616cfb4f02279394096317c08218fcda8e082651a.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/goldroof.png",
+      "sha256": "46f9e76998b9830fecf631675220e16f9f7574760592583a5cd0946e400ff18c",
+      "size": 3969470,
+      "parts": [
+        "46f9e76998b9830fecf631675220e16f9f7574760592583a5cd0946e400ff18c.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_celtglass1.png",
+      "sha256": "ffc46948546626cd1cf6a4c7a672345c0c49386561aa472326fe83031f061465",
+      "size": 1463904,
+      "parts": [
+        "ffc46948546626cd1cf6a4c7a672345c0c49386561aa472326fe83031f061465.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_elfglass.png",
+      "sha256": "ac4bcaebfb4352ed8ef3f0da2904205a08cb4e264ede4973e66c724f146cd4a0",
+      "size": 1543734,
+      "parts": [
+        "ac4bcaebfb4352ed8ef3f0da2904205a08cb4e264ede4973e66c724f146cd4a0.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_elfmagic.png",
+      "sha256": "130abc1361d307b1ed11f8220638e8106e1917b406c33f66d689ccc94c34449d",
+      "size": 2918100,
+      "parts": [
+        "130abc1361d307b1ed11f8220638e8106e1917b406c33f66d689ccc94c34449d.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_grass.png",
+      "sha256": "5d05c614c746f6e5b151d8098cf25990057544c8c52fa131480ae47065f0a948",
+      "size": 13207983,
+      "parts": [
+        "5d05c614c746f6e5b151d8098cf25990057544c8c52fa131480ae47065f0a948.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_grass_craggy.png",
+      "sha256": "78cded4d4816e15b8b8bfe9d9a87746d710ea794892b0ea2ddd995a9649a2234",
+      "size": 13417246,
+      "parts": [
+        "78cded4d4816e15b8b8bfe9d9a87746d710ea794892b0ea2ddd995a9649a2234.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_ground_scrub.png",
+      "sha256": "2c1ef30c15269dc9b71f5eedfb5bcd80e8d7cc9366daa7742e0b8ac4e00895d3",
+      "size": 13349626,
+      "parts": [
+        "2c1ef30c15269dc9b71f5eedfb5bcd80e8d7cc9366daa7742e0b8ac4e00895d3.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_soil.png",
+      "sha256": "8fc50db792d5becb106bef44b588dceb9924858ab826769dc405dba18c5b7670",
+      "size": 12010714,
+      "parts": [
+        "8fc50db792d5becb106bef44b588dceb9924858ab826769dc405dba18c5b7670.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/h_stmp.png",
+      "sha256": "b0b18be2960a8413a3fbeec54b7ef6cc2fcccbeb1196a623d32113b1d63f4b1b",
+      "size": 12823722,
+      "parts": [
+        "b0b18be2960a8413a3fbeec54b7ef6cc2fcccbeb1196a623d32113b1d63f4b1b.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hallbox.png",
+      "sha256": "c3998107383c215e55f7faa6be1dbbed63261f72825837fa9c8e401792de3a80",
+      "size": 2820111,
+      "parts": [
+        "c3998107383c215e55f7faa6be1dbbed63261f72825837fa9c8e401792de3a80.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hallmossstone.png",
+      "sha256": "9e13612ed11810a581e768c868d7192116156733abcec08e69518518d089e869",
+      "size": 13270275,
+      "parts": [
+        "9e13612ed11810a581e768c868d7192116156733abcec08e69518518d089e869.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/harchrlf.png",
+      "sha256": "56dfee2900a24267e01ae12b30ff9357e6ec9827ffa50a998a3c3f941f0fa3a2",
+      "size": 9996521,
+      "parts": [
+        "56dfee2900a24267e01ae12b30ff9357e6ec9827ffa50a998a3c3f941f0fa3a2.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hbanner.png",
+      "sha256": "7236f9d8e7f10682de3a09bfa3e4c03102e661e23b0227f95685b83a99af71b2",
+      "size": 3470358,
+      "parts": [
+        "7236f9d8e7f10682de3a09bfa3e4c03102e661e23b0227f95685b83a99af71b2.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hbasevine.png",
+      "sha256": "837f2ad50ca6e20ef38844a8e2bf4a7f0e889e63ef3c3eab45b07ccf670a90d3",
+      "size": 3614447,
+      "parts": [
+        "837f2ad50ca6e20ef38844a8e2bf4a7f0e889e63ef3c3eab45b07ccf670a90d3.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hbeam.png",
+      "sha256": "07a0c38865e3fe9e39f37c53afb53c07227c8701a7750d5278a94b0e81e3e8fe",
+      "size": 4873308,
+      "parts": [
+        "07a0c38865e3fe9e39f37c53afb53c07227c8701a7750d5278a94b0e81e3e8fe.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hbirchtreen.png",
+      "sha256": "30de21bf675ac4885006a9b89cd47e53b36224775159ee4536d20bcc0706eb94",
+      "size": 10488122,
+      "parts": [
+        "30de21bf675ac4885006a9b89cd47e53b36224775159ee4536d20bcc0706eb94.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hceltcarve.png",
+      "sha256": "cad33786ec1b55ddb8353350e0cd2b4d88bb7651f36978dd2fb1b76b2a4f7f56",
+      "size": 6264800,
+      "parts": [
+        "cad33786ec1b55ddb8353350e0cd2b4d88bb7651f36978dd2fb1b76b2a4f7f56.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hclimbvine.png",
+      "sha256": "2fd610ac37e4919d51c1ff7426d14ef1eb55cea75528ead623f192c808a99e9a",
+      "size": 2863032,
+      "parts": [
+        "2fd610ac37e4919d51c1ff7426d14ef1eb55cea75528ead623f192c808a99e9a.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hcloth1.png",
+      "sha256": "a20c244bbd8b3131beec8da422bd85404e4225c6d15e4298afbc0b7c3b464173",
+      "size": 5654570,
+      "parts": [
+        "a20c244bbd8b3131beec8da422bd85404e4225c6d15e4298afbc0b7c3b464173.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hclutter.png",
+      "sha256": "b8b7c9e6225bc7351a7324b45c79c892a64edc898385980b44a13cb23928b809",
+      "size": 2367927,
+      "parts": [
+        "b8b7c9e6225bc7351a7324b45c79c892a64edc898385980b44a13cb23928b809.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hcobble.png",
+      "sha256": "ff5e291d368b4da7326e542dce333973f4f48cb5fd5aa19465b890d6b0459d0f",
+      "size": 11580630,
+      "parts": [
+        "ff5e291d368b4da7326e542dce333973f4f48cb5fd5aa19465b890d6b0459d0f.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hcrystal.png",
+      "sha256": "593931a2b0418c43bedaa72cea9f7680cfd1b7fe536b3a03a34c282e9138a68d",
+      "size": 12173490,
+      "parts": [
+        "593931a2b0418c43bedaa72cea9f7680cfd1b7fe536b3a03a34c282e9138a68d.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hcrystalfacet.png",
+      "sha256": "e96e5160330a52db3fd5f0c7213c9fc562a35c38c701eda70c833ff80978dacd",
+      "size": 11446791,
+      "parts": [
+        "e96e5160330a52db3fd5f0c7213c9fc562a35c38c701eda70c833ff80978dacd.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hcrystalrock.png",
+      "sha256": "f4cf695deb5e465ea206b54b7616b25bb427695e7405950fea378b0af2cc40eb",
+      "size": 12980399,
+      "parts": [
+        "f4cf695deb5e465ea206b54b7616b25bb427695e7405950fea378b0af2cc40eb.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hdiscmosaic.png",
+      "sha256": "30e925423d22a038c2f5ecfa5597171792f9ca639d35d6a1c5edc39716da78a7",
+      "size": 10516103,
+      "parts": [
+        "30e925423d22a038c2f5ecfa5597171792f9ca639d35d6a1c5edc39716da78a7.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hdoor1.png",
+      "sha256": "9348e8d64cc3635bfb66e8fa327e2350c6593e79c9ffd428fcf4a60220bf9240",
+      "size": 5908186,
+      "parts": [
+        "9348e8d64cc3635bfb66e8fa327e2350c6593e79c9ffd428fcf4a60220bf9240.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hdragonwindow.png",
+      "sha256": "d9879d33429ddd048d9b4a4a62b6dcfd1323e42820ddc35ac917e17500f761e4",
+      "size": 10196633,
+      "parts": [
+        "d9879d33429ddd048d9b4a4a62b6dcfd1323e42820ddc35ac917e17500f761e4.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/henge.png",
+      "sha256": "6d2a9f70f87dfd59e4999e795a419a8e90dcf97a1e61b674def931055046d768",
+      "size": 8404606,
+      "parts": [
+        "6d2a9f70f87dfd59e4999e795a419a8e90dcf97a1e61b674def931055046d768.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hflowertile.png",
+      "sha256": "abfb5206cecdb5fc5f686d5d196749c00405e8bba1bbd4c4b2046ddad6807b80",
+      "size": 13288973,
+      "parts": [
+        "abfb5206cecdb5fc5f686d5d196749c00405e8bba1bbd4c4b2046ddad6807b80.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hflwrpic.png",
+      "sha256": "b77be9d42b73d278d6410757f8c3e7f3f5fc30c3a4004ce7853148cb70a9ed3b",
+      "size": 13698082,
+      "parts": [
+        "b77be9d42b73d278d6410757f8c3e7f3f5fc30c3a4004ce7853148cb70a9ed3b.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlampbas.png",
+      "sha256": "d3b6f61d82f5c4719576d6815fd50d40e5d161c7c8ba558942df0f128103baeb",
+      "size": 2993147,
+      "parts": [
+        "d3b6f61d82f5c4719576d6815fd50d40e5d161c7c8ba558942df0f128103baeb.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlichen1.png",
+      "sha256": "0900ee849d74d6bc3d8e9083b8eaae914dbe4c8c131f3259cb34ee473dc0d57e",
+      "size": 12625120,
+      "parts": [
+        "0900ee849d74d6bc3d8e9083b8eaae914dbe4c8c131f3259cb34ee473dc0d57e.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlichenoverlay.png",
+      "sha256": "742da08a8b02f323e376d94c856b3eae85fab4425d99c78afe077410c7fd2cba",
+      "size": 5463668,
+      "parts": [
+        "742da08a8b02f323e376d94c856b3eae85fab4425d99c78afe077410c7fd2cba.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlightstone.png",
+      "sha256": "d12983e3ceb77c61382124f96eee2a986a02ce8d34fe95a31d09547f819d2788",
+      "size": 12546075,
+      "parts": [
+        "d12983e3ceb77c61382124f96eee2a986a02ce8d34fe95a31d09547f819d2788.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlimest.png",
+      "sha256": "0027f947807807fa04dfc430a5f903b58a410d5975a79e0d5a9424878799a5c8",
+      "size": 10850158,
+      "parts": [
+        "0027f947807807fa04dfc430a5f903b58a410d5975a79e0d5a9424878799a5c8.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlimestone.png",
+      "sha256": "9bce676355bd20936cef4da7b73c143d2726839e2fceed3efc35472de8b87e81",
+      "size": 10933793,
+      "parts": [
+        "9bce676355bd20936cef4da7b73c143d2726839e2fceed3efc35472de8b87e81.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hlitwood.png",
+      "sha256": "ed62b94e751f8d37fd17d0ca4a735442bd34cd82ba11d51b0510e596aa6cbdc5",
+      "size": 2633293,
+      "parts": [
+        "ed62b94e751f8d37fd17d0ca4a735442bd34cd82ba11d51b0510e596aa6cbdc5.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmarkerardee.png",
+      "sha256": "78080a0621bee45e2c1f4a46041a8dddf1e21dfd6e263607b578e77df340d794",
+      "size": 13363638,
+      "parts": [
+        "78080a0621bee45e2c1f4a46041a8dddf1e21dfd6e263607b578e77df340d794.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmosaic2.png",
+      "sha256": "4429111fea017c78674131a8a24d5ad04b123c6bf1b0f4f4aebed8b00c897ec0",
+      "size": 11857712,
+      "parts": [
+        "4429111fea017c78674131a8a24d5ad04b123c6bf1b0f4f4aebed8b00c897ec0.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmossrock.png",
+      "sha256": "baa54abc62133063869dd9aaa84658603b20f776a2eb3db932c143322a57e126",
+      "size": 13120900,
+      "parts": [
+        "baa54abc62133063869dd9aaa84658603b20f776a2eb3db932c143322a57e126.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmtn01.png",
+      "sha256": "b7673056c76b2f7c09b1682a4e28ec88e4a13582c3d8aa28b18edf390d7bb23d",
+      "size": 12948980,
+      "parts": [
+        "b7673056c76b2f7c09b1682a4e28ec88e4a13582c3d8aa28b18edf390d7bb23d.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmtn02.png",
+      "sha256": "4f8eebb0c0b7127f61202019b917d64f35b7eac792af59304a10671ca7176b72",
+      "size": 12734206,
+      "parts": [
+        "4f8eebb0c0b7127f61202019b917d64f35b7eac792af59304a10671ca7176b72.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmtn03.png",
+      "sha256": "ad55a715d84754efe5164254297b5115e31ac820dcf05e2803b7aca454e76b1c",
+      "size": 12619458,
+      "parts": [
+        "ad55a715d84754efe5164254297b5115e31ac820dcf05e2803b7aca454e76b1c.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hmtn04.png",
+      "sha256": "218cb41396c574cb9815ee775cd0f8f9bdbbaceffe654089157b58c23ed493b8",
+      "size": 12686481,
+      "parts": [
+        "218cb41396c574cb9815ee775cd0f8f9bdbbaceffe654089157b58c23ed493b8.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hnoudoor.png",
+      "sha256": "ea245e6b0216d9cac76cf05cf76d34e4f74080edb4c51fad0adb65294024b339",
+      "size": 5819717,
+      "parts": [
+        "ea245e6b0216d9cac76cf05cf76d34e4f74080edb4c51fad0adb65294024b339.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/holdgrove.png",
+      "sha256": "ef0ca3cb23631384356fe6e0a99747c5dc882c6b4fb4cb6de22a3ef64abfb2ff",
+      "size": 12757810,
+      "parts": [
+        "ef0ca3cb23631384356fe6e0a99747c5dc882c6b4fb4cb6de22a3ef64abfb2ff.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hplank.png",
+      "sha256": "ca4621acf1c6ab4f063c5de7f88b2509ed30f026b81cb3583d355f2d05fca2fa",
+      "size": 10919447,
+      "parts": [
+        "ca4621acf1c6ab4f063c5de7f88b2509ed30f026b81cb3583d355f2d05fca2fa.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hrockband.png",
+      "sha256": "cf7a9922ff7fd5c7bbef5b1f723b8f22bd5394d0dadb03aa7aede34723c3e7b7",
+      "size": 12272961,
+      "parts": [
+        "cf7a9922ff7fd5c7bbef5b1f723b8f22bd5394d0dadb03aa7aede34723c3e7b7.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hrockvine.png",
+      "sha256": "d30f83c220132f5dc9f46cf68c823d2ef62cdc0c3def32eef135883a9e88c34f",
+      "size": 13355520,
+      "parts": [
+        "d30f83c220132f5dc9f46cf68c823d2ef62cdc0c3def32eef135883a9e88c34f.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hrooftile1.png",
+      "sha256": "f5a5bd1c008dd136d7a56a91045e1e142fb7f734e62bae0e393b05f540e7b8f7",
+      "size": 5596958,
+      "parts": [
+        "f5a5bd1c008dd136d7a56a91045e1e142fb7f734e62bae0e393b05f540e7b8f7.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hshing1.png",
+      "sha256": "d9635fd16c41879f55c39c18585dbef6de42b3fb26f9aeaddbd5e2080665cc25",
+      "size": 12727023,
+      "parts": [
+        "d9635fd16c41879f55c39c18585dbef6de42b3fb26f9aeaddbd5e2080665cc25.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hshroom.png",
+      "sha256": "cd1b45ff2837e945167849a3772d32cd6a190185f739606c8042c5a9b017428c",
+      "size": 13087579,
+      "parts": [
+        "cd1b45ff2837e945167849a3772d32cd6a190185f739606c8042c5a9b017428c.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hslate2.png",
+      "sha256": "65f627c25cd457cd8c520f928a21a8491a6b4819f1343b89cf5a5437b2c01d0e",
+      "size": 11959948,
+      "parts": [
+        "65f627c25cd457cd8c520f928a21a8491a6b4819f1343b89cf5a5437b2c01d0e.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstnsqar.png",
+      "sha256": "220dd8753cfec33d25e7a2e0fa5a701edc6c9ab10ae39acd6e6812dff2a58b45",
+      "size": 12119841,
+      "parts": [
+        "220dd8753cfec33d25e7a2e0fa5a701edc6c9ab10ae39acd6e6812dff2a58b45.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstoneslab.png",
+      "sha256": "700247e67b07e1d09147749ce874de614c0ccd2f0cdfaab4a263e50b0c4a37a6",
+      "size": 12901660,
+      "parts": [
+        "700247e67b07e1d09147749ce874de614c0ccd2f0cdfaab4a263e50b0c4a37a6.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstonwal2.png",
+      "sha256": "80a5f6487d34d4bdbc229f4ff918bf3e47a805ea4edb5786405e471bd3269b9a",
+      "size": 11989059,
+      "parts": [
+        "80a5f6487d34d4bdbc229f4ff918bf3e47a805ea4edb5786405e471bd3269b9a.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstonwal2band.png",
+      "sha256": "3724866bb11838fae789a42d00fb1d74f745ae890b34fe137d3e7d51c708b970",
+      "size": 11305278,
+      "parts": [
+        "3724866bb11838fae789a42d00fb1d74f745ae890b34fe137d3e7d51c708b970.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstraw.png",
+      "sha256": "07f18212446198c17aa7a308542c759fa52559c2fcd121991ec5c814252c7400",
+      "size": 13673512,
+      "parts": [
+        "07f18212446198c17aa7a308542c759fa52559c2fcd121991ec5c814252c7400.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstrawgr.png",
+      "sha256": "4906f698ac2cf55b5fce97abe287cfc7ab5db97e30c10a4013851482441af9f9",
+      "size": 13306607,
+      "parts": [
+        "4906f698ac2cf55b5fce97abe287cfc7ab5db97e30c10a4013851482441af9f9.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hstucwin2.png",
+      "sha256": "2ef46455f19e96337e4289b42c02c019fa123e9a3886cf45a19b8c855500ebec",
+      "size": 11469448,
+      "parts": [
+        "2ef46455f19e96337e4289b42c02c019fa123e9a3886cf45a19b8c855500ebec.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hvinewalk.png",
+      "sha256": "4656559df6a96ad67888fa77a404e5b211be53902f3beb6d6104592f510eac1d",
+      "size": 3119959,
+      "parts": [
+        "4656559df6a96ad67888fa77a404e5b211be53902f3beb6d6104592f510eac1d.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/hwwashbrick.png",
+      "sha256": "16aa95525d5a82d1347eb671ad672dfd349be956a9bac4aff4ec7084aba4de7e",
+      "size": 12936679,
+      "parts": [
+        "16aa95525d5a82d1347eb671ad672dfd349be956a9bac4aff4ec7084aba4de7e.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/nbeam.png",
+      "sha256": "d4bb4f41e0522b17345d0ea14dc0826df5365b473dfb1370e29c1c705a1ea368",
+      "size": 4412101,
+      "parts": [
+        "d4bb4f41e0522b17345d0ea14dc0826df5365b473dfb1370e29c1c705a1ea368.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/nfinishes.png",
+      "sha256": "f65c7865867215e01a7356c8b5cea6acce0ab90307e0e9137d220284f0af5fac",
+      "size": 5809561,
+      "parts": [
+        "f65c7865867215e01a7356c8b5cea6acce0ab90307e0e9137d220284f0af5fac.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/nrockgrey.png",
+      "sha256": "0d68b8687dbc7214c05b86ea4d33dc7546e92a33f59c712666c7a9f1cb63385b",
+      "size": 12188645,
+      "parts": [
+        "0d68b8687dbc7214c05b86ea4d33dc7546e92a33f59c712666c7a9f1cb63385b.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/poleparts.png",
+      "sha256": "6b32f2e4b09cef0b0935a2cf9680f0a881568ca4f5f8431beaabbf532b0eae9f",
+      "size": 12481152,
+      "parts": [
+        "6b32f2e4b09cef0b0935a2cf9680f0a881568ca4f5f8431beaabbf532b0eae9f.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/vlogside.png",
+      "sha256": "5af1aab5864928c75d906e6562ec0231bc46185cc85dbab446372f031b9e51b9",
+      "size": 10074699,
+      "parts": [
+        "5af1aab5864928c75d906e6562ec0231bc46185cc85dbab446372f031b9e51b9.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/wallwin1.png",
+      "sha256": "91e2cdc8607ec431e63fad308e9bec9a8b308fa3945a8ccdf594a9ff24dd3341",
+      "size": 2503476,
+      "parts": [
+        "91e2cdc8607ec431e63fad308e9bec9a8b308fa3945a8ccdf594a9ff24dd3341.000.z"
+      ]
+    },
+    {
+      "path": ".enhanced-session/validated_zone207/textures/watery.png",
+      "sha256": "d497f3bc92d204caae62d003be65467578dd309ae2f16bfab5cf0f26e0516162",
+      "size": 714412,
+      "parts": [
+        "d497f3bc92d204caae62d003be65467578dd309ae2f16bfab5cf0f26e0516162.000.z"
+      ]
+    },
+    {
       "path": ".enhanced-session/water_trial/active.json",
       "sha256": "88ef4ebf8774de729de05a3547fe60413e8f8b9bf09afa4840b099653d1779a9",
       "size": 171,
