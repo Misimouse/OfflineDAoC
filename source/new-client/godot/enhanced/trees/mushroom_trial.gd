@@ -16,6 +16,8 @@ func attach(region) -> bool:
 		if pointer.get("disabled",true) or FileAccess.get_sha256(pointer.manifest)!=pointer.sha256:return false
 		path=pointer.manifest
 	manifest=JSON.parse_string(FileAccess.get_file_as_string(path))
+	for f in manifest.get("files",[]):
+		if FileAccess.get_sha256(f.path)!=f.sha256:return false
 	if FileAccess.get_sha256(manifest.scene)!=manifest.sha256:return false
 	if manifest.has("bindstone_scene") and FileAccess.get_sha256(manifest.bindstone_scene)!=manifest.bindstone_sha256:return false
 	for file in manifest.stock_hashes:
@@ -52,18 +54,22 @@ func apply_zone(zone) -> void:
 		for component in manifest.rings[file]:
 			var model:Node3D=packed.instantiate();var lo:Vector3=Vector3(component.minimum[0],component.minimum[1],component.minimum[2]);var hi:=Vector3(component.maximum[0],component.maximum[1],component.maximum[2]);var size:=hi-lo
 			model.scale=Vector3(size.x/2.92,size.y/2.65,size.z/2.92);model.position=Vector3(component.center[0],0,component.center[2]);holder.add_child(model);mushrooms.append(model)
-	var giant:Node3D=packed.instantiate();giant.name="Seta_gigante_prueba";giant.scale=Vector3.ONE*float(manifest.giant_scale);giant.position=Vector3(manifest.giant_x,0,manifest.giant_z);pending.add_child(giant);mushrooms.append(giant)
+	var giant:Node3D
+	if manifest.get("show_giant",true):
+		giant=packed.instantiate();giant.name="Seta_gigante_prueba";giant.scale=Vector3.ONE*float(manifest.giant_scale);giant.position=Vector3(manifest.giant_x,0,manifest.giant_z);pending.add_child(giant);mushrooms.append(giant)
 	zone.add_child(pending)
 	for model in mushrooms:
 		var at:Vector3=zone.to_local(model.global_position);at.y=zone.height_at(at.x,at.z)-.025;model.global_position=zone.to_global(at)
 		for mesh in model.find_children("*","MeshInstance3D",true,false):mesh.visibility_range_end=600 if model==giant else 180
-	var at:Vector3=giant.position
-	var label:=Label3D.new();label.text="Seta gigante · prueba";label.billboard=BaseMaterial3D.BILLBOARD_ENABLED;label.font_size=42;label.outline_size=10;label.position=at+Vector3.UP*3;label.visibility_range_end=70;pending.add_child(label)
-	rows=[{"id":"review:mushroom_giant","name":"Seta gigante · prueba","position":[at.x,at.y,at.z],"model":"Seta mágica","kind":"Prueba de seta","zone":207,"model_file":"","image_files":[manifest.texture],"note":"Prototipo LAB: sombrero redondeado, láminas y pie nuevo. Sin tenderos ni colisiones añadidas."}]
+	rows=[]
+	if is_instance_valid(giant):
+		var at:Vector3=giant.position
+		var label:=Label3D.new();label.text="Seta gigante · prueba";label.billboard=BaseMaterial3D.BILLBOARD_ENABLED;label.font_size=42;label.outline_size=10;label.position=at+Vector3.UP*3;label.visibility_range_end=70;pending.add_child(label)
+		rows=[{"id":"review:mushroom_giant","name":"Seta gigante · prueba","position":[at.x,at.y,at.z],"model":"Seta mágica","kind":"Prueba de seta","zone":207,"model_file":"","image_files":[manifest.texture],"note":"Prototipo LAB: sombrero redondeado, láminas y pie nuevo. Sin tenderos ni colisiones añadidas."}]
 	originals=plans;display=pending;bound_zone=zone
 	for record in originals:
 		var transform:Transform3D=record.transform;transform.basis=Basis(Vector3.ZERO,Vector3.ZERO,Vector3.ZERO);record.node.multimesh.set_instance_transform(record.index,transform)
-	print("MUSHROOM_TRIAL_READY small=",mushrooms.size()-1," giant=1")
+	print("MUSHROOM_TRIAL_READY small=",mushrooms.size()-(1 if is_instance_valid(giant) else 0)," giant=",1 if is_instance_valid(giant) else 0)
 func restore() -> void:
 	for record in originals:
 		if is_instance_valid(record.node):record.node.multimesh.set_instance_transform(record.index,record.transform)

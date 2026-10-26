@@ -2,6 +2,13 @@
 # (the game's C# (godot\MMOEngine.csproj: your companions' bot code). Portable (owner 2026-10-11): the .NET SDK in tools\dotnet and the package
 # cache in tools\nuget, offline (godot\nuget.config: the Godot .NET build's own packages).
 $root = Split-Path -Parent $PSScriptRoot
+# A source build installs the versioned, approved art as well as compiling C#.
+# Existing private LAB profiles are never overwritten by this installer.
+$approvedInstaller = Join-Path $PSScriptRoot 'install_approved.py'
+if (Test-Path $approvedInstaller) {
+	& python $approvedInstaller --apply
+	if ($LASTEXITCODE -ne 0) { throw 'Approved art installation failed; build stopped.' }
+}
 $dotnetDir = Join-Path $root 'tools\dotnet'
 if (Test-Path (Join-Path $dotnetDir 'dotnet.exe')) {
 	$env:DOTNET_ROOT = $dotnetDir

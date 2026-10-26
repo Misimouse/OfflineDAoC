@@ -1,5 +1,5 @@
 extends Node
-## Local material pilot: source distribution, terrain geometry and physics remain intact.
+## Local terrain material override: source distribution, terrain geometry and physics remain intact.
 const STATE:="res://.enhanced-session/ground_patterns/"
 var override_manifest:=""
 var manifest:Dictionary={}
@@ -18,7 +18,13 @@ func configure() -> bool:
 		if pointer.get("disabled",true) or FileAccess.get_sha256(pointer.manifest)!=pointer.sha256:return false
 		path=pointer.manifest
 	manifest=JSON.parse_string(FileAccess.get_file_as_string(path))
-	if manifest.get("zone",-1)!=207 or manifest.get("patches",[]).size()!=4:return false
+	if manifest.get("zone",-1)!=207:return false
+	var full:bool=manifest.get("scope", "")=="whole-zone"
+	if manifest.get("patches",[]).size()!=(64 if full else 4):return false
+	if full:
+		var source=JSON.parse_string(FileAccess.get_file_as_string("res://content/zones/zone207/zone.json"))
+		var expected:Array=source.ground_splat.patches.keys();var actual:Array=manifest.patches.duplicate();expected.sort();actual.sort()
+		if actual!=expected:return false
 	if FileAccess.get_sha256("res://content/zones/zone207/zone.json")!=manifest.zone_sha256:return false
 	if FileAccess.get_sha256("res://game/terrain.gdshader")!=manifest.original_shader_sha256:return false
 	if FileAccess.get_sha256(manifest.paths_manifest)!=manifest.paths_manifest_sha256:return false
@@ -53,13 +59,20 @@ func apply_zone(zone) -> bool:
 		var mat:=ShaderMaterial.new();mat.shader=shader
 		for key in ["tile_tex","base_tex","base_tiles","layer_tex","layer_tiles","layer_tileable","layer_count","weights0","weights1","patch_index","patches","far_fade_m","soil_index","gravel_index","soil_colour","soil_normal","soil_roughness","gravel_colour","gravel_normal","gravel_roughness","soil_tiles","gravel_tiles","normal_strength","normal_fade_m"]:mat.set_shader_parameter(key,baseline.replacement.get_shader_parameter(key))
 		mat.set_shader_parameter("atlas0",atlas(manifest.atlas_paths[0]));mat.set_shader_parameter("atlas1",atlas(manifest.atlas_paths[1]))
+		if manifest.get("scope", "")=="whole-zone":
+			mat.set_shader_parameter("whole_zone",true)
+			mat.set_shader_parameter("atlas2",atlas(manifest.atlas_paths[2]));mat.set_shader_parameter("atlas3",atlas(manifest.atlas_paths[3]))
+			var retained:Array[Texture2D]=[]
+			for path in manifest.retained_extra_paths:retained.append(texture(path))
+			mat.set_shader_parameter("retained_tex",retained)
 		for name in ["grass","scrub","craggy"]:mat.set_shader_parameter(name+"_new",texture(manifest.texture_paths[name]))
 		mat.set_shader_parameter("clover_tex",zone.materials.texture("clover_whiteflowers"));mat.set_shader_parameter("rock_tex",zone.materials.texture("rock4"));mat.set_shader_parameter("regional_tex",zone.materials.texture("connacht"))
+		if manifest.has("approved_road_mask"):mat.set_shader_parameter("approved_road_mask",texture(manifest.approved_road_mask))
 		if manifest.has("regional_mean"):mat.set_shader_parameter("regional_mean",Vector3(manifest.regional_mean[0],manifest.regional_mean[1],manifest.regional_mean[2]))
 		mat.set_shader_parameter("pilot_bounds",Vector4(manifest.pilot_bounds[0],manifest.pilot_bounds[1],manifest.pilot_bounds[2],manifest.pilot_bounds[3]));mat.set_shader_parameter("feather_metres",manifest.feather_metres)
 		bindings.append({"mesh":baseline.mesh,"baseline":baseline.replacement,"replacement":mat})
-	if bindings.size()!=4:restore();return false
-	bound_zone=zone;was_blend=true;set_enabled(enabled);print("GROUND_PATTERNS_APPLIED patches=4 distribution=source geometry=unchanged");return true
+	if bindings.size()!=manifest.patches.size():restore();return false
+	bound_zone=zone;was_blend=true;set_enabled(enabled);print("GROUND_PATTERNS_APPLIED patches=",bindings.size()," distribution=source geometry=unchanged");return true
 func diagnostic() -> Dictionary:
 	var actual:=0
 	var actual_shaders:Array=[]
@@ -74,7 +87,7 @@ func diagnostic() -> Dictionary:
 func update_label() -> void:
 	if not is_instance_valid(label):return
 	var state=diagnostic()
-	var revision:String={"first-pilot":"R1","stochastic-all-tiled-surfaces":"R2","smooth-source-masks":"R3","continuous-soil-detail":"R4","terrain-finish-r5":"R5","r6-no-furrows":"R6"}.get(state.revision,String(state.revision))
+	var revision:String={"first-pilot":"R1","stochastic-all-tiled-surfaces":"R2","smooth-source-masks":"R3","continuous-soil-detail":"R4","terrain-finish-r5":"R5","r6-no-furrows":"R6","r6-connacht-complete":"R6 Connacht","r6-connacht-sand-review":"R6 Connacht + arena","r6-connacht-approved-paths":"R6 Connacht + caminos"}.get(state.revision,String(state.revision))
 	label.text="Terreno: %s | %s | material %d/%d | Ctrl+F10: comparar"%[revision,"nuevo" if enabled and was_blend else "anterior",state.replacement_meshes,state.bound_meshes]
 func set_enabled(value:bool) -> void:
 	enabled=value

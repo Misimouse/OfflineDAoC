@@ -39,3 +39,4 @@
 
 # Local Enhanced lab configuration, overlays and session state.
 **/.enhanced-session/
+source/new-client/godot/enhanced/approved_assets.json

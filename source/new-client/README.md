@@ -21,6 +21,11 @@ original game client's files and comes with the 0.36c download.
 
 ## Running from source
 
+This branch includes the [approved Connacht/Hibernia art package](approved/README.md).
+The C# build command below also installs its models, textures and runtime profiles into a clean
+checkout. Python 3.10+ is required. Matching converted base content is still needed; no original
+game content, account or saved world is included in the repository.
+
 1. Install the .NET 10 SDK and Godot 4.7.2 (.NET build).
 2. Copy `new-client/godot/content` from a 0.36c install into `godot/content` (or build it with the pipeline,
    below). `godot/content/.gdignore` must stay: Godot must not import the content folder.

@@ -360,6 +360,7 @@ func _place_arrival(loc: Dictionary, zone_id: int, start: Dictionary) -> void:
 func _ready_rest(loading: LoadingScreen) -> void:
 	Graphics.apply_viewport()                               # Options > VIDEO quality on the built world
 	Graphics.apply_scene(self)
+	await load("res://enhanced/approved_runtime.gd").attach(self, loading)
 	hud = Label.new()
 	hud.position = Vector2(12, 10)
 	hud.add_theme_color_override("font_color", Color(1, 0.96, 0.85))
@@ -603,6 +604,11 @@ func _switch_audio() -> void:
 
 
 func _add_clutter(z: ZoneLoader) -> GroundClutter:
+	if load("res://enhanced/approved_runtime.gd").clears_ground(self, int(z.info.id)):
+		return null
+	# Private LAB clearance covers initial, streamed and revisited zones.
+	if load("res://enhanced/replant/ground_clearance.gd").is_enabled(get_tree().root):
+		return null
 	var c: GroundClutter = load("res://enhanced/replant/replant_clutter.gd").new()
 	c.name = "GroundClutter"
 	z.add_child(c)

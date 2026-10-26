@@ -14,6 +14,7 @@ var previous_msaa:int=0
 var smoothing_changed:=false
 var lod_clock:=0.0
 var root_extensions
+var graphics_settings:Node
 func configure() -> bool:
 	var path:=override_manifest
 	if path.is_empty():
@@ -25,6 +26,8 @@ func configure() -> bool:
 	if manifest.get("zone",-1)!=207 or manifest.get("models",[]).size()!=11:return false
 	if FileAccess.get_sha256("res://content/zones/zone207/zone.json")!=manifest.get("zone_sha256",""):return false
 	if manifest.get("terrain_conform",false) and FileAccess.get_sha256(manifest.elm_bark)!=manifest.elm_bark_sha256:return false
+	for f in manifest.get("files",[]):
+		if FileAccess.get_sha256(f.path)!=f.sha256:return false
 	for item in manifest.models:
 		if FileAccess.get_sha256(item.scene)!=item.scene_sha256:return false
 		if FileAccess.get_sha256("res://content/zones/zone207/"+String(item.file))!=item.stock_sha256:return false
@@ -90,10 +93,25 @@ func apply_zone(zone) -> bool:
 		root_extensions=load("res://enhanced/trees/terrain_root_extensions.gd").new()
 		for tree in planted:
 			if tree.file!="models/hlog.gltf":tree.meshes.append_array(root_extensions.apply(tree.asset,zone))
-	previous_taa=get_viewport().use_taa;previous_msaa=get_viewport().msaa_3d
-	get_viewport().use_taa=true;get_viewport().msaa_3d=maxi(previous_msaa,Viewport.MSAA_4X) as Viewport.MSAA;smoothing_changed=true
+	_start_smoothing()
 	last_view=-1;_process(0);set_enabled(enabled)
 	print("FOREST_POPULATION_APPLIED total=",planted.size()," original_parts=",originals.size());return true
+func _start_smoothing() -> void:
+	previous_taa=get_viewport().use_taa;previous_msaa=get_viewport().msaa_3d;smoothing_changed=true
+	graphics_settings=get_node_or_null("/root/Graphics")
+	if graphics_settings!=null and not graphics_settings.changed.is_connected(_on_graphics_changed):graphics_settings.changed.connect(_on_graphics_changed)
+	_apply_leaf_smoothing()
+func _apply_leaf_smoothing() -> void:
+	if smoothing_changed:get_viewport().use_taa=true if enabled else previous_taa
+func _on_graphics_changed() -> void:
+	if not is_instance_valid(bound_zone) or not smoothing_changed:return
+	# Graphics has just applied the user's settings. Remember that choice for classic/restore.
+	previous_taa=get_viewport().use_taa
+	_apply_leaf_smoothing()
+func _stop_smoothing() -> void:
+	if graphics_settings!=null and graphics_settings.changed.is_connected(_on_graphics_changed):graphics_settings.changed.disconnect(_on_graphics_changed)
+	graphics_settings=null
+	if smoothing_changed:get_viewport().use_taa=previous_taa;smoothing_changed=false
 func update_lods(camera:Camera3D) -> void:
 	if camera==null:return
 	for tree in planted:
@@ -126,6 +144,7 @@ func set_enabled(value:bool) -> void:
 		if value:transform.basis=Basis(Vector3.ZERO,Vector3.ZERO,Vector3.ZERO)
 		record.node.multimesh.set_instance_transform(record.index,transform)
 	if is_instance_valid(anchor):anchor.visible=value
+	_apply_leaf_smoothing()
 func _input(event:InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.ctrl_pressed and event.keycode==KEY_F9:
 		set_enabled(not enabled);get_viewport().set_input_as_handled()
@@ -135,6 +154,5 @@ func restore() -> void:
 	root_extensions=null
 	if is_instance_valid(anchor):anchor.queue_free()
 	anchor=null;bound_zone=null
-	if smoothing_changed:
-		get_viewport().use_taa=previous_taa;get_viewport().msaa_3d=previous_msaa as Viewport.MSAA;smoothing_changed=false
+	_stop_smoothing()
 func _exit_tree() -> void:restore()

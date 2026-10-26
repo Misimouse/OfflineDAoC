@@ -69,9 +69,9 @@ func apply_zone(zone) -> bool:
 		for i in range(1,layers.size()):
 			if layers[i].tex=="h_soil":soil_index=i-1
 			if layers[i].tex=="h_tinypebbles":gravel_index=i-1
-		if soil_index<0 or gravel_index<0:return false
+		if (soil_index<0 or gravel_index<0) and manifest.get("scope", "")!="whole-zone":return false
 		targets.append({"mesh":mesh,"original":original,"soil":soil_index,"gravel":gravel_index})
-	if targets.size()!=4:return false
+	if targets.size()!=manifest.patches.size():return false
 	if textures.is_empty():
 		for spec in manifest.maps:
 			var path=String(spec.path)
@@ -100,7 +100,7 @@ func apply_zone(zone) -> bool:
 	bindings=targets
 	bound_zone=zone
 	set_mode(mode)
-	print("PATHS_PBR_APPLIED zone=207 patches=4 material_overrides=4 mode=",mode," physics_unchanged=true")
+	print("PATHS_PBR_APPLIED zone=207 patches=",bindings.size()," material_overrides=",bindings.size()," mode=",mode," physics_unchanged=true")
 	return true
 
 func set_mode(value:int) -> void:

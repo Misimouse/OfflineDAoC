@@ -1,0 +1,6 @@
+# Compressed approved resources must round-trip unchanged on every platform.
+source/new-client/approved/**/blobs/*.z binary
+# These source baselines are hash-guarded by the approved v0.37c profiles.
+source/new-client/godot/game/zone_loader.gd text eol=crlf
+source/new-client/godot/game/water.gdshader text eol=crlf
+source/new-client/godot/game/terrain.gdshader text eol=crlf
