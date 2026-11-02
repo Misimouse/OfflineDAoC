@@ -71,6 +71,12 @@ public:SLATE_BEGIN_ARGS(SClassicConcentrationIcon){}SLATE_ARGUMENT(const FSlateB
  virtual FReply OnMouseButtonDown(const FGeometry&,const FPointerEvent& Event)override{if(Event.GetEffectingButton()==EKeys::RightMouseButton&&Event.IsShiftDown()&&Cancel)Cancel();return FReply::Handled();}
 private:TFunction<void()> Cancel;
 };
+class SClassicShopDrop:public SCompoundWidget{
+public:SLATE_BEGIN_ARGS(SClassicShopDrop){}SLATE_DEFAULT_SLOT(FArguments,Content) SLATE_ARGUMENT(TFunction<void(int32,const FString&)>,Sell) SLATE_END_ARGS()
+ void Construct(const FArguments& A){Sell=A._Sell;ChildSlot[A._Content.Widget];}
+ virtual FReply OnDrop(const FGeometry&,const FDragDropEvent& Event)override{auto D=Event.GetOperationAs<FClassicDrag>();if(D&&D->InventorySlot>=40&&D->InventorySlot<80&&!D->ItemToken.IsEmpty()&&Sell){Sell(D->InventorySlot,D->ItemToken);return FReply::Handled();}return FReply::Unhandled();}
+private:TFunction<void(int32,const FString&)> Sell;
+};
 class SClassicMove:public SCompoundWidget{
 public:SLATE_BEGIN_ARGS(SClassicMove){}SLATE_ARGUMENT(TSharedPtr<SWidget>,Content)SLATE_ARGUMENT(TFunction<void(FVector2D)>,Move)SLATE_ARGUMENT(TFunction<void()>,End)SLATE_END_ARGS()
  void Construct(const FArguments&A){Move=A._Move;End=A._End;ChildSlot[A._Content.ToSharedRef()];}
@@ -124,8 +130,8 @@ void UDAoCBridgeSubsystem::ApplyClassicUI(TSharedPtr<FJsonObject> State){
  if(Revision!=ClassicRevision){ClassicRevision=Revision;RefreshClassicPanel();RefreshClassicBars();RefreshClassicEffects();RefreshClassicCasting();RefreshClassicMiniGroup();RefreshClassicJournal();RefreshClassicTrainer();RefreshClassicPet();RefreshClassicConcentration();RefreshClassicVault();RefreshClassicDetail();}
 }
 void UDAoCBridgeSubsystem::SetClassicTab(const FString& Tab){if(Tab!=TEXT("character")&&Tab!=TEXT("inventory")&&Tab!=TEXT("skills")&&Tab!=TEXT("combat")&&Tab!=TEXT("magic")&&Tab!=TEXT("group"))return;ClassicTab=Tab;bClassicOpen=true;bInventoryMoving=false;RemoveInventoryUI();RefreshClassicPanel();SaveClassicLayout();}
-bool UDAoCBridgeSubsystem::CloseClassicPanel(){if(bZoneMapOpen){CloseZoneMap();return true;}if(CloseGroupConfirmation())return true;if(CloseClassicDetail())return true;if(CloseClassicVault())return true;if(CloseClassicTrainer())return true;if(CloseClassicJournal())return true;if(!ClassicState.IsValid()||!bClassicOpen)return false;if(bInventoryMoving){bInventoryMoving=false;RefreshClassicPanel();return true;}bClassicOpen=false;RefreshClassicPanel();SaveClassicLayout();return true;}
-bool UDAoCBridgeSubsystem::ClassicUIHovered()const{if(ZoneMapPanel.IsValid()&&ZoneMapPanel->IsHovered())return true;if(ChatHovered())return true;if(ClassicVaultPanel.IsValid()&&ClassicVaultPanel->IsHovered())return true;if(ClassicConcentrationBox.IsValid()&&ClassicConcentrationBox->IsHovered())return true;if(ClassicPetBox.IsValid()&&ClassicPetBox->IsHovered())return true;if(ClassicTrainerPanel.IsValid()&&ClassicTrainerPanel->IsHovered())return true;if(ClassicJournalPanel.IsValid()&&ClassicJournalPanel->IsHovered())return true;if(ClassicGroupConfirmPanel.IsValid()&&ClassicGroupConfirmPanel->IsHovered())return true;if(bClassicMiniGroupOpen&&ClassicMiniGroupBox.IsValid()&&ClassicMiniGroupBox->IsHovered())return true;if(ClassicEffectsBox.IsValid()&&ClassicEffectsBox->IsHovered())return true;if(ClassicDetailPanel.IsValid()&&ClassicDetailPanel->IsHovered())return true;if(bClassicOpen&&ClassicPanelBox.IsValid()&&ClassicPanelBox->IsHovered())return true;for(auto& B:ClassicBarBoxes)if(B.IsValid()&&B->IsHovered())return true;return false;}
+bool UDAoCBridgeSubsystem::CloseClassicPanel(){if(ClassicMerchantOverlay.IsValid()){CloseClassicMerchant();return true;}if(bZoneMapOpen){CloseZoneMap();return true;}if(CloseGroupConfirmation())return true;if(CloseClassicDetail())return true;if(CloseClassicVault())return true;if(CloseClassicTrainer())return true;if(CloseClassicJournal())return true;if(!ClassicState.IsValid()||!bClassicOpen)return false;if(bInventoryMoving){bInventoryMoving=false;RefreshClassicPanel();return true;}bClassicOpen=false;RefreshClassicPanel();SaveClassicLayout();return true;}
+bool UDAoCBridgeSubsystem::ClassicUIHovered()const{if(ClassicMerchantPanel.IsValid()&&ClassicMerchantPanel->IsHovered())return true;if(ZoneMapPanel.IsValid()&&ZoneMapPanel->IsHovered())return true;if(ChatHovered())return true;if(ClassicVaultPanel.IsValid()&&ClassicVaultPanel->IsHovered())return true;if(ClassicConcentrationBox.IsValid()&&ClassicConcentrationBox->IsHovered())return true;if(ClassicPetBox.IsValid()&&ClassicPetBox->IsHovered())return true;if(ClassicTrainerPanel.IsValid()&&ClassicTrainerPanel->IsHovered())return true;if(ClassicJournalPanel.IsValid()&&ClassicJournalPanel->IsHovered())return true;if(ClassicGroupConfirmPanel.IsValid()&&ClassicGroupConfirmPanel->IsHovered())return true;if(bClassicMiniGroupOpen&&ClassicMiniGroupBox.IsValid()&&ClassicMiniGroupBox->IsHovered())return true;if(ClassicEffectsBox.IsValid()&&ClassicEffectsBox->IsHovered())return true;if(ClassicDetailPanel.IsValid()&&ClassicDetailPanel->IsHovered())return true;if(bClassicOpen&&ClassicPanelBox.IsValid()&&ClassicPanelBox->IsHovered())return true;for(auto& B:ClassicBarBoxes)if(B.IsValid()&&B->IsHovered())return true;return false;}
 void UDAoCBridgeSubsystem::RefreshClassicPanel(){
  if(!ClassicPanelBox.IsValid())return;ClassicPanelBox->SetVisibility(bClassicOpen?EVisibility::Visible:EVisibility::Collapsed);if(!bClassicOpen)return;
  auto Canvas=SNew(SCanvas);const FString Skin=ClassicTab==TEXT("inventory")?TEXT("old_pperdoll"):ClassicTab==TEXT("skills")?TEXT("skillsheet"):ClassicTab==TEXT("magic")?TEXT("magicsheet"):ClassicTab==TEXT("combat")?TEXT("combstylesheet"):ClassicTab==TEXT("group")?TEXT("group"):TEXT("charsheet");
@@ -217,7 +223,7 @@ void UDAoCBridgeSubsystem::TickClassicUI(){
  if(!ClassicState.IsValid()||!bClassicOpen||ClassicTab!=TEXT("inventory")||FPlatformTime::Seconds()-ClassicCapturedAt<.3)return;ClassicCapturedAt=FPlatformTime::Seconds();UpdateClassicDoll();
 }
 
-void UDAoCBridgeSubsystem::RemoveClassicUI(){CloseZoneMap();RemoveChat();UILayoutUnits=FVector2D::ZeroVector;CloseClassicVault(false);ClassicVaultSerial=-1;ClassicVaultSignature.Empty();CloseClassicTrainer();CloseClassicJournal();CloseGroupConfirmation();if(ClassicDetailOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(ClassicDetailOverlay.ToSharedRef());ClassicDetailOverlay.Reset();ClassicDetailPanel.Reset();if(ClassicOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(ClassicOverlay.ToSharedRef());ClassicOverlay.Reset();ClassicPanelBox.Reset();ClassicEffectsBox.Reset();ClassicCastBox.Reset();ClassicMiniGroupBox.Reset();ClassicPetBox.Reset();ClassicPetSignature.Empty();ClassicConcentrationBox.Reset();ClassicConcentrationSignature.Empty();for(auto& B:ClassicBarBoxes)B.Reset();ClassicState.Reset();ClassicRevision=-1;if(IsValid(ClassicDollActor))ClassicDollActor->Destroy();ClassicDollActor=nullptr;ClassicDollSignature.Empty();ClassicDollYaw=0;ClassicLastInventorySlot=-1;ClassicLastInventoryClickAt=0;if(IsValid(ClassicCaptureActor))ClassicCaptureActor->Destroy();ClassicCaptureActor=nullptr;ClassicCapture=nullptr;ClassicDollTarget=nullptr;ClassicDollBrush=nullptr;ClassicBrushes.Empty();ClassicTextures.Empty();}
+void UDAoCBridgeSubsystem::RemoveClassicUI(){CloseClassicMerchant(false);CloseZoneMap();RemoveChat();UILayoutUnits=FVector2D::ZeroVector;CloseClassicVault(false);ClassicVaultSerial=-1;ClassicVaultSignature.Empty();CloseClassicTrainer();CloseClassicJournal();CloseGroupConfirmation();if(ClassicDetailOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(ClassicDetailOverlay.ToSharedRef());ClassicDetailOverlay.Reset();ClassicDetailPanel.Reset();if(ClassicOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(ClassicOverlay.ToSharedRef());ClassicOverlay.Reset();ClassicPanelBox.Reset();ClassicEffectsBox.Reset();ClassicCastBox.Reset();ClassicMiniGroupBox.Reset();ClassicPetBox.Reset();ClassicPetSignature.Empty();ClassicConcentrationBox.Reset();ClassicConcentrationSignature.Empty();for(auto& B:ClassicBarBoxes)B.Reset();ClassicState.Reset();ClassicRevision=-1;if(IsValid(ClassicDollActor))ClassicDollActor->Destroy();ClassicDollActor=nullptr;ClassicDollSignature.Empty();ClassicDollYaw=0;ClassicLastInventorySlot=-1;ClassicLastInventoryClickAt=0;if(IsValid(ClassicCaptureActor))ClassicCaptureActor->Destroy();ClassicCaptureActor=nullptr;ClassicCapture=nullptr;ClassicDollTarget=nullptr;ClassicDollBrush=nullptr;ClassicBrushes.Empty();ClassicTextures.Empty();}
 
 void UDAoCBridgeSubsystem::ClassicInspect(const FString& Id,const FString& Token){
  if(!bLocalAvailable||bExiting||Id.IsEmpty()||Token.IsEmpty())return;
@@ -387,7 +393,7 @@ void UDAoCBridgeSubsystem::ClassicVaultSlotClicked(int32 Slot){
  const double Now=FPlatformTime::Seconds();if(Slot<80&&Slot==ClassicLastInventorySlot&&Now-ClassicLastInventoryClickAt<.5){ActivateClassicInventorySlot(Slot);RefreshClassicPanel();return;}ClassicLastInventorySlot=Slot;ClassicLastInventoryClickAt=Now;
  if(bInventoryMoving){if(SelectedItemSlot!=Slot)SendItemAction(TEXT("inventory_move"),SelectedItemSlot,Slot);bInventoryMoving=false;}
  else if(InventoryItem(Slot).IsValid()){SelectedItemSlot=Slot;bInventoryMoving=true;}
- RefreshClassicPanel();RefreshClassicVault();
+ RefreshClassicPanel();RefreshClassicVault();RefreshClassicMerchant();
 }
 void UDAoCBridgeSubsystem::RefreshClassicVault(){
  if(!GetWorld()||!GetWorld()->GetGameViewport())return;auto* Viewport=GetWorld()->GetGameViewport();auto Vault=CO(InventoryState,TEXT("vault"));bool Valid=false;if(Vault.IsValid())Vault->TryGetBoolField(TEXT("valid"),Valid);
@@ -413,4 +419,50 @@ void UDAoCBridgeSubsystem::RefreshClassicVault(){
  const FString Feedback=CS(InventoryState,TEXT("feedback"));At(Canvas,{6,404},{212,34},CT(Feedback.IsEmpty()?TEXT("Drag between backpack and vault. Double-click an icon to withdraw."):Feedback,7));
  ClassicVaultPanel=SNew(SClassicMove).Content(Canvas).Move([this](FVector2D Delta){ClassicVaultPosition+=Delta;}).End([this](){SaveClassicLayout();});
  auto Root=SNew(SCanvas);Root->AddSlot().Position_Lambda([this](){FVector2D Size;Size=UIViewportSize();Size/=ClassicScale();return FVector2D(FMath::Clamp(ClassicVaultPosition.X,0.,FMath::Max(0.,Size.X-224)),FMath::Clamp(ClassicVaultPosition.Y,0.,FMath::Max(0.,Size.Y-440)));}).Size(FVector2D(224,440))[ClassicVaultPanel.ToSharedRef()];ClassicVaultOverlay=SNew(SDPIScaler).DPIScale_Lambda([this](){return ClassicScale();})[Root];Viewport->AddViewportWidgetContent(ClassicVaultOverlay.ToSharedRef(),34);
+}
+
+void UDAoCBridgeSubsystem::CloseClassicMerchant(bool Notify){
+ if(ClassicMerchantOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(ClassicMerchantOverlay.ToSharedRef());
+ ClassicMerchantOverlay.Reset();ClassicMerchantPanel.Reset();ClassicMerchantSignature.Empty();
+ if(Notify)Send(TEXT("dismiss_interaction"));
+}
+
+void UDAoCBridgeSubsystem::RefreshClassicMerchant(){
+ if(!GetWorld()||!GetWorld()->GetGameViewport())return;
+ auto Merchant=CO(InteractionState,TEXT("merchant")),Pages=CO(Merchant,TEXT("pages"));
+ if(!Pages.IsValid()||Pages->Values.IsEmpty()){CloseClassicMerchant(false);ClassicMerchantId.Empty();return;}
+ const FString Id=CS(Merchant,TEXT("entity_id"));
+ if(Id!=ClassicMerchantId){ClassicMerchantId=Id;ClassicMerchantPage=0;ClassicMerchantSelected=-1;ClassicMerchantClickAt=0;ClassicMerchantSignature.Empty();}
+ TArray<int32> PageNumbers;for(int32 I=0;I<10;++I)if(Pages->HasField(FString::FromInt(I)))PageNumbers.Add(I);if(PageNumbers.IsEmpty())return;
+ if(!PageNumbers.Contains(ClassicMerchantPage))ClassicMerchantPage=PageNumbers[0];
+ FString Stamp;FJsonSerializer::Serialize(Merchant.ToSharedRef(),TJsonWriterFactory<>::Create(&Stamp));Stamp+=FString::Printf(TEXT("/%d/%d/%d/%lld/%s"),ClassicMerchantPage,ClassicMerchantSelected,SelectedItemSlot,int64(CN(InventoryState,TEXT("revision"))),*CS(InventoryState,TEXT("feedback")));
+ if(ClassicMerchantOverlay.IsValid()&&Stamp==ClassicMerchantSignature)return;
+ CloseClassicMerchant(false);ClassicMerchantSignature=Stamp;
+ auto Canvas=SNew(SCanvas);At(Canvas,{0,0},{350,448},SNew(SImage).Image(ClassicArt(TEXT("merchant"))));
+ At(Canvas,{16,2},{318,14},CT(CS(Merchant,TEXT("name")),11,Gold));At(Canvas,{333,1},{15,16},CB(CT(TEXT("X"),9),[this](){CloseClassicMerchant();}));
+ auto List=SNew(SVerticalBox);TSharedPtr<FJsonObject> Selected;
+ const int64 Catalog=int64(CN(Merchant,TEXT("catalog_revision"),-1));const int32 Page=ClassicMerchantPage;
+ for(auto Value:CA(Pages,*FString::FromInt(Page))){
+  auto Item=Value->AsObject();const int32 Index=int32(CN(Item,TEXT("index"),-1));if(Index<0||Index>29)continue;if(Index==ClassicMerchantSelected)Selected=Item;
+  auto Buy=[this,Page,Index,Id,Catalog](){BuyMerchantItem(Page,Index,Id,Catalog);};
+  auto Select=[this,Index,Buy](){const double Now=FPlatformTime::Seconds();const bool Twice=ClassicMerchantSelected==Index&&Now-ClassicMerchantClickAt<=.5;ClassicMerchantSelected=Index;ClassicMerchantClickAt=Now;if(Twice)Buy();RefreshClassicMerchant();};
+  auto Row=SNew(SHorizontalBox);
+  Row->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(18).HeightOverride(18)[SNew(SClassicAction).Entry(Item).Icon(ClassicIcon(int32(CN(Item,TEXT("icon"),-1)))).Border(nullptr).Font(CF(6)).Bar(-1).Bank(-1).Slot(-1).InventorySlot(-1).Click(Select).DoubleClick(Buy)]];
+  Row->AddSlot().FillWidth(1)[CB(CT(CS(Item,TEXT("name")),8,Index==ClassicMerchantSelected?Gold:Cream),Select)];
+  List->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(18)[SNew(SBorder).Padding(0).BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"))).BorderBackgroundColor(Index==ClassicMerchantSelected?FLinearColor(.25,.2,.08,.45):FLinearColor(0,0,0,.05))[Row]]];
+ }
+ At(Canvas,{8,20},{324,360},SNew(SScrollBox)+SScrollBox::Slot()[List]);
+ const int64 Price=int64(CN(Selected,TEXT("price")));const int64 Divisors[]={10000000000LL,10000000LL,10000LL,100LL,1LL};const int64 Limits[]={1000,1000,1000,100,100};const double CoinX[]={64,109,154,199,244};
+ for(int32 I=0;I<5;++I){At(Canvas,{CoinX[I],392},{33,13},SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"))).BorderBackgroundColor(FLinearColor(.02,.02,.02,1)).Padding(0)[CT(Selected.IsValid()?FString::Printf(TEXT("%lld"),(Price/Divisors[I])%Limits[I]):TEXT(""),8)]);}
+ At(Canvas,{8,406},{328,14},CT(CS(InventoryState,TEXT("feedback")),7,Gold));
+ const int32 Position=PageNumbers.Find(Page);
+ for(int32 Direction:{-1,1}){const int32 Next=PageNumbers[FMath::Clamp(Position+Direction,0,PageNumbers.Num()-1)];At(Canvas,{Direction<0?10.:96.,426},{22,16},CB(CT(Direction<0?TEXT("<"):TEXT(">"),9),[this,Next](){ClassicMerchantPage=Next;ClassicMerchantSelected=-1;ClassicMerchantClickAt=0;RefreshClassicMerchant();}));}
+ At(Canvas,{34,428},{60,12},CT(FString::Printf(TEXT("%d / %d"),Position+1,PageNumbers.Num()),8));
+ bool Pending=false;if(InventoryState)InventoryState->TryGetBoolField(TEXT("pending"),Pending);
+ At(Canvas,{250,424},{80,18},SNew(SBox).IsEnabled(Selected.IsValid()&&!Pending&&CN(Merchant,TEXT("window"),-1)==0)[CB(CT(TEXT("BUY"),10),[this,Page,Id,Catalog](){if(ClassicMerchantSelected>=0)BuyMerchantItem(Page,ClassicMerchantSelected,Id,Catalog);})]);
+ At(Canvas,{160,424},{70,18},SNew(SBox).IsEnabled(SelectedItemSlot>=40&&SelectedItemSlot<80&&InventoryItem(SelectedItemSlot).IsValid()&&!Pending)[CB(CT(TEXT("SELL"),10),[this](){bInventoryMoving=false;SendItemAction(TEXT("merchant_sell"),SelectedItemSlot);})]);
+ auto Drop=SNew(SClassicShopDrop).Sell([this](int32 Slot,const FString& Token){if(CS(InventoryItem(Slot),TEXT("token"))==Token){bInventoryMoving=false;SendItemAction(TEXT("merchant_sell"),Slot);}})[Canvas];
+ ClassicMerchantPanel=SNew(SClassicMove).Content(Drop).Move([this](FVector2D Delta){if(ClassicMerchantPosition.X<0)ClassicMerchantPosition.X=FMath::Max(0.,(UIViewportSize().X/ClassicScale()-350)*.5);ClassicMerchantPosition+=Delta;});
+ auto Root=SNew(SCanvas);Root->AddSlot().Position_Lambda([this](){const FVector2D Size=UIViewportSize()/ClassicScale();const double X=ClassicMerchantPosition.X<0?(Size.X-350)*.5:ClassicMerchantPosition.X;return FVector2D(FMath::Clamp(X,0.,FMath::Max(0.,Size.X-350)),FMath::Clamp(ClassicMerchantPosition.Y,0.,FMath::Max(0.,Size.Y-448)));}).Size(FVector2D(350,448))[ClassicMerchantPanel.ToSharedRef()];
+ ClassicMerchantOverlay=SNew(SDPIScaler).DPIScale_Lambda([this](){return ClassicScale();})[Root];GetWorld()->GetGameViewport()->AddViewportWidgetContent(ClassicMerchantOverlay.ToSharedRef(),35);
 }

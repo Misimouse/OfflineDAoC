@@ -39,7 +39,7 @@ void UDAoCBridgeSubsystem::ApplyInventory(TSharedPtr<FJsonObject> State){
     const FString OldToken=InvStr(InventoryItem(SelectedItemSlot),TEXT("token"));const int64 OldState=int64(InvNum(InventoryState,TEXT("state_revision"),-1));InventoryState=State;
     if(OldState!=int64(InvNum(State,TEXT("state_revision"),-1))){bInventoryMoving=false;bConfirmSale=false;if(OldToken!=InvStr(InventoryItem(SelectedItemSlot),TEXT("token")))SelectedItemSlot=-1;}
     const int64 Revision=int64(InvNum(State,TEXT("revision"),-1));if(Revision==InventoryRevision)return;InventoryRevision=Revision;
-    RefreshInventoryUI();RefreshClassicVault();if(ClassicState.IsValid()&&ClassicTab==TEXT("inventory"))RefreshClassicPanel();
+    RefreshInventoryUI();RefreshClassicVault();RefreshClassicMerchant();if(ClassicState.IsValid()&&ClassicTab==TEXT("inventory"))RefreshClassicPanel();
     if(InteractionState.IsValid()){InteractionRevision=-1;ApplyInteraction(InteractionState);}
 }
 void UDAoCBridgeSubsystem::SendItemAction(const FString& Action,int32 Slot,int32 ToSlot){

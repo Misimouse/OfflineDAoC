@@ -92,6 +92,8 @@ private:
     void TickEquipmentAnimations();
     TWeakObjectPtr<AActor> EquipmentActor;
     TSharedPtr<FJsonObject> EquipmentCatalog;
+    TSharedPtr<FJsonObject> ArmourCatalog;
+    void ApplyBodyArmour(AActor* Actor,TSharedPtr<FJsonObject> Equipment);
     FString EquipmentFingerprint;
     int32 EquipmentMissingModels=0,EquipmentMissingBones=0;
     uint32 EquipmentVisualTestSteps=0;
@@ -100,6 +102,7 @@ private:
     void ClearLocalEquipment();
     TSharedPtr<FJsonObject> EquipmentReport() const;
     bool TickEquipmentAcceptance();
+    bool TickArmourAcceptance();
     bool TickCombatVisualAcceptance();
     void UpdateEquipmentVisualTest(double Elapsed);
     TMap<FString,int32> EntityModels;
@@ -224,6 +227,13 @@ private:
     bool bClassicVaultOpen=false;
     int32 ClassicVaultSerial=-1,ClassicVaultPage=0;
     FString ClassicVaultSignature;
+    TSharedPtr<SWidget> ClassicMerchantOverlay,ClassicMerchantPanel;
+    int32 ClassicMerchantPage=0,ClassicMerchantSelected=-1;
+    double ClassicMerchantClickAt=0;
+    FString ClassicMerchantId,ClassicMerchantSignature;
+    FVector2D ClassicMerchantPosition=FVector2D(-1,4);
+    void RefreshClassicMerchant();
+    void CloseClassicMerchant(bool Notify=true);
     FVector2D ClassicVaultPosition=FVector2D(200,60);
     void RefreshClassicVault();
     bool CloseClassicVault(bool Notify=true);

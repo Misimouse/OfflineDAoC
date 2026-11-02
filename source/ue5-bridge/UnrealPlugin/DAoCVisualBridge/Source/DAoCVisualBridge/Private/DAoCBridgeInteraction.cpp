@@ -78,9 +78,9 @@ bool UDAoCBridgeSubsystem::CloseInteraction(){
     if((Talk.IsValid()&&!Talk->Values.IsEmpty())||(Merchant.IsValid()&&!Merchant->Values.IsEmpty())){Send(TEXT("dismiss_interaction"));return true;}
     if(!CurrentTarget().IsEmpty()){SelectEntity(TEXT(""));return true;}return false;
 }
-void UDAoCBridgeSubsystem::RemoveInteractionUI(){if(InteractionOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(InteractionOverlay.ToSharedRef());InteractionOverlay.Reset();InteractionPanel.Reset();}
+void UDAoCBridgeSubsystem::RemoveInteractionUI(){CloseClassicMerchant(false);if(InteractionOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(InteractionOverlay.ToSharedRef());InteractionOverlay.Reset();InteractionPanel.Reset();}
 void UDAoCBridgeSubsystem::ApplyInteraction(TSharedPtr<FJsonObject> State){
-    InteractionState=State;
+    InteractionState=State;RefreshClassicMerchant();
     auto* Viewport=GetWorld()->GetGameViewport();if(!Viewport)return;
     if(!InteractionOverlay.IsValid()){
         TSharedRef<SOverlay> Overlay=SNew(SOverlay);
@@ -103,11 +103,7 @@ void UDAoCBridgeSubsystem::ApplyInteraction(TSharedPtr<FJsonObject> State){
         Body->AddSlot().AutoHeight().Padding(0,8)[Text(Str(Talk,TEXT("name"))+TEXT("\n\n")+Str(Talk,TEXT("text")))];const int64 Id=int64(Num(Talk,TEXT("id")));const TArray<TSharedPtr<FJsonValue>>* Words=nullptr;
         if(Talk->TryGetArrayField(TEXT("keywords"),Words))for(const auto& Word:*Words){FString W=Word->AsString();Button(W,[this,W,Id](){auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("reply_id"),Id);V->SetStringField(TEXT("word"),W);Send(TEXT("keyword"),V);});}HasContent=true;
     }
-    auto Merchant=Obj(State,TEXT("merchant"));auto Pages=Obj(Merchant,TEXT("pages"));
-    if(Pages.IsValid()&&!Pages->Values.IsEmpty()){
-        Body->AddSlot().AutoHeight().Padding(0,8)[Text(Str(Merchant,TEXT("name"))+TEXT(" — Merchandise"))];TArray<FString> Keys;for(int I=0;I<10;++I){FString Key=FString::FromInt(I);if(Pages->HasField(Key))Keys.Add(Key);}
-        for(const FString& Key:Keys){Body->AddSlot().AutoHeight().Padding(0,5)[Text(TEXT("Page ")+FString::FromInt(FCString::Atoi(*Key)+1))];for(const auto& Value:Pages->GetArrayField(Key)){auto It=Value->AsObject();int64 Price=int64(Num(It,TEXT("price")));FString Cost=FString::Printf(TEXT("%lld gold %lld silver %lld copper"),Price/10000,(Price/100)%100,Price%100);Body->AddSlot().AutoHeight().Padding(0,3)[Text(Str(It,TEXT("name"))+TEXT("  |  ")+Cost)];const FString Id=Str(Merchant,TEXT("entity_id"));const int64 Catalog=int64(Num(Merchant,TEXT("catalog_revision"),-1));const int32 Page=FCString::Atoi(*Key),Index=int32(Num(It,TEXT("index"),-1));if(Num(Merchant,TEXT("window"),-1)==0)Button(TEXT("Buy one pack"),[this,Page,Index,Id,Catalog](){BuyMerchantItem(Page,Index,Id,Catalog);});}}Button(TEXT("Open inventory to sell"),[this](){if(!bInventoryOpen)ToggleInventory();});HasContent=true;
-    }
+    auto Merchant=Obj(State,TEXT("merchant"));
     if(HasContent){if((Talk.IsValid()&&!Talk->Values.IsEmpty())||(Merchant.IsValid()&&!Merchant->Values.IsEmpty()))Button(TEXT("Close conversation / merchandise"),[this](){Send(TEXT("dismiss_interaction"));});
         InteractionPanel->AddSlot().AutoHeight()[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FLinearColor(.025f,.025f,.02f,.96f)).Padding(14)[SNew(SBox).MaxDesiredHeight(520)[SNew(SScrollBox)+SScrollBox::Slot()[Body]]]];
     }

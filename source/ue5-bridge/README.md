@@ -41,7 +41,13 @@ Do not run all installer or live-test scripts blindly. An installer may target a
 - Bounded original spell meshes/particles and weapon-local effects; permanent effect limits of 8/16/24 by quality, local player priority and cleanup on unequip/despawn/session end.
 - Pet visual/command integration, with original protocol authority.
 
-Converted assets and generated catalogues needed for those definitions are deliberately excluded. The snapshot is not a claim of complete DAoC parity: individual face/armour appearance, every rare NIF controller, every class, every region and packaged/cooked distribution remain incomplete.
+Run `prepare_merchant_ui.py` alongside the existing classic UI asset preparation to include the merchant skin. The merchant uses the same item icon sheets as the inventory.
+
+The current bridge also includes an independent, frozen inventory figure with rotation controls, explicit equip/unequip actions and the original merchant window layout, icon lookup and coin fields. Original-server tests cover equipment moves, purchasing, selling and the horse-ticket icon. Modular armour supports the nine Hibernian figures already exported for Connacht, with original textures, mesh variants and animation skeletons; helmets, cloaks and individual character face/hair customization remain separate work. Two texture names are absent in the source content.
+
+To generate the optional modular armour library, run `Godot/export_modular_armor.gd` with the local Godot project and output path, then `prepare_modular_armor.py` and `import_modular_armor_unreal.py` in the private Unreal host. Inspect and test the generated candidate catalogues before activating them. Imported assets stay out of Git.
+
+Converted assets and generated catalogues needed for those definitions are deliberately excluded. The snapshot is not a claim of complete DAoC parity: complete face/armour appearance, every rare NIF controller, every class, every region and packaged/cooked distribution remain incomplete.
 
 ## Validation provenance
 

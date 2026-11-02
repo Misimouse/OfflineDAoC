@@ -11,7 +11,7 @@ func check(ok:bool,label:String)->void:
     checks+=1
     if not ok:failures.append(label)
 func _initialize()->void:
-    var state=load("res://interaction_state.gd").new()
+    var state=load(get_script().resource_path.get_base_dir().path_join("interaction_state.gd")).new()
     var client:=FakeClient.new()
     var pos:=Vector3(1400,130,1250)
     var rows:Dictionary={"npc:2":{"id":"npc:2","kind":"npc","name":"Merchant","health":.42,"level":20,"position_m":[1402,130,1250]},"player:3":{"id":"player:3","kind":"player","name":"Remote","health":1,"position_m":[1401,130,1250]}}
@@ -36,9 +36,11 @@ func _initialize()->void:
     var before:=client.calls.size()
     check(not state.execute({"action":"keyword","reply_id":reply,"word":"/jump"},client,rows,pos),"unoffered keyword blocked")
     check(client.calls.size()==before,"invalid keyword not sent")
+    state.icon_for_model=func(_model):return 777
     state.consume("merchant",{"page":0,"window":0,"items":[{"index":1,"name":"Sword","price":12345}]},rows,101)
     state.consume("merchant",{"page":1,"window":0,"items":[{"index":1,"name":"Shield","price":500}]},rows,101)
     state.consume("merchant",{"page":0,"window":0,"items":[{"index":1,"name":"Sword","price":12345}]},rows,102)
+    check(int(state.merchant.pages["0"][0].icon)==777,"merchant item keeps original model to icon lookup")
     check(state.merchant.pages.size()==2 and state.merchant.pages["0"].size()==1,"merchant pages merge without duplicate items")
     state.maintain(client,rows,pos+Vector3(10,0,0))
     check(not state.merchant.is_empty(),"small distance change keeps catalog stable")
@@ -63,7 +65,8 @@ func _initialize()->void:
     state.consume("dialog",{"text":"Note","type":0,"code":0},rows,105)
     state.consume("region_changed",{},rows,106)
     check(state.dialogs.is_empty() and state.messages.is_empty(),"region clears UI state")
-    var f:=FileAccess.open("res://../Reports/interactions/godot_tests.json",FileAccess.WRITE)
+    var out:String=get_script().resource_path.get_base_dir().path_join("../Reports/interactions");DirAccess.make_dir_recursive_absolute(out)
+    var f:=FileAccess.open(out.path_join("godot_tests.json"),FileAccess.WRITE)
     f.store_string(JSON.stringify({"passed":failures.is_empty(),"checks":checks,"failures":failures},"  "));f.close()
     print("INTERACTION_CHECKS ",checks," failures=",failures)
     client.free();quit(0 if failures.is_empty() else 1)

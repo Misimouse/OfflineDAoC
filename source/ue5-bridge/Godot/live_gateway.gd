@@ -91,6 +91,7 @@ func _ready()->void:
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     combat_visual.configure(JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json"))),JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
+    interaction.icon_for_model=Callable(server,"item_icon")
     item_db=load("res://game/ui/item_db.gd");assert(item_db!=null)
     var collisions=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../collision_catalog.json")))
     if collisions is Dictionary:

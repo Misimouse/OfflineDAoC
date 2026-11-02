@@ -1,5 +1,6 @@
 extends RefCounted
 ## Server-derived interaction state; injectable client keeps protocol tests offline.
+var icon_for_model:Callable
 var selected_id:=""
 var selected_group_oid:=0
 var group_targets:Dictionary={}
@@ -117,7 +118,7 @@ func consume(kind:String,data:Dictionary,entities:Dictionary,now:int)->void:
         if page<0 or page>9:return
         var items:Array=[]
         for item in data.get("items",[]):
-            items.append({"index":int(item.get("index",0)),"name":String(item.get("name","")).left(160),"price":int(item.get("price",0)),"level":int(item.get("level",0)),"model":int(item.get("model",0)),"object_type":int(item.get("object_type",0)),"hand":int(item.get("hand",0)),"can_use":bool(item.get("can_use",false))})
+            items.append({"index":int(item.get("index",0)),"name":String(item.get("name","")).left(160),"price":int(item.get("price",0)),"level":int(item.get("level",0)),"model":int(item.get("model",0)),"icon":int(item.get("icon",icon_for_model.call(int(item.get("model",0))) if icon_for_model.is_valid() else 0)),"object_type":int(item.get("object_type",0)),"hand":int(item.get("hand",0)),"can_use":bool(item.get("can_use",false))})
             if items.size()>=30:break
         serial+=1;merchant["catalog_revision"]=serial
         merchant.pages[str(page)]=items;responses+=1;revision+=1

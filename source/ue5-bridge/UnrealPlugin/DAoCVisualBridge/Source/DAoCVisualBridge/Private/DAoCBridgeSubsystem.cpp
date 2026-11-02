@@ -207,6 +207,7 @@ AActor* UDAoCBridgeSubsystem::CreateEntity(const FString& Id,TSharedPtr<FJsonObj
         if(Entry)(*Entry)->TryGetNumberField(TEXT("scale"),BaseScale);Row->TryGetNumberField(TEXT("size"),Size);
         Actor->SetActorScale3D(FVector(FMath::Clamp(BaseScale*Size/50.,.01,20.)));
     }
+    ApplyBodyArmour(Actor,nullptr);
     Actor->Tags.Add(TEXT("DAoCBridgeEntity"));
     Entities.Add(Id,Actor);EntityModels.Add(Id,FCString::Atoi(*Model));return Actor;
 }
@@ -523,6 +524,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickViewportAcceptance())return;
     if(TickClassicAcceptance())return;
     if(TickCombatVisualAcceptance())return;
+    if(TickArmourAcceptance())return;
     if(TickEquipmentAcceptance())return;
     if(TickSpellVisualAcceptance())return;
     if(TickTrainingPlacement())return;
