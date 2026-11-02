@@ -1,0 +1,41 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.8",
+  "Category": "DAoC Enhanced",
+  "Description": "Isolated playable Connacht bridge; shared art is read-only at runtime.",
+  "Plugins": [
+    {
+      "Name": "PythonScriptPlugin",
+      "Enabled": true
+    },
+    {
+      "Name": "EditorScriptingUtilities",
+      "Enabled": true
+    },
+    {
+      "Name": "Interchange",
+      "Enabled": true
+    },
+    {
+      "Name": "InterchangeEditor",
+      "Enabled": true
+    },
+    {
+      "Name": "Fab",
+      "Enabled": false
+    },
+    {
+      "Name": "Bridge",
+      "Enabled": false
+    },
+    {
+      "Name": "Nwiro",
+      "Enabled": true,
+      "MarketplaceURL": "com.epicgames.launcher://ue/Fab/product/22e3bc90-ed91-4154-8bea-21c33e6a51b7"
+    },
+    {
+      "Name": "DAoCVisualBridge",
+      "Enabled": true
+    }
+  ]
+}

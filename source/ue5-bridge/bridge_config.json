@@ -1,0 +1,23 @@
+{
+  "protocol": "daoc-visual-bridge",
+  "version": 1,
+  "host": "127.0.0.1",
+  "port": 19727,
+  "zone_id": 207,
+  "destination_map": "/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba",
+  "godot_origin_m": [
+    1364.0,
+    130.0,
+    1263.0
+  ],
+  "max_entities": 2048,
+  "max_frame_bytes": 1048576,
+  "stale_seconds": 2.0,
+  "initial_spawn_m": [
+    1423.066379131092,
+    124.83426586566733,
+    1156.881431918
+  ],
+  "initial_camera_yaw_deg": -96.9287,
+  "client_quality": "balanced"
+}

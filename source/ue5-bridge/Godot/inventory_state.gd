@@ -1,0 +1,138 @@
+extends RefCounted
+## A view of server inventory. Commands never change items or coins optimistically.
+const EQUIPMENT:=[10,11,12,13,21,22,23,24,25,26,27,28,29,32,33,34,35,36,37]
+var items:Dictionary={}
+var vault:Dictionary={}
+var money:Dictionary={}
+var gear:Dictionary={}
+var weapon_set:="standard"
+var weight_now:=-1
+var weight_max:=-1
+var revision:=0
+var state_revision:=0
+var fingerprint:=""
+var feedback:=""
+var pending:Dictionary={}
+var requests:=0
+var rejected:=0
+var inventory_events:=0
+
+func reset()->void:
+    items.clear();vault.clear();money.clear();gear.clear();pending.clear();fingerprint="";feedback="";weapon_set="standard";weight_now=-1;weight_max=-1;state_revision+=1;revision+=1;inventory_events=0
+
+func observe(kind:String)->void:
+    if kind=="inventory":
+        if inventory_events==0:revision+=1
+        inventory_events+=1
+
+func sync(rows:Array,coins:Dictionary,appearance:Dictionary,weapons:String,carried:int,capacity:int,now:int,vault_state:Dictionary={})->void:
+    vault=vault_state.duplicate(true)
+    var next:Dictionary={}
+    for row in rows:
+        var slot:=int(row.get("slot",-1))
+        if not allowed_slots().has(slot):continue
+        var it:Dictionary=row.duplicate(true)
+        it["token"]=JSON.stringify(row).sha256_text();next[slot]=it
+    var ordered:Array=[]
+    for slot in allowed_slots():
+        if next.has(slot):ordered.append(next[slot])
+    var normalized:Dictionary={}
+    for key in ["mithril","platinum","gold","silver","copper"]:normalized[key]=maxi(0,int(coins.get(key,0)))
+    var key:=JSON.stringify([ordered,normalized,appearance,weapons,carried,capacity,vault]).sha256_text()
+    if key!=fingerprint:
+        items=next;money=normalized;gear=appearance.duplicate(true);weapon_set=weapons;weight_now=carried;weight_max=capacity;fingerprint=key;state_revision+=1;revision+=1
+        if not pending.is_empty() and inventory_events>int(pending.inventory_events):
+            pending.clear();feedback="Inventory updated by the server.";revision+=1
+    if not pending.is_empty() and now>=int(pending.until_ms):
+        pending.clear();feedback="No confirmation received. Check inventory before repeating the operation.";revision+=1
+
+func allowed_slots()->Array:
+    var slots:Array=EQUIPMENT+range(40,80)
+    if bool(vault.get("valid",false)) and [int(vault.get("first",0)),int(vault.get("count",0))] in [[110,40],[150,100]]:slots.append_array(range(int(vault.first),int(vault.first)+int(vault.count)))
+    return slots
+func vault_slot(slot:int)->bool:return bool(vault.get("valid",false)) and slot>=int(vault.get("first",0)) and slot<int(vault.get("first",0))+int(vault.get("count",0))
+func first_free()->int:
+    for slot in range(40,80):
+        if not items.has(slot):return slot
+    return -1
+
+func slots_for(it:Dictionary)->Array:
+    var t:=int(it.get("item_type",0))
+    match t:
+        10:return [10]
+        11:return [11] if int(it.get("object_type",0))==42 else [10,11]
+        12,13,21,22,23,24,25,26,27,28,29,32,37:return [t]
+        33,34:return [33,34]
+        35,36:return [35,36]
+    return []
+
+func total_copper()->int:
+    return int(money.get("copper",0))+100*int(money.get("silver",0))+10000*int(money.get("gold",0))+10000000*int(money.get("platinum",0))+10000000000*int(money.get("mithril",0))
+
+func fail(text:String)->bool:
+    feedback=text;rejected+=1;revision+=1;return false
+
+func input_integer(value:Dictionary,key:String,fallback:int=-1)->int:
+    var n=value.get(key,fallback)
+    if not (n is int or n is float) or not is_finite(float(n)) or float(n)!=floor(float(n)) or absf(float(n))>9007199254740991.0:return -2147483648
+    return int(n)
+
+func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictionary,pos:Vector3,now:int)->bool:
+    var action:=String(value.get("action",""))
+    if action not in ["inventory_move","inventory_equip","inventory_unequip","merchant_buy","merchant_sell"]:return false
+    if inventory_events==0 or fingerprint.is_empty():return fail("The server is still sending inventory.")
+    if not pending.is_empty():return fail("Wait for the server's response to the previous operation.")
+    if input_integer(value,"inventory_revision")!=state_revision:return fail("The inventory has changed. Select the item again.")
+    if not interaction.dialogs.is_empty():return fail("Answer the pending confirmation first.")
+    var source:=input_integer(value,"slot");var destination:=-1;var count:=1
+    if action!="merchant_buy":
+        if not items.has(source) or String(value.get("item_token",""))!=String(items[source].token):return fail("That item is no longer in this slot.")
+        count=int(items[source].get("count",1))
+        if count<1 or count>65535:return fail("Invalid item quantity.")
+    if action in ["inventory_move","inventory_equip","inventory_unequip"]:
+        if action=="inventory_move":destination=input_integer(value,"to_slot")
+        elif action=="inventory_equip":
+            if source<40 or source>79:return fail("Select a backpack item.")
+            var fits:=slots_for(items[source])
+            if fits.is_empty():return fail("That item cannot be equipped.")
+            destination=int(fits[0])
+            for slot in fits:
+                if not items.has(slot):destination=slot;break
+        else:
+            if source not in EQUIPMENT:return fail("Select an equipped item.")
+            destination=first_free()
+            if destination<0:return fail("Your backpack is full.")
+        if destination==source or not allowed_slots().has(destination):return fail("Invalid destination slot.")
+        if source>=110 or destination>=110:
+            if action!="inventory_move" or String(value.get("vault_token",""))!=String(vault.get("token","")) or not bool(vault.get("valid",false)):return fail("The vault has changed or is closed.")
+            if (not vault_slot(source) and (source<40 or source>79)) or (not vault_slot(destination) and (destination<40 or destination>79)):return fail("Move the item between backpack and vault.")
+        if destination in EQUIPMENT and destination not in slots_for(items[source]):return fail("That item does not match this equipment slot.")
+        if source in EQUIPMENT and items.has(destination) and source not in slots_for(items[destination]):return fail("The destination item cannot occupy this equipment slot.")
+        client.call("MoveItem",source,destination,count)
+    else:
+        var merchant:Dictionary=interaction.merchant
+        var id:=String(merchant.get("entity_id",""))
+        var row:Dictionary=entities.get(id,{})
+        if merchant.is_empty() or id!=interaction.selected_id or id!=interaction.conversation_id or not interaction._valid(row) or interaction._distance(row,pos)>6:return fail("Open the nearby merchant's catalogue.")
+        if int(merchant.get("window",-1))!=0:return fail("This service needs its own window.")
+        if String(value.get("merchant_id",""))!=id or input_integer(value,"merchant_revision")!=int(merchant.get("catalog_revision",-2)):return fail("The catalogue has changed. Select the item again.")
+        var x:=int(pos.x*40+35*8192);var y:=int(pos.z*40+51*8192)
+        if action=="merchant_buy":
+            var page:=input_integer(value,"page");var index:=input_integer(value,"index");var offered:Dictionary={}
+            for it in merchant.get("pages",{}).get(str(page),[]):
+                if int(it.index)==index:offered=it;break
+            if page<0 or page>9 or index<0 or index>29 or offered.is_empty():return fail("That item is not in the current catalogue.")
+            if input_integer(value,"count",1)!=1:return fail("Buy one pack at a time.")
+            if int(offered.get("price",-1))<0 or total_copper()<int(offered.price):return fail("You do not have enough money.")
+            if first_free()<0:return fail("Free a backpack slot before buying.")
+            client.call("BuyItem",x,y,page*30+index,1,0)
+        else:
+            if source<40 or source>79:return fail("You can only sell backpack items.")
+            client.call("SellItem",x,y,source)
+    requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events};revision+=1;return true
+
+func snapshot()->Dictionary:
+    var rows:Array=[]
+    for slot in allowed_slots():
+        if items.has(slot):rows.append(items[slot])
+    return {"revision":revision,"state_revision":state_revision,"ready":inventory_events>0 and not fingerprint.is_empty(),"items":rows,"vault":vault.duplicate(true),"money":money,"gear":gear,"weapon_set":weapon_set,"weight_now":weight_now,"weight_max":weight_max,"pending":not pending.is_empty(),"feedback":feedback}

@@ -1,0 +1,22 @@
+{
+  "FileVersion": 3,
+  "Version": 1,
+  "VersionName": "0.2",
+  "FriendlyName": "DAoC Visual Bridge",
+  "Description": "Opt-in standalone Connacht client, receiving state from Godot over loopback.",
+  "Category": "DAoC",
+  "CanContainContent": true,
+  "Modules": [
+    {
+      "Name": "DAoCVisualBridge",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "ProceduralMeshComponent",
+      "Enabled": true
+    }
+  ]
+}

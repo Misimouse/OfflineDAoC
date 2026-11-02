@@ -1,0 +1,9 @@
+{
+  "base_commit": "049c92819ba7cfd13e1662d2e31fe0f21c619511",
+  "files": [
+    "GameServer/gameobjects/GamePlayer.cs",
+    "GameServer/serverrules/AbstractServerRules.cs",
+    "GameServer/commands/gmcommands/BridgeGmCombatMode.cs"
+  ],
+  "deployment": "Manual review, build and test required. This overlay does not deploy itself."
+}
