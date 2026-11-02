@@ -2,6 +2,7 @@ extends SceneTree
 class FakeClient extends Node:
     var calls:Array=[]
     func MoveItem(a:int,b:int,n:int)->void:calls.append(["move",a,b,n])
+    func Target(oid,flags):calls.append(["target",oid,flags])
     func BuyItem(x:int,y:int,s:int,n:int,m:int)->void:calls.append(["buy",x,y,s,n,m])
     func SellItem(x:int,y:int,s:int)->void:calls.append(["sell",x,y,s])
 var failures:Array=[]
@@ -49,6 +50,7 @@ func _initialize()->void:
     inter.consume("merchant",{"page":2,"window":0,"items":[{"index":3,"name":"Cloak","price":100}]},entities,1)
     var buy:Dictionary={"action":"merchant_buy","page":2,"index":3,"count":1,"merchant_id":"npc:7","merchant_revision":inter.merchant.catalog_revision,"inventory_revision":state.state_revision}
     check(state.execute(buy,client,inter,entities,pos,14000),"buy offered item")
+    check(client.calls[-2]==["target",7,0xE000],"buy restores the actual merchant target before the transaction")
     check(client.calls.back()==["buy",1400*40+35*8192,1250*40+51*8192,63,1,0],"buy uses region position, page*30+index and currency menu")
     check(state.money=={"mithril":1,"platinum":1,"gold":2,"silver":3,"copper":4},"no invented coin deduction")
     state.sync(rows,coins,{},"standard",10,100,27000)
@@ -69,6 +71,7 @@ func _initialize()->void:
     inter.dialogs=[];rows[0].slot=40;state.sync(rows,coins,{},"standard",10,100,27006)
     var sell:Dictionary={"action":"merchant_sell","slot":40,"item_token":state.items[40].token,"inventory_revision":state.state_revision,"merchant_id":"npc:7","merchant_revision":inter.merchant.catalog_revision}
     check(state.execute(sell,client,inter,entities,pos,27007),"sell backpack item through open merchant")
+    check(client.calls[-2]==["target",7,0xE000],"sale restores the actual merchant target before the transaction")
     check(client.calls.back()==["sell",1400*40+35*8192,1250*40+51*8192,40],"sell original server command")
     check(state.items.has(40),"sale awaits actual inventory packet")
     var fixture:=FileAccess.open("res://../Reports/inventory/fixture.json",FileAccess.WRITE)

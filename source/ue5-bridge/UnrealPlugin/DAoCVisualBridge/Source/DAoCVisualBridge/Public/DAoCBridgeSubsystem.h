@@ -228,6 +228,9 @@ private:
     void RefreshClassicVault();
     bool CloseClassicVault(bool Notify=true);
     void ClassicVaultSlotClicked(int32 Slot);
+    void ActivateClassicInventorySlot(int32 Slot);
+    int32 ClassicLastInventorySlot=-1;
+    double ClassicLastInventoryClickAt=0;
 
     void RefreshClassicCasting();
     void RefreshClassicEffects();
@@ -235,6 +238,10 @@ private:
     UPROPERTY() TMap<FString,TObjectPtr<UTexture2D>> ClassicTextures;
     UPROPERTY() TObjectPtr<UTextureRenderTarget2D> ClassicDollTarget;
     UPROPERTY() TObjectPtr<AActor> ClassicCaptureActor;
+    UPROPERTY() TObjectPtr<AActor> ClassicDollActor;
+    FString ClassicDollSignature;
+    float ClassicDollYaw=0;
+    void UpdateClassicDoll();
     USceneCaptureComponent2D* ClassicCapture=nullptr;
     FSlateBrush* ClassicDollBrush=nullptr;
     FString ClassicTab=TEXT("character"),ClassicLayoutFile,ClassicLayoutCharacter;

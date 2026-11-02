@@ -125,9 +125,11 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
             if input_integer(value,"count",1)!=1:return fail("Buy one pack at a time.")
             if int(offered.get("price",-1))<0 or total_copper()<int(offered.price):return fail("You do not have enough money.")
             if first_free()<0:return fail("Free a backpack slot before buying.")
+            client.call("Target",int(id.get_slice(":",1)),0xE000)
             client.call("BuyItem",x,y,page*30+index,1,0)
         else:
             if source<40 or source>79:return fail("You can only sell backpack items.")
+            client.call("Target",int(id.get_slice(":",1)),0xE000)
             client.call("SellItem",x,y,source)
     requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events};revision+=1;return true
 

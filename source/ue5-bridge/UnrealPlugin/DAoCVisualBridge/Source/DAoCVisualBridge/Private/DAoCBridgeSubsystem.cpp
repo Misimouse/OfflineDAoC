@@ -1,6 +1,6 @@
+#include "DAoCBridgeSubsystem.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/FileManager.h"
-#include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeCharacter.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"

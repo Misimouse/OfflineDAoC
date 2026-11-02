@@ -1,3 +1,4 @@
+#include "DAoCBridgeRemoteMotion.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeCharacter.h"
 #include "Dom/JsonObject.h"
