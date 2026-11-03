@@ -83,6 +83,16 @@ Helmet validation passed 2,462 native checks and 2,468 with rendered preview val
 
 Original armour/weapon skill refusals now finish the outstanding equipment request immediately and display the original English reason. The bridge changes no item, coin or item token on a refusal. Exact server replies apply only to equipment moves; NPC speech, unrelated messages, purchases and backpack-only moves cannot acknowledge them. Validation covers 11 refusal-state checks, 35 inventory, 25 vault, 46 exchange and 26 transport checks, gateway parsing, and ten disposable-server checks including immediate leather/plate refusal for a normal-privilege Magician. Server equipment rules and the GM exception remain unchanged.
 
+## Original appearance preparation (inactive)
+
+Character creation still uses the default appearance. The separate preparation tools retain original per-race heads and all non-null hairstyle meshes, including sparse glTF morph targets, instead of merging away their face/hair deformation data. They do not change the active body or equipment catalogues, creation UI, server rules, or maps.
+
+Export `Godot/export_appearance_parts.gd` with `--output=<workspace>/SourceAppearance --races=cel_m,cel_f,elf_m,elf_f,fir_m,fir_f,lur_m,lur_f,syl_m,syl_f` after Godot's `--`. Run `ProtocolQA/verify_appearance_exports.py <workspace>/SourceAppearance --report=<workspace>/Reports/appearance/export_verification.json`. The validator checks glTF headers, morph data (including sparse accessors), UVs, skinning, indices and original PNG dimensions.
+
+Set `DAOC_BRIDGE_WORKSPACE` to the private bridge workspace containing `models.json`, `equipment_catalog_v01.json` and `SourceAppearance`. Run `import_appearance_parts_unreal.py` with Unreal Python, then `prepare_appearance_materials_unreal.py`. The importer checks each original bone's reference position/rotation against its active body. Textures and morph-capable material masters are isolated under `Appearance_v01`; `appearance_catalog_candidate.json` remains inactive. `appearance_material_unreal.py` preserves original face/eye/tattoo multiplication, hair cutout and starter-clothing skin masks.
+
+Local preparation verified ten figures, 62 parts, 393 morph targets, 23,262 vertices and 286 textures. Five unsaved editor captures checked example face/hair/eye/tattoo/tint and morph combinations; this is a resource proof, not complete customization or an installed creator feature. Connecting validated choices to creation, persistence, animated accessories, helmets/hoods and the inventory miniature remains pending. Keep the existing default-appearance behavior until that integration passes its own tests.
+
 ## Upstream and maintenance
 
 The original author has put OfflineDAoC on hold. Source changes after 0.37c exist upstream at `12992146a16dc888f91ec611d18d9d891d3e11e1`; they have been reviewed but not merged wholesale into this snapshot. They include navigation-memory fixes, Godot loading fixes, appearance and gameplay changes. Whole-file replacement can remove this fork's art hooks and introduce dependencies; port and test by feature.
