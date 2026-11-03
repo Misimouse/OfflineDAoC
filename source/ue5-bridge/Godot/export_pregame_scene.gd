@@ -25,7 +25,12 @@ func standard(original:Material)->Material:
     elif "ALPHA = c.a * opacity;" in original.shader.code:m.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
     elif "blend_add" in original.shader.code:
         m.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA;m.blend_mode=BaseMaterial3D.BLEND_MODE_ADD
-    m.set_meta("source_spec",original.get_meta("spec",{}))
+    var spec:Dictionary=original.get_meta("spec",{}).duplicate(true)
+    if spec.has("billboard"):
+        # These fixed-camera cards are baked per source node below. Keeping the
+        # shader billboard after merging would rotate them around the scene origin.
+        spec["baked_billboard"]=spec.billboard;spec.erase("billboard")
+    m.set_meta("source_spec",spec)
     var slots:Dictionary={}
     for slot in ["base","dark","detail","decal","glow","tex1","tex2"]:
         if not bool(original.get_shader_parameter("has_"+slot)):continue
@@ -38,6 +43,27 @@ func standard(original:Material)->Material:
         slots[slot]={"file":png,"uv":int(original.get_shader_parameter(slot+"_uv")),"source":source.get_meta("daoc_source_path","")}
     m.set_meta("source_layers",slots)
     return m
+func surface_transform(instance:MeshInstance3D,surface:int,camera:Camera3D)->Transform3D:
+    var transform:=instance.global_transform
+    var original:Material=instance.get_active_material(surface)
+    if not original is ShaderMaterial:return transform
+    var mode:int=int(original.get_shader_parameter("billboard"))
+    if mode==0:return transform
+    var scale:float=transform.basis.x.length()
+    if mode==1:
+        # Exactly the original NifMaterials vertex shader's camera-facing basis,
+        # including its NIF-axis restoration before the view transform.
+        var toward:Vector3=(camera.global_position-transform.origin).normalized()
+        var right:Vector3=camera.global_basis.y.cross(toward).normalized()
+        var up:Vector3=toward.cross(right)
+        var restore:=Basis(Vector3(-1,0,0),Vector3(0,0,-1),Vector3(0,-1,0))
+        transform.basis=Basis(right,up,toward).scaled(Vector3.ONE*scale)*restore
+    elif mode==2:
+        var up:=Vector3.UP
+        var side:Vector3=up.cross(camera.global_basis.z).normalized()
+        transform.basis=Basis(side,up,side.cross(up)).scaled(Vector3.ONE*scale)
+    else:assert(false,"Unsupported original billboard mode")
+    return transform
 func run()->void:
     var output:=""
     for arg in OS.get_cmdline_user_args():
@@ -69,7 +95,7 @@ func run()->void:
                 material.resource_name="PGM%03d" % groups.size()
                 export_materials.append({"name":material.resource_name,"spec":material.get_meta("source_spec",{}),"layers":material.get_meta("source_layers",{})})
                 var builder:=SurfaceTool.new();builder.begin(Mesh.PRIMITIVE_TRIANGLES);builder.set_material(material);groups[key]=builder
-            groups[key].append_from(posed,surface,instance.global_transform)
+            groups[key].append_from(posed,surface,surface_transform(instance,surface,camera))
     assert(groups.size()<=256)
     for builder in groups.values():builder.commit(combined);surfaces+=1
     var holder:=Node3D.new();root.add_child(holder);holder.name="Original_Hibernia_Lobby"

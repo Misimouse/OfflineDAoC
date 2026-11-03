@@ -13,6 +13,8 @@
 #include "Components/PointLightComponent.h"
 #include "Engine/Scene.h"
 #include "ContentStreaming.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 namespace {
 FString PreviewString(TSharedPtr<FJsonObject> O,const TCHAR* K){FString S;if(O)O->TryGetStringField(K,S);return S;}
@@ -34,7 +36,9 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
     // glTF -> Unreal coordinates: metres (x,y,z) become centimetres (x,z,y).
     auto Point=[Origin](FVector P){return Origin+FVector(P.X,P.Z,P.Y)*100;};
     auto* Backdrop=GetWorld()->SpawnActor<AStaticMeshActor>(Origin,FRotator::ZeroRotator,Parameters);CharacterLobbyBackdropActor=Backdrop;
-    if(Backdrop){auto* Mesh=Backdrop->GetStaticMeshComponent();Mesh->SetMobility(EComponentMobility::Movable);Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/DAoCVisualBridge/Pregame_v02/hibernia_lobby/StaticMeshes/hibernia_lobby.hibernia_lobby")));Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);Mesh->SetCastShadow(false);Mesh->SetVisibleInSceneCaptureOnly(true);}
+    FString BackdropPath=TEXT("/DAoCVisualBridge/Pregame_v03/hibernia_lobby/StaticMeshes/hibernia_lobby.hibernia_lobby");
+    FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyBackdrop="),BackdropPath);
+    if(Backdrop){auto* Mesh=Backdrop->GetStaticMeshComponent();Mesh->SetMobility(EComponentMobility::Movable);Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,*BackdropPath));Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);Mesh->SetCastShadow(false);Mesh->SetVisibleInSceneCaptureOnly(true);}
     const TMap<FString,int32> Models={{TEXT("cel_m"),1984},{TEXT("cel_f"),310},{TEXT("elf_m"),382},{TEXT("elf_f"),388},{TEXT("fir_m"),352},{TEXT("fir_f"),1983},{TEXT("lur_m"),318},{TEXT("lur_f"),378},{TEXT("syl_m"),700},{TEXT("syl_f"),708}};
     const int32 Model=Models.FindRef(PreviewString(Row,TEXT("prefix")));auto* Definition=ModelCatalog.Find(FString::FromInt(Model));
     auto* Figure=Definition?LoadObject<USkeletalMesh>(nullptr,*PreviewString(*Definition,TEXT("asset"))):nullptr;
@@ -55,7 +59,10 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
         for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Actor);Actor->AddInstanceComponent(Light);Light->SetupAttachment(Actor->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(170,180,220):FVector(-120,-120,120));Light->SetIntensityUnits(ELightUnits::Lumens);Light->SetIntensity(I==0?800:200);Light->SetAttenuationRadius(600);Light->SetLightingChannels(false,true,false);Light->SetCastShadows(false);Light->RegisterComponent();}
     }
     CharacterLobbyCaptureActor=GetWorld()->SpawnActor<AActor>(Origin,FRotator::ZeroRotator,Parameters);CharacterLobbyCapture=NewObject<USceneCaptureComponent2D>(CharacterLobbyCaptureActor);CharacterLobbyCaptureActor->SetRootComponent(CharacterLobbyCapture);CharacterLobbyCapture->RegisterComponent();
-    auto* Capture=CharacterLobbyCapture;Capture->bCaptureEveryFrame=false;Capture->bCaptureOnMovement=false;Capture->PrimitiveRenderMode=ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;Capture->CaptureSource=ESceneCaptureSource::SCS_FinalColorLDR;Capture->FOVAngle=40;
+    // Slate expects a linear image and applies display gamma itself. Supplying
+    // final LDR here applied gamma twice; the cinematic tone curve also crushed
+    // the original lobby's dark colours. Keep the original linear presentation.
+    auto* Capture=CharacterLobbyCapture;Capture->bCaptureEveryFrame=false;Capture->bCaptureOnMovement=false;Capture->PrimitiveRenderMode=ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;Capture->CaptureSource=ESceneCaptureSource::SCS_FinalColorHDR;Capture->FOVAngle=40;
     Capture->ShowFlags.SetAtmosphere(false);Capture->ShowFlags.SetFog(false);Capture->ShowFlags.SetMotionBlur(false);Capture->ShowFlags.SetGlobalIllumination(false);Capture->ShowFlags.SetDynamicShadows(false);Capture->ShowFlags.SetPostProcessMaterial(false);
     Capture->PostProcessSettings.bOverride_AutoExposureMethod=true;Capture->PostProcessSettings.AutoExposureMethod=EAutoExposureMethod::AEM_Manual;
     Capture->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure=true;Capture->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure=false;

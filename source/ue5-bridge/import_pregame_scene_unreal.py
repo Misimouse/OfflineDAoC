@@ -5,10 +5,10 @@ import unreal
 
 root=Path(os.environ['DAOC_BRIDGE_WORKSPACE'])
 fidelity=os.environ.get('DAOC_BRIDGE_PREGAME_FIDELITY','1')!='0'
-folder=Path(os.environ.get('DAOC_BRIDGE_PREGAME_SOURCE',str(root/('SourcePregame_v02' if fidelity else 'SourcePregame_v01'))))
+folder=Path(os.environ.get('DAOC_BRIDGE_PREGAME_SOURCE',str(root/('SourcePregame_v03' if fidelity else 'SourcePregame_v01'))))
 folder.mkdir(parents=True,exist_ok=True)
 source=folder/'hibernia_lobby.glb'
-destination='/DAoCVisualBridge/Pregame_v02' if fidelity else '/DAoCVisualBridge/Pregame_v01'
+destination='/DAoCVisualBridge/Pregame_v03' if fidelity else '/DAoCVisualBridge/Pregame_v01'
 assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
 tools=unreal.AssetToolsHelpers.get_asset_tools()
 lib=unreal.MaterialEditingLibrary
@@ -64,7 +64,16 @@ try:
                 material.set_editor_property('blend_mode',unreal.BlendMode.BLEND_TRANSLUCENT);lib.connect_material_property(sample,'A',unreal.MaterialProperty.MP_OPACITY)
             lib.recompile_material(material);assets.save_loaded_asset(material)
         material_assets[name]=material
-    mesh=meshes[0];slots=mesh.get_editor_property('static_materials');assert len(slots)==len(document['materials'])
+    mesh=meshes[0]
+    # This small, fixed-camera scene must retain its full mesh in DX11 as well
+    # as DX12. Automatic Nanite import produced a 4,225-triangle fallback from
+    # the 62,798-triangle original, deleting tower walls, banners and vegetation.
+    editor_meshes=unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
+    assert editor_meshes, 'Run with -ExecutePythonScript (editor services required)'
+    nanite=editor_meshes.get_nanite_settings(mesh)
+    nanite.set_editor_property('enabled',False)
+    editor_meshes.set_nanite_settings(mesh,nanite,True)
+    slots=mesh.get_editor_property('static_materials');assert len(slots)==len(document['materials'])
     assignments=[]
     for index,slot in enumerate(slots):
         name=str(slot.material_slot_name);match=re.search(r'PGM\d{3}',name);assert match,(index,name)

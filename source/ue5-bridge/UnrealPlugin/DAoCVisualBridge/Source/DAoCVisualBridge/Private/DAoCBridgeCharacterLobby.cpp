@@ -31,6 +31,13 @@
 #include "Fonts/FontMeasure.h"
 #include "UnrealClient.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "ImageUtils.h"
+#include "Serialization/BufferArchive.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
+#include "StaticMeshResources.h"
 
 namespace {
 FString LobbyText(TSharedPtr<FJsonObject> O,const TCHAR* K){FString V;if(O)O->TryGetStringField(K,V);return V;}
@@ -190,8 +197,17 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
     if(!Capture.IsEmpty()){
         if(Phase==1){ApplyCharacterLobby(CharacterLobbyState,false);if(GShaderCompilingManager&&GShaderCompilingManager->IsCompiling())return true;if(FPlatformTime::Seconds()-Started<8)return true;FScreenshotRequest::RequestScreenshot(Capture,true,false);Phase=2;Started=FPlatformTime::Seconds();return true;}
         if(FPlatformTime::Seconds()-Started<1)return true;
+        // Preserve the actual scene target separately from the desktop-scaled UI
+        // screenshot. A small Slate window cannot establish full-resolution fidelity.
+        if(CharacterLobbyCapture)CharacterLobbyCapture->CaptureScene();
+        FlushRenderingCommands();FBufferArchive PreviewBytes;
+        Check(CharacterLobbyTarget&&FImageUtils::ExportRenderTarget2DAsPNG(CharacterLobbyTarget,PreviewBytes)&&FFileHelper::SaveArrayToFile(PreviewBytes,*(Capture+TEXT(".scene.png"))),TEXT("full scene target exported"));
     }
     auto Report=MakeShared<FJsonObject>();Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetArrayField(TEXT("failures"),Failures);Report->SetBoolField(TEXT("live_account"),false);
+    if(CharacterLobbyTarget){Report->SetNumberField(TEXT("preview_width"),CharacterLobbyTarget->SizeX);Report->SetNumberField(TEXT("preview_height"),CharacterLobbyTarget->SizeY);}
+    if(auto* Backdrop=Cast<AStaticMeshActor>(CharacterLobbyBackdropActor.Get()))if(UStaticMesh* Mesh=Backdrop->GetStaticMeshComponent()->GetStaticMesh())if(auto* Data=Mesh->GetRenderData()){
+        TArray<TSharedPtr<FJsonValue>> Lods;for(const auto& Lod:Data->LODResources){auto Entry=MakeShared<FJsonObject>();Entry->SetNumberField(TEXT("triangles"),Lod.GetNumTriangles());Entry->SetNumberField(TEXT("uv_channels"),Lod.VertexBuffers.StaticMeshVertexBuffer.GetNumTexCoords());Lods.Add(MakeShared<FJsonValueObject>(Entry));}Report->SetArrayField(TEXT("backdrop_lods"),Lods);
+    }
     FString Text;FJsonSerializer::Serialize(Report,TJsonWriterFactory<>::Create(&Text));FFileHelper::SaveStringToFile(Text,*(Path+TEXT(".native.json")));RemoveCharacterLobby();Phase=99;
     UKismetSystemLibrary::QuitGame(GetWorld(),nullptr,EQuitPreference::Quit,false);return true;
 }
