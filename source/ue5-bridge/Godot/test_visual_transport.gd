@@ -56,5 +56,7 @@ func _initialize()->void:
     check(transport.publish([]) and transport.last_snapshot.get("zone_lights",[])==[light],"original point lights cross transport independently of NPC presence")
     transport.snapshot_metadata["zone_lights"]=[];transport.publish([])
     check(transport.last_snapshot.get("zone_lights",[light]).is_empty(),"empty light set can clear previous zone lights")
+    transport.snapshot_metadata["exchange"]={"visible":false,"catalog_revision":1};transport.publish([])
+    check(transport.last_snapshot.get("exchange",{})=={"visible":false,"catalog_revision":1},"exchange state crosses the bounded transport whitelist")
     transport.free()
     a.free();var report:={"passed":failures.is_empty(),"checks":checks,"failures":failures,"real_server":false};var f:=FileAccess.open(get_script().resource_path.get_base_dir().path_join("../Reports/training_staff_fx_pets/godot_visual_tests.json"),FileAccess.WRITE);f.store_string(JSON.stringify(report));f.close();print(JSON.stringify(report));quit(0 if failures.is_empty() else 1)

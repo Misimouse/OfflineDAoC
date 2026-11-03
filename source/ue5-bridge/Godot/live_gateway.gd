@@ -7,6 +7,7 @@ var inventory:RefCounted
 var character_lobby:RefCounted
 var local_model_id:=0
 var vault:RefCounted
+var exchange:RefCounted
 var player_state:RefCounted
 var combat_visual:RefCounted
 var gm_mode:RefCounted
@@ -77,6 +78,7 @@ func _ready()->void:
     interaction=load(folder.path_join("interaction_state.gd")).new()
     inventory=load(folder.path_join("inventory_state.gd")).new()
     vault=load(folder.path_join("vault_state.gd")).new()
+    exchange=load(folder.path_join("exchange_state.gd")).new()
     player_state=load(folder.path_join("player_combat_state.gd")).new()
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
     gm_mode=load(folder.path_join("gm_test_mode.gd")).new()
@@ -103,6 +105,9 @@ func _ready()->void:
     server.created.connect(func(ok,why):character_lobby.refresh(server);character_lobby.creation_result(ok,why))
     server.name_checked.connect(func(name,result):character_lobby.name_result(name,result,server,Time.get_ticks_msec()))
     item_db=load("res://game/ui/item_db.gd");assert(item_db!=null)
+    exchange.item_lookup=func(id:String)->Dictionary:return item_db.item(id)
+    server.exchange_open.connect(func(which):exchange.open(which,server,interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0,Time.get_ticks_msec()))
+    server.exchange_changed.connect(func():exchange.sync(server,inventory,Time.get_ticks_msec()))
     var collisions=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../collision_catalog.json")))
     if collisions is Dictionary:
         for model in collisions.get("models",{}).values():
@@ -169,6 +174,7 @@ func apply_entry(entry:Dictionary)->void:
         status="Connected to Connacht"
 
 func world_event(kind:String,data:Dictionary)->void:
+    exchange.observe(kind,data)
     if kind in ["you","region_changed","quit"]:line_of_sight.reset()
     if kind=="los":
         var positions:Dictionary={};positions[int(server.me_oid)]={"id":"player:local","pos":position}
@@ -227,6 +233,9 @@ func world_event(kind:String,data:Dictionary)->void:
     interaction.consume(kind,data,adapter.entities,Engine.get_process_frames())
     if kind=="quit":status="Session saved";write_report();return
     if kind in ["you","npc","player","move","remove","region_changed","quit","model_change","death","revive","object","combat","equipment"]:adapter.consume_world(kind,data)
+    # Publish the opened container and its inventory revision together. The original
+    # Server emits exchange_open before forwarding this inventory world event.
+    if kind in ["inventory","market"]:sync_inventory(Time.get_ticks_msec())
     if kind=="combat" and int(server.entry.get("zone",-1))==207:
         var now:=Time.get_ticks_msec();sync_inventory(now)
         combat_visual.consume(data,int(server.me_oid),adapter.oid_to_id,adapter.entities,now,local_weapon_stance(),not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0)
@@ -237,6 +246,11 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action in exchange.ACTIONS:
+        var now:=Time.get_ticks_msec()
+        sync_inventory(now);exchange.sync(server,inventory,now)
+        exchange.execute(value,server,inventory,interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0,now)
+        return
     if action=="vault_close":vault.close(value);sync_inventory(Time.get_ticks_msec());return
     if action=="conc_cancel":
         concentration.sync(server,player_state.vitals,player_state.ready,Time.get_ticks_msec());concentration.request(value,server.client,Time.get_ticks_msec());return
@@ -276,6 +290,7 @@ func command(value:Dictionary)->void:
     elif action in ["target","interact","keyword","dialog_response","dismiss_interaction"]:
         interaction.execute(value,server.client,adapter.entities,position)
     elif action in ["inventory_move","inventory_equip","inventory_unequip","merchant_buy","merchant_sell"]:
+        if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
         sync_inventory(Time.get_ticks_msec())
         inventory.execute(value,server.client,interaction,adapter.entities,position,Time.get_ticks_msec())
     elif action in ["ui_bank","ui_assign","ui_clear","ui_use","ui_use_slot","ui_detail","ui_detail_close","ui_server_window_close"]:
@@ -418,6 +433,7 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
+        transport.snapshot_metadata["exchange"]=exchange.snapshot()
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states
@@ -486,6 +502,8 @@ func sync_inventory(now:int)->void:
         row["equip_slots"]=inventory.slots_for(row)
         rows.append(row)
     inventory.sync(rows,server.money,server.gear,server.weapon_set,int(server.weight_now),int(server.weight_max),now,vault_state)
+    exchange.maintain(interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+    exchange.sync(server,inventory,now)
 
 func write_report()->void:
     var models:Dictionary={}
@@ -507,6 +525,7 @@ func write_report()->void:
     report["inventory"]={"slots":inventory.items.size(),"revision":inventory.state_revision,"requests":inventory.requests,"rejected":inventory.rejected,"pending":not inventory.pending.is_empty(),"feedback":inventory.feedback}
     report["combat_visual"]={"packets":combat_visual.packets,"emitted":combat_visual.emitted,"suppressed_ranged":combat_visual.suppressed_ranged}
     report["character_lobby"]=character_lobby.snapshot()
+    report["exchange"]=exchange.snapshot()
     report["player_status"]=player_state.snapshot();report["player_status_events"]=player_state.status_events;report["attack_mode_events"]=player_state.mode_events;report["combat_events"]=player_state.combat_events;report["player_state_requests"]=player_state.requests;report["player_state_rejected"]=player_state.rejected
     if adapter.record_motion and not server.playing and ever_played:
         var trace:=FileAccess.open(folder.path_join("../Reports/movement/server_trace.json"),FileAccess.WRITE)

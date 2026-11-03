@@ -42,6 +42,7 @@ Do not run all installer or live-test scripts blindly. An installer may target a
 - Merchant windows block world selection across their scrollbar. NPC conversations use one head bubble with keyword replies. Door fixtures survive streamed actor renaming through spatial matching, and private colliders follow level load/unload. Door geometry/catalogue generation is still required when adding another region.
 
 - Original server-driven combat, death/release, selection/interactions and classic UI state, with viewport resizing and English game text.
+- Realm Exchange browse/search, original item icons, purchase confirmation, listing chests, price changes, withdrawal and sale-proceeds collection. Its window reuses the original granite artwork and fonts. Item and money changes come from the original server; stale window/item identities and pending operations are checked before forwarding commands. Owner prices retain the original client's remembered-price behavior, including an unknown value when no local quote is available. This does not add exchange brokers to an art map or change world data.
 - Weapon/staff/shield and NPC equipment, original attachment references, seated-camera facing lock and training-dummy support.
 - 39 flexible weapon definitions with original clips and independent action clocks; 132 original dye IDs; original shield emblem composition; 94 original permanent weapon effects.
 - Bounded original spell meshes/particles and weapon-local effects; permanent effect limits of 8/16/24 by quality, local player priority and cleanup on unequip/despawn/session end.
@@ -64,6 +65,10 @@ The 3 November input/lighting correction passed 313 UI/inventory/combat/posture/
 Source-package validation is recorded separately in `SOURCE-VALIDATION.md`. Native asset-dependent suites need regenerated local catalogues/fixtures; a clean source checkout alone does not provide them. Ardee FPS are not certified by the empty-scene render or headless tests. Earlier measurements were contended by other editor processes.
 
 The character-menu addition was checked separately: 16 lobby rules, 7 original-server realm-queue regressions, 13 native menu checks, a rendered TCP snapshot replay, six disposable-server creation/entry checks and 142 ten-figure armour checks (144 with the Sylvan female preview). The 313 general regressions and 72 window/input checks also passed. The realm queue now accepts an authoritative reply even when a locked account returns a different realm; creation stays disabled until initial roster requests finish.
+
+The Realm Exchange addition passed 46 Godot state checks, 24 transport checks, 34 rendered native UI checks, 314 general regressions and 72 window/input checks. A separate disposable original-server test used two characters to list an item, set its price, find and purchase it, verify the exact item/coin transfer, collect the seller's proceeds and withdraw an unsold item (eight checks). The isolated database was restored after normal shutdown. These checks do not replace manual play validation. The shared action-icon widget now initializes optional brush and slot arguments explicitly; inventory/container revisions are synchronized before publishing newly opened exchange state.
+
+`ProtocolQA/prepare_lobby_project.py` prepares the isolated headless gameplay project used by the exchange test. It accepts an installation with the realm-queue patch already present, copies gameplay scripts, and shares content/import caches for reading. Run it only after preparing a marker-protected disposable QA runtime; do not open that shared-cache project in the Godot editor. `ProtocolQA/verify_exchange_real.py` requires that project and never targets a played database.
 
 ## Upstream and maintenance
 

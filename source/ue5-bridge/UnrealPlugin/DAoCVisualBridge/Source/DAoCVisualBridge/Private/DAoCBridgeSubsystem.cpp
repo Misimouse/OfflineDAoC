@@ -230,6 +230,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     const TSharedPtr<FJsonObject>* PlayerStatus=nullptr;if(M->TryGetObjectField(TEXT("player_status"),PlayerStatus))ApplyPlayerStatus(*PlayerStatus);
     const TSharedPtr<FJsonObject>* Classic=nullptr;if(M->TryGetObjectField(TEXT("classic_ui"),Classic))ApplyClassicUI(*Classic);
     ApplyChat(M);
+    const TSharedPtr<FJsonObject>* Exchange=nullptr;if(M->TryGetObjectField(TEXT("exchange"),Exchange))ApplyExchange(*Exchange);
     }
     ApplyZoneLights(M);
     Sequence=static_cast<int64>(Seq);LastSnapshot=FPlatformTime::Seconds();TSet<FString> Seen;NpcCount=0;
@@ -336,14 +337,14 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Mode);
     }
     auto* Viewport=GetWorld()->GetGameViewport();const bool Focused=Viewport&&Viewport->Viewport&&Viewport->Viewport->HasFocus();
-    const bool Dead=PlayerIsDead();const bool FacingLocked=!PlayerCanMove();
-    if(!Focused||Dead||bChatOpen){bMouseLookToggle=false;bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
-    if(!bChatOpen&&FPlatformTime::Seconds()-ChatClosedAt>.2&&PC->WasInputKeyJustPressed(EKeys::Enter))OpenChat();
+    const bool Typing=ExchangeTyping();const bool Dead=PlayerIsDead();const bool FacingLocked=!PlayerCanMove();
+    if(!Focused||Dead||bChatOpen||Typing){bMouseLookToggle=false;bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
+    if(!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2&&PC->WasInputKeyJustPressed(EKeys::Enter))OpenChat();
     PlayerPawn->bUseControllerRotationYaw=false;
     if(Dead){PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->DisableMovement();}
     else if(bNavigationReady&&PlayerPawn->GetCharacterMovement()->MovementMode==MOVE_None)PlayerPawn->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
-    if(!Dead&&!bChatOpen&&PC->WasInputKeyJustPressed(EKeys::F3))bMouseLookToggle=!bMouseLookToggle;
-    SetMouseLook(!Dead&&!bChatOpen&&bControls&&!bExiting&&Focused&&!ClassicUIHovered()&&!InventoryHovered()&&!PlayerStatusHovered()&&(bMouseLookToggle||(bRightPointerHeld&&bRightPointerDragged)));
+    if(!Dead&&!bChatOpen&&!Typing&&PC->WasInputKeyJustPressed(EKeys::F3))bMouseLookToggle=!bMouseLookToggle;
+    SetMouseLook(!Dead&&!bChatOpen&&!Typing&&bControls&&!bExiting&&Focused&&!ClassicUIHovered()&&!InventoryHovered()&&!PlayerStatusHovered()&&(bMouseLookToggle||(bRightPointerHeld&&bRightPointerDragged)));
     if(bMouseLook){
         float DX=0,DY=0;PC->GetInputMouseDelta(DX,DY);
         if(!bSkipMouseDelta){CameraYaw=FRotator::NormalizeAxis(CameraYaw+DX*MouseSensitivity);CameraPitch=FMath::Clamp(CameraPitch+DY*MouseSensitivity,-75.f,65.f);}
@@ -357,7 +358,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     const bool Walking=PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift);
     PlayerPawn->GetCharacterMovement()->MaxWalkSpeed=ServerRunSpeed*(Walking?.35f:1.f);
     FVector Desired=FVector::ZeroVector;
-    if(bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!bChatOpen&&FPlatformTime::Seconds()-ChatClosedAt>.2){
+    if(bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2){
         float Fwd=(PC->IsInputKeyDown(EKeys::W)?1:0)-(PC->IsInputKeyDown(EKeys::S)?1:0);
         if(bLeftPointerHeld&&bRightPointerHeld)Fwd=1;
         float Right=(PC->IsInputKeyDown(EKeys::D)?1:0)-(PC->IsInputKeyDown(EKeys::A)?1:0);
@@ -387,7 +388,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     }else{PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
     PlayerPosition=PlayerPawn->FeetPosition();TravelledMetres+=FVector::Dist2D(PreviousFeet,PlayerPosition)/100;PreviousFeet=PlayerPosition;
     PeakMovementSpeed=FMath::Max(PeakMovementSpeed,PlayerPawn->GetVelocity().Size2D()/100);
-    if(!Dead&&!bChatOpen&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&FPlatformTime::Seconds()-LastMove>.1){
+    if(!Dead&&!bChatOpen&&!Typing&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&FPlatformTime::Seconds()-LastMove>.1){
         auto Values=MakeShared<FJsonObject>();Values->SetArrayField(TEXT("position_m"),JsonPoint(PlayerPosition));
         Values->SetArrayField(TEXT("forward_xz"),{MakeShared<FJsonValueNumber>(FMath::Cos(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw))),MakeShared<FJsonValueNumber>(FMath::Sin(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw)))});
         Values->SetStringField(TEXT("target_entity_id"),CurrentTarget());Values->SetBoolField(TEXT("target_in_view"),PlayerSeesTarget());
@@ -533,6 +534,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     InstallWorldPointerInput();
     UpdateUILayout();
     UpdateChatInput();
+    if(TickExchangeAcceptance())return;
     if(TickViewportAcceptance())return;
     if(TickCharacterLobbyAcceptance())return;
     if(TickClassicAcceptance())return;

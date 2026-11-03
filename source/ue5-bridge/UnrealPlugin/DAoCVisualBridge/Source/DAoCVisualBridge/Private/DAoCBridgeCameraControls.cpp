@@ -9,11 +9,11 @@ void UDAoCBridgeSubsystem::ApplyCameraView(){
     PlayerPawn->CameraArm->bEnableCameraLag=!bFirstPerson;
 }
 void UDAoCBridgeSubsystem::ToggleFirstPerson(){
-    if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||PlayerIsDead()||bChatOpen||bExiting)return;
+    if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||PlayerIsDead()||bChatOpen||ExchangeTyping()||bExiting)return;
     bFirstPerson=!bFirstPerson;ApplyCameraView();
 }
 void UDAoCBridgeSubsystem::AdjustCameraZoom(float Steps){
-    if(!FMath::IsFinite(Steps)||FMath::Abs(Steps)>20||PlayerIsDead()||bChatOpen||bExiting)return;
+    if(!FMath::IsFinite(Steps)||FMath::Abs(Steps)>20||PlayerIsDead()||bChatOpen||ExchangeTyping()||bExiting)return;
     if(bFirstPerson){if(Steps>=0)return;bFirstPerson=false;ThirdPersonDistance=80;}
     ThirdPersonDistance=FMath::Clamp(ThirdPersonDistance-Steps*60.f,80.f,1200.f);ApplyCameraView();
 }

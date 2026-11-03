@@ -29,9 +29,9 @@ void UDAoCBridgeSubsystem::InstallWorldPointerInput(){
 void UDAoCBridgeSubsystem::RemoveWorldPointerInput(){if(WorldPointerInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(WorldPointerInput);WorldPointerInput.Reset();bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
 bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{
  auto Hit=[&](const TSharedPtr<SWidget>& W){return W.IsValid()&&W->GetVisibility().IsVisible()&&W->GetCachedGeometry().IsUnderLocation(Absolute);};
- if(bChatOpen||FSlateApplication::Get().AnyMenusVisible())return true;
+ if(bChatOpen||ExchangeTyping()||FSlateApplication::Get().AnyMenusVisible())return true;
  if(bClassicOpen&&Hit(ClassicPanelBox)||bClassicMiniGroupOpen&&Hit(ClassicMiniGroupBox))return true;
- for(const auto& W:{ClassicDetailPanel,ClassicGroupConfirmPanel,ClassicJournalPanel,ClassicTrainerPanel,ClassicVaultPanel,ClassicMerchantPanel,ZoneMapPanel})if(Hit(W))return true;
+ for(const auto& W:{ClassicDetailPanel,ClassicGroupConfirmPanel,ClassicJournalPanel,ClassicTrainerPanel,ClassicVaultPanel,ClassicMerchantPanel,ExchangePanel,ZoneMapPanel})if(Hit(W))return true;
  for(const auto& W:ClassicBarBoxes)if(Hit(W))return true;
  for(const auto& W:ChatPanels)if(Hit(W))return true;
  for(const auto& W:WorldBubblePanels)if(Hit(W))return true;
