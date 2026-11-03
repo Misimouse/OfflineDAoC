@@ -72,15 +72,37 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
                 // Remote equipment packets carry these flags directly rather than in inventory.gear.
                 Gear->RemoveField(TEXT("gear"));Gear->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);Check(CapeShape(2),TEXT("remote equipment hood flags use the same cloak selection"));Gear->SetBoolField(TEXT("hood"),false);ApplyBodyArmour(Actor,Gear);
             }
+            const TSharedPtr<FJsonObject>* Helmets=nullptr;const TSharedPtr<FJsonObject>* RaceHelmets=nullptr;
+            auto FindHelmet=[&](){TArray<USkeletalMeshComponent*> Parts;Actor->GetComponents(Parts);USkeletalMeshComponent* Found=nullptr;for(auto* Part:Parts)if(Part->ComponentHasTag(TEXT("DAoCBridgeHelmet")))Found=Part;return Found;};
+            if(ArmourCatalog->TryGetObjectField(TEXT("helmets"),Helmets)&&(*Helmets)->TryGetObjectField(BaseId,RaceHelmets)){
+                auto Hat=MakeShared<FJsonObject>();Hat->SetNumberField(TEXT("slot"),21);Hat->SetNumberField(TEXT("color"),2);
+                auto WithHat=Worn;WithHat.Add(MakeShared<FJsonValueObject>(Hat));Gear->SetArrayField(TEXT("items"),WithHat);
+                for(const auto& Entry:(*RaceHelmets)->Values){Hat->SetNumberField(TEXT("model"),FCString::Atoi(*Entry.Key));ApplyBodyArmour(Actor,Gear);auto* Part=FindHelmet();
+                    Check(Part&&Part->GetSkeletalMeshAsset()->GetPathName()==Entry.Value->AsObject()->GetStringField(TEXT("asset")),TEXT("original race-specific helmet assembly loads ")+BaseId+TEXT("/")+Entry.Key);
+                    Check(Part&&Part->LeaderPoseComponent.Get()==Body&&Part->GetCollisionEnabled()==ECollisionEnabled::NoCollision&&Part->GetRelativeTransform().Equals(FTransform::Identity),TEXT("helmet follows the figure bones without offset or collision"));
+                    bool Full=false;Entry.Value->AsObject()->TryGetBoolField(TEXT("full"),Full);bool CorrectHead=true;
+                    for(auto V:Sections){auto S=V->AsObject();const int32 Index=S->GetIntegerField(TEXT("index"));if(S->GetStringField(TEXT("slot"))==TEXT("head"))CorrectHead&=Body->IsMaterialSectionShown(Index,0)!=Full;bool Hair=false;S->TryGetBoolField(TEXT("hood_hair"),Hair);if(Hair)CorrectHead&=!Body->IsMaterialSectionShown(Index,0);}
+                    Check(CorrectHead,TEXT("full helmets replace head; ordinary helmets retain face and use original helmet hair"));
+                    ApplyBodyArmour(Actor,Gear);Check(FindHelmet()==Part,TEXT("unchanged helmet does not recreate its component"));
+                }
+                Gear->SetBoolField(TEXT("helm_hidden"),true);ApplyBodyArmour(Actor,Gear);Check(FindHelmet()==nullptr,TEXT("hidden helmet flag removes the original assembly"));Gear->SetBoolField(TEXT("helm_hidden"),false);
+                Gear->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);Check(FindHelmet()==nullptr,TEXT("visible raised hood hides the helmet"));Gear->SetBoolField(TEXT("hood"),false);
+                Gear->SetArrayField(TEXT("items"),Worn);ApplyBodyArmour(Actor,Gear);Check(FindHelmet()==nullptr,TEXT("unequipping the helmet removes the assembly"));
+                Hat->SetNumberField(TEXT("model"),999999);Gear->SetArrayField(TEXT("items"),WithHat);ApplyBodyArmour(Actor,Gear);bool FaceRestored=FindHelmet()==nullptr;
+                for(auto V:Sections){auto S=V->AsObject();if(S->GetStringField(TEXT("slot"))==TEXT("head"))FaceRestored&=Body->IsMaterialSectionShown(S->GetIntegerField(TEXT("index")),0);}
+                Check(FaceRestored,TEXT("unsupported helmet safely retains the original face"));Gear->SetArrayField(TEXT("items"),Worn);ApplyBodyArmour(Actor,Gear);
+            }
             FString Idle;(*Base)->TryGetStringField(TEXT("idle"),Idle);auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Idle);if(Clip){Body->PlayAnimation(Clip,true);Body->TickAnimation(.1f,false);Body->RefreshBoneTransforms();}
             Check(Clip&&Body->GetSingleNodeInstance()&&Body->GetSingleNodeInstance()->GetAnimationAsset()==Clip,TEXT("original animation runs on the modular figure"));
             if(BaseId==CaptureFigure&&!Capture.IsEmpty()){
+                int32 CaptureHelmet=0;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureHelmet="),CaptureHelmet)&&CaptureHelmet>0){auto Hat=MakeShared<FJsonObject>();Hat->SetNumberField(TEXT("slot"),21);Hat->SetNumberField(TEXT("model"),CaptureHelmet);Worn.Add(MakeShared<FJsonValueObject>(Hat));Gear->SetArrayField(TEXT("items"),Worn);ApplyBodyArmour(Actor,Gear);Check(FindHelmet()!=nullptr,TEXT("render preview wears requested original helmet"));}
                 if(Definition->HasField(TEXT("cloaks"))&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureHood"))){Gear->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);}
                 double CaptureYaw=0;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureYaw="),CaptureYaw);ClassicDollYaw=float(CaptureYaw);
                 Entities.Add(TEXT("player:local"),Actor);EntityModels.Add(TEXT("player:local"),FCString::Atoi(*BaseId));InventoryState=Gear;InventoryState->SetNumberField(TEXT("state_revision"),1);UpdateClassicDoll();
                 auto* Doll=Cast<ASkeletalMeshActor>(ClassicDollActor);bool Same=Doll!=nullptr;
                 if(Doll)for(auto V:Sections){const int32 Index=V->AsObject()->GetIntegerField(TEXT("index"));Same&=Doll->GetSkeletalMeshComponent()->IsMaterialSectionShown(Index,0)==Body->IsMaterialSectionShown(Index,0);}
                 Check(Same,TEXT("independent preview copies worn section visibility"));
+                if(CaptureHelmet>0){bool PreviewHelmet=false;auto* WornHelmet=FindHelmet();if(Doll&&WornHelmet){TArray<USkeletalMeshComponent*> Parts;Doll->GetComponents(Parts);for(auto* Part:Parts)if(Part!=Doll->GetSkeletalMeshComponent()&&Part->GetSkeletalMeshAsset()==WornHelmet->GetSkeletalMeshAsset())PreviewHelmet|=Part->LeaderPoseComponent.Get()==Doll->GetSkeletalMeshComponent()&&Part->bPauseAnims&&!Part->IsComponentTickEnabled();}Check(PreviewHelmet,TEXT("inventory helmet follows only the frozen independent preview body"));}
                 if(Doll&&ClassicCapture&&ClassicDollTarget){
                     const FBox Box=Doll->GetSkeletalMeshComponent()->CalcBounds(Doll->GetSkeletalMeshComponent()->GetComponentTransform()).GetBox();const FVector Eye=ClassicCapture->GetComponentLocation();const FRotator Rotation=ClassicCapture->GetComponentRotation();
                     const FVector Forward=Rotation.Vector(),Right=FRotationMatrix(Rotation).GetUnitAxis(EAxis::Y),Up=FRotationMatrix(Rotation).GetUnitAxis(EAxis::Z);const double TanH=FMath::Tan(FMath::DegreesToRadians(ClassicCapture->FOVAngle*.5)),TanV=TanH*ClassicDollTarget->SizeY/FMath::Max(1,ClassicDollTarget->SizeX);
