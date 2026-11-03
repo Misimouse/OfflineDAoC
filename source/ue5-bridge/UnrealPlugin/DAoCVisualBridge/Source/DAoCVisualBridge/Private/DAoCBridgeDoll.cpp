@@ -65,6 +65,20 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
         ClassicDollTarget=NewObject<UTextureRenderTarget2D>(this);ClassicDollTarget->ClearColor=FLinearColor(.08,.08,.08,1);ClassicDollTarget->InitAutoFormat(256,384);ClassicCapture->TextureTarget=ClassicDollTarget;RefreshClassicPanel();
     }
     ClassicCapture->ClearShowOnlyComponents();ClassicCapture->ShowOnlyActorComponents(ClassicDollActor,true);
-    const FVector Feet=ClassicDollActor->GetActorLocation(),Forward=FRotator(0,90+ClassicDollYaw,0).Vector();const FVector Eye=Feet+Forward*200+FVector(0,0,100);
-    ClassicCapture->SetWorldLocationAndRotation(Eye,(Feet+FVector(0,0,90)-Eye).Rotation());ClassicCapture->CaptureScene();
+    const FVector Feet=ClassicDollActor->GetActorLocation(),Forward=FRotator(0,90+ClassicDollYaw,0).Vector();
+    FVector Center=Feet+FVector(0,0,90);double Distance=200,Elevation=10;
+    FBox PreviewBounds(ForceInit);TArray<UMeshComponent*> PreviewMeshes;ClassicDollActor->GetComponents(PreviewMeshes);
+    for(auto* Part:PreviewMeshes)if(Part&&Part->IsVisible()){Part->UpdateComponentToWorld();PreviewBounds+=Part->CalcBounds(Part->GetComponentTransform()).GetBox();}
+    if(PreviewBounds.IsValid){const FVector Extent=PreviewBounds.GetExtent();
+        if(!Extent.ContainsNaN()&&Extent.Z>1){
+            Center=PreviewBounds.GetCenter();const FVector Right=FVector::CrossProduct(FVector::UpVector,Forward);
+            const double TanH=FMath::Tan(FMath::DegreesToRadians(ClassicCapture->FOVAngle*.5));
+            const double TanV=TanH*ClassicDollTarget->SizeY/FMath::Max(1,ClassicDollTarget->SizeX);
+            const double Width=FMath::Abs(Right.X)*Extent.X+FMath::Abs(Right.Y)*Extent.Y;
+            const double Depth=FMath::Abs(Forward.X)*Extent.X+FMath::Abs(Forward.Y)*Extent.Y;
+            Distance=FMath::Clamp(Depth+FMath::Max(Width/TanH,Extent.Z/TanV)*1.15,30.,1000.);Elevation=Extent.Z*.04;
+        }
+    }
+    const FVector Eye=Center+Forward*Distance+FVector(0,0,Elevation);
+    ClassicCapture->SetWorldLocationAndRotation(Eye,(Center-Eye).Rotation());ClassicCapture->CaptureScene();
 }

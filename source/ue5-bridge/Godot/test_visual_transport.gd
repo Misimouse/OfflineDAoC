@@ -5,14 +5,16 @@ func check(ok:bool,label:String)->void:checks+=1;if not ok:failures.append(label
 func _initialize()->void:
     var a=load("res://decoded_world_adapter.gd").new();a.zone_info={"x":35,"y":51}
     a.consume_world("you",{"oid":1,"region":200,"x":35*8192+400,"y":51*8192+400,"z":5200})
-    a.consume_world("equipment",{"oid":7,"weapon_slots":0x22,"items":[{"slot":12,"model":19}]})
+    a.consume_world("equipment",{"oid":7,"weapon_slots":0x22,"hood":1,"hidden":3,"items":[{"slot":12,"model":19}]})
     check(not a.entities.has("npc:7"),"equipment cannot invent an NPC")
     a.consume_world("npc",{"oid":7,"x":35*8192+440,"y":51*8192+440,"z":5200,"model":310,"name":"Test","level":20,"heading":0,"speed":0})
     var row:Dictionary=a.entities["npc:7"]
     check(row.equipment.items.size()==1 and row.equipment.items[0].model==19 and row.equipment.weapon_slots==0x22,"equipment arriving before spawn survives with real slots and models")
+    check(row.equipment.hood and row.equipment.cloak_hidden and row.equipment.helm_hidden,"original hood and hidden equipment flags survive packet-before-spawn ordering")
     var first:int=row.equipment.revision
     a.consume_world("equipment",{"oid":7,"weapon_slots":0x10,"items":[{"slot":10,"model":445},{"slot":11,"model":59}]})
     check(row.equipment.revision>first and row.equipment.items.size()==2 and row.equipment.weapon_slots==0x10,"authoritative set and gear replacement")
+    check(not row.equipment.hood and not row.equipment.cloak_hidden and not row.equipment.helm_hidden,"new equipment packet clears previous hood and hidden flags")
     a.consume_world("equipment",{"oid":7,"weapon_slots":0x10,"items":[]})
     check(row.equipment.items.is_empty(),"empty equipment removes old weapons")
     a.consume_world("remove",{"oid":7,"type":1})

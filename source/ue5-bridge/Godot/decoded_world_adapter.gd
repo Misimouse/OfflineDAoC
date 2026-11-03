@@ -103,7 +103,8 @@ func consume_world(kind: String, data: Dictionary) -> void:
     if kind=="equipment":
         if oid<=0 or oid>65535:return
         equipment_revision+=1
-        var gear:={"items":data.get("items",[]).duplicate(true),"weapon_slots":int(data.get("weapon_slots",255)),"revision":equipment_revision}
+        var gear:={"items":data.get("items",[]).duplicate(true),"weapon_slots":int(data.get("weapon_slots",255)),"revision":equipment_revision,
+            "hood":(int(data.get("hood",0))&1)!=0,"cloak_hidden":(int(data.get("hidden",0))&1)!=0,"helm_hidden":(int(data.get("hidden",0))&2)!=0}
         if equipment_packets.size()<2048 or equipment_packets.has(oid):equipment_packets[oid]=gear
         if oid_to_id.has(oid) and entities.has(oid_to_id[oid]):entities[oid_to_id[oid]]["equipment"]=gear
         return

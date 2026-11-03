@@ -11,9 +11,14 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/SkeletalMesh.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/Texture.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
+#include "Engine/DirectionalLight.h"
+#include "Components/LightComponent.h"
 #include "ImageUtils.h"
 #include "RenderingThread.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -26,6 +31,11 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
     FString CaptureFigure=TEXT("1984");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureFigure="),CaptureFigure);
     if(!Ran){
         Ran=true;Started=FPlatformTime::Seconds();Report=MakeShared<FJsonObject>();Check(Socket==nullptr,TEXT("no live session"));Check(ArmourCatalog.IsValid(),TEXT("original armour catalogue loaded"));
+        if(!Capture.IsEmpty()){
+            FActorSpawnParameters Params;Params.ObjectFlags|=RF_Transient;
+            for(int32 I=0;I<2;++I){auto* Light=GetWorld()->SpawnActor<ADirectionalLight>(FVector::ZeroVector,FRotator(I==0?-35.f:-20.f,I==0?120.f:-60.f,0),Params);if(Light)Light->GetLightComponent()->SetIntensity(I==0?4.f:2.f);}
+            Report->SetBoolField(TEXT("controlled_preview_lighting"),true);
+        }
         const TSharedPtr<FJsonObject>* Figures=nullptr;
         if(ArmourCatalog&&ArmourCatalog->TryGetObjectField(TEXT("figures"),Figures))for(const auto& Pair:(*Figures)->Values){
             auto Definition=Pair.Value->AsObject();auto* Mesh=LoadObject<USkeletalMesh>(nullptr,*Pair.Key);Check(Mesh!=nullptr,TEXT("modular figure loads"));if(!Mesh)continue;
@@ -44,16 +54,44 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
             Check(Visible>=1&&Correct,TEXT("chain armour selects its original body variant without overlaps"));Check(Texture,TEXT("equipped armour samples its original texture"));
             const int32 PartSlots[]={22,23,27,28},PartModels[]={34,40,32,33};const TCHAR* PartNames[]={TEXT("gloves"),TEXT("boots"),TEXT("legs"),TEXT("arms")};
             for(int32 N=0;N<4;++N){auto Piece=MakeShared<FJsonObject>();Piece->SetNumberField(TEXT("slot"),PartSlots[N]);Piece->SetNumberField(TEXT("model"),PartModels[N]);Worn.Add(MakeShared<FJsonValueObject>(Piece));Gear->SetArrayField(TEXT("items"),Worn);ApplyBodyArmour(Actor,Gear);bool Textured=false;for(auto V:Sections){auto S=V->AsObject();const int32 Index=S->GetIntegerField(TEXT("index"));if(S->GetStringField(TEXT("slot"))==PartNames[N]&&Body->IsMaterialSectionShown(Index,0)){UTexture* Image=nullptr;if(auto* Material=Body->GetMaterial(Index))Textured|=Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("ArmorTexture")),Image)&&Image!=nullptr;}}Check(Textured,TEXT("original equipment slot dresses ")+FString(PartNames[N]));}
+            if(Definition->HasField(TEXT("cloaks"))){
+                auto Cloak=MakeShared<FJsonObject>();Cloak->SetNumberField(TEXT("slot"),26);Cloak->SetNumberField(TEXT("model"),57);Cloak->SetNumberField(TEXT("color"),2);Worn.Add(MakeShared<FJsonValueObject>(Cloak));Gear->SetArrayField(TEXT("items"),Worn);
+                auto Flags=MakeShared<FJsonObject>();Gear->SetObjectField(TEXT("gear"),Flags);
+                auto CapeShape=[&](int32 ExpectedShape){int32 Count=0;bool Correct=true;for(auto V:Sections){auto S=V->AsObject();if(S->GetStringField(TEXT("slot"))!=TEXT("cloak"))continue;const bool Shown=Body->IsMaterialSectionShown(S->GetIntegerField(TEXT("index")),0);if(Shown){++Count;Correct&=S->GetIntegerField(TEXT("variant"))==ExpectedShape;}}return ExpectedShape==0?Count==0:Count==1&&Correct;};
+                Check(CapeShape(0),TEXT("no cloak visible before a cloak is equipped"));ApplyBodyArmour(Actor,Gear);Check(CapeShape(1),TEXT("worn cloak selects the original hood-down mesh"));
+                bool Textured=false,Dyed=false,SingleSided=false,Emblemed=false;const auto Palette=ArmourCatalog->GetObjectField(TEXT("dyes"));const auto Dye=Palette->GetArrayField(TEXT("2"));
+                for(auto V:Sections){auto S=V->AsObject();const int32 Index=S->GetIntegerField(TEXT("index"));if(S->GetStringField(TEXT("slot"))!=TEXT("cloak" )||!Body->IsMaterialSectionShown(Index,0))continue;auto* Material=Body->GetMaterial(Index);UTexture* Tex=nullptr;FLinearColor Tint;Textured=Material&&Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("ArmorTexture")),Tex)&&Tex;Dyed=Material&&Material->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ArmorDye")),Tint)&&FMath::IsNearlyEqual(Tint.R,float(Dye[0]->AsNumber()),.001f)&&FMath::IsNearlyEqual(Tint.G,float(Dye[1]->AsNumber()),.001f);SingleSided=Material&&!Material->IsTwoSided();}
+                Check(Textured,TEXT("cloak samples original item texture"));Check(Dyed,TEXT("cloak applies original dye palette"));Check(SingleSided,TEXT("cloak preserves original single-sided rendering"));
+                const auto* Data=Body->GetSkeletalMeshAsset()->GetResourceForRendering();Check(Data&&!Data->LODRenderData.IsEmpty()&&Data->LODRenderData[0].GetNumTexCoords()>=3,TEXT("cloak mesh retains texture pattern and logo UV channels"));
+                Flags->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);Check(CapeShape(2),TEXT("hood flag switches to original raised-hood mesh"));
+                bool HairHidden=true;for(auto V:Sections){auto S=V->AsObject();bool Hair=false;S->TryGetBoolField(TEXT("hood_hair"),Hair);if(Hair&&Body->IsMaterialSectionShown(S->GetIntegerField(TEXT("index")),0))HairHidden=false;}Check(HairHidden,TEXT("raised hood covers the original hair sections"));
+                Flags->SetBoolField(TEXT("cloak_hidden"),true);ApplyBodyArmour(Actor,Gear);Check(CapeShape(0),TEXT("server hidden-cloak flag hides both cape and hood"));
+                Flags->SetBoolField(TEXT("cloak_hidden"),false);Flags->SetBoolField(TEXT("hood"),false);Cloak->SetNumberField(TEXT("emblem"),513);ApplyBodyArmour(Actor,Gear);
+                for(auto V:Sections){auto S=V->AsObject();const int32 Index=S->GetIntegerField(TEXT("index"));if(S->GetStringField(TEXT("slot"))!=TEXT("cloak")||!Body->IsMaterialSectionShown(Index,0))continue;auto* Material=Body->GetMaterial(Index);float Has=0,Logo=0;UTexture* Pattern=nullptr;UTexture* Mark=nullptr;Emblemed=Material&&Material->GetScalarParameterValue(FMaterialParameterInfo(TEXT("HasEmblem")),Has)&&Has==1&&Material->GetScalarParameterValue(FMaterialParameterInfo(TEXT("HasLogo")),Logo)&&Logo==1&&Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("Pattern")),Pattern)&&Pattern&&Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("Logo")),Mark)&&Mark;}
+                Check(Emblemed,TEXT("cloak uses original guild pattern and logo"));
+                // Remote equipment packets carry these flags directly rather than in inventory.gear.
+                Gear->RemoveField(TEXT("gear"));Gear->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);Check(CapeShape(2),TEXT("remote equipment hood flags use the same cloak selection"));Gear->SetBoolField(TEXT("hood"),false);ApplyBodyArmour(Actor,Gear);
+            }
             FString Idle;(*Base)->TryGetStringField(TEXT("idle"),Idle);auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Idle);if(Clip){Body->PlayAnimation(Clip,true);Body->TickAnimation(.1f,false);Body->RefreshBoneTransforms();}
             Check(Clip&&Body->GetSingleNodeInstance()&&Body->GetSingleNodeInstance()->GetAnimationAsset()==Clip,TEXT("original animation runs on the modular figure"));
             if(BaseId==CaptureFigure&&!Capture.IsEmpty()){
+                if(Definition->HasField(TEXT("cloaks"))&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureHood"))){Gear->SetBoolField(TEXT("hood"),true);ApplyBodyArmour(Actor,Gear);}
+                double CaptureYaw=0;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureYaw="),CaptureYaw);ClassicDollYaw=float(CaptureYaw);
                 Entities.Add(TEXT("player:local"),Actor);EntityModels.Add(TEXT("player:local"),FCString::Atoi(*BaseId));InventoryState=Gear;InventoryState->SetNumberField(TEXT("state_revision"),1);UpdateClassicDoll();
                 auto* Doll=Cast<ASkeletalMeshActor>(ClassicDollActor);bool Same=Doll!=nullptr;
                 if(Doll)for(auto V:Sections){const int32 Index=V->AsObject()->GetIntegerField(TEXT("index"));Same&=Doll->GetSkeletalMeshComponent()->IsMaterialSectionShown(Index,0)==Body->IsMaterialSectionShown(Index,0);}
                 Check(Same,TEXT("independent preview copies worn section visibility"));
+                if(Doll&&ClassicCapture&&ClassicDollTarget){
+                    const FBox Box=Doll->GetSkeletalMeshComponent()->CalcBounds(Doll->GetSkeletalMeshComponent()->GetComponentTransform()).GetBox();const FVector Eye=ClassicCapture->GetComponentLocation();const FRotator Rotation=ClassicCapture->GetComponentRotation();
+                    const FVector Forward=Rotation.Vector(),Right=FRotationMatrix(Rotation).GetUnitAxis(EAxis::Y),Up=FRotationMatrix(Rotation).GetUnitAxis(EAxis::Z);const double TanH=FMath::Tan(FMath::DegreesToRadians(ClassicCapture->FOVAngle*.5)),TanV=TanH*ClassicDollTarget->SizeY/FMath::Max(1,ClassicDollTarget->SizeX);
+                    bool Fits=true;double Low=100,High=-100;
+                    for(int32 Corner=0;Corner<8;++Corner){const FVector Point((Corner&1)?Box.Max.X:Box.Min.X,(Corner&2)?Box.Max.Y:Box.Min.Y,(Corner&4)?Box.Max.Z:Box.Min.Z);const FVector Delta=Point-Eye;const double Depth=FVector::DotProduct(Delta,Forward);if(Depth<=0){Fits=false;continue;}const double X=FVector::DotProduct(Delta,Right)/(Depth*TanH),Y=FVector::DotProduct(Delta,Up)/(Depth*TanV);Fits&=FMath::Abs(X)<.99&&FMath::Abs(Y)<.99;Low=FMath::Min(Low,Y);High=FMath::Max(High,Y);}
+                    Check(Fits,TEXT("preview keeps full body and hood inside the image"));Check(High-Low>=1,TEXT("preview frames small and large races at a useful scale"));
+                }
             }
             ApplyBodyArmour(Actor,nullptr);Correct=true;Visible=0;for(auto V:Sections){auto S=V->AsObject();if(S->GetStringField(TEXT("slot"))!=TEXT("body"))continue;const int32 Index=S->GetIntegerField(TEXT("index"));if(Body->IsMaterialSectionShown(Index,0)){++Visible;Correct&=S->GetIntegerField(TEXT("variant"))==Clothes->GetObjectField(TEXT("body"))->GetIntegerField(TEXT("variant"));}}
             Check(Visible>=1&&Correct,TEXT("unequipping restores the original starter body"));
+            if(Definition->HasField(TEXT("cloaks"))){bool Hidden=true;for(auto V:Sections){auto S=V->AsObject();if(S->GetStringField(TEXT("slot"))==TEXT("cloak")&&Body->IsMaterialSectionShown(S->GetIntegerField(TEXT("index")),0))Hidden=false;}Check(Hidden,TEXT("unequipping removes the cape without leaving a hood"));}
         }
         else Check(false,TEXT("modular figures present"));
         if(!Capture.IsEmpty())return true;

@@ -25,7 +25,8 @@ func merge_meshes(holder:Node3D)->void:
 		var combined:=ArrayMesh.new()
 		for mesh in group:
 			for surface in mesh.mesh.get_surface_count():
-				combined.add_surface_from_arrays(mesh.mesh.surface_get_primitive_type(surface),mesh.mesh.surface_get_arrays(surface))
+				# Cloak emblem coordinates use custom vertex channels; keep their encoding.
+				combined.add_surface_from_arrays(mesh.mesh.surface_get_primitive_type(surface),mesh.mesh.surface_get_arrays(surface),[],{},mesh.mesh.surface_get_format(surface))
 				combined.surface_set_material(combined.get_surface_count()-1,mesh.get_active_material(surface))
 		var result:=MeshInstance3D.new();result.name="Bridge_Merged_Character";result.mesh=combined
 		result.skin=first.skin;result.skeleton=first.skeleton;result.transform=first.transform
