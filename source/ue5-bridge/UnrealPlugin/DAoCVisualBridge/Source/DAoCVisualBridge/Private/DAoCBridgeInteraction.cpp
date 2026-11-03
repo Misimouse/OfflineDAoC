@@ -99,10 +99,6 @@ void UDAoCBridgeSubsystem::ApplyInteraction(TSharedPtr<FJsonObject> State){
         Button(Num(D,TEXT("type"))==0?TEXT("Accept"):TEXT("Yes / accept"),[Reply](){Reply(1);});if(Num(D,TEXT("type"))!=0)Button(TEXT("No / decline"),[Reply](){Reply(0);});HasContent=true;
     }
     auto Talk=Obj(State,TEXT("talk"));
-    if(Talk.IsValid()&&!Talk->Values.IsEmpty()){
-        Body->AddSlot().AutoHeight().Padding(0,8)[Text(Str(Talk,TEXT("name"))+TEXT("\n\n")+Str(Talk,TEXT("text")))];const int64 Id=int64(Num(Talk,TEXT("id")));const TArray<TSharedPtr<FJsonValue>>* Words=nullptr;
-        if(Talk->TryGetArrayField(TEXT("keywords"),Words))for(const auto& Word:*Words){FString W=Word->AsString();Button(W,[this,W,Id](){auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("reply_id"),Id);V->SetStringField(TEXT("word"),W);Send(TEXT("keyword"),V);});}HasContent=true;
-    }
     auto Merchant=Obj(State,TEXT("merchant"));
     if(HasContent){if((Talk.IsValid()&&!Talk->Values.IsEmpty())||(Merchant.IsValid()&&!Merchant->Values.IsEmpty()))Button(TEXT("Close conversation / merchandise"),[this](){Send(TEXT("dismiss_interaction"));});
         InteractionPanel->AddSlot().AutoHeight()[SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(FLinearColor(.025f,.025f,.02f,.96f)).Padding(14)[SNew(SBox).MaxDesiredHeight(520)[SNew(SScrollBox)+SScrollBox::Slot()[Body]]]];

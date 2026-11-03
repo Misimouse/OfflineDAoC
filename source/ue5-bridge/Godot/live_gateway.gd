@@ -19,6 +19,7 @@ var spell_visuals:RefCounted
 var spell_cast:RefCounted
 var classic_ui:RefCounted
 var ui_pose:Node3D
+var zone_lights:Array=[]
 var last_ui_sync:=0
 var last_move_speed:=0.0
 var target_sight_id:=""
@@ -63,6 +64,8 @@ var entry_revision:=0
 func _ready()->void:
     folder=get_script().resource_path.get_base_dir()
     chat_state=load(folder.path_join("chat_state.gd")).new()
+    var zone_info=JSON.parse_string(FileAccess.get_file_as_string("res://content/zones/zone207/zone.json"))
+    if zone_info is Dictionary:zone_lights=zone_info.get("lights",[])
     var config=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../bridge_config.json")))
     if config is Dictionary:
         var point=config.get("initial_spawn_m",[])
@@ -386,7 +389,7 @@ func _process(_delta:float)->void:
                 if row.has("motion"):row.motion.age_ms=maxi(0,now-int(row.motion.at_ms))
         var pct:=int(server.max_speed_pct)
         transport.snapshot_metadata={"character":character_name,"status":status,"in_game":server.playing,
-            "max_speed_mps":player_state.run_speed_mps(pct)}
+            "max_speed_mps":player_state.run_speed_mps(pct),"zone_lights":zone_lights}
         var states:Array=[]
         for id in door_states:states.append({"id":id,"open":door_states[id]})
         if chat_state!=null:transport.snapshot_metadata["chat"]=chat_state.snapshot()

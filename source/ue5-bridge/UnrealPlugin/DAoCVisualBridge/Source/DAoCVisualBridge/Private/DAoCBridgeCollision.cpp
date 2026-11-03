@@ -12,13 +12,19 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
+void UDAoCBridgeSubsystem::GeometryLevelChanged(ULevel*,UWorld* World){if(World==GetWorld()){bCollisionConfigured=false;GeometryUpdateAfter=FPlatformTime::Seconds()+.1;}}
+
 void UDAoCBridgeSubsystem::ConfigureCollisions(){
     if(bCollisionConfigured)return;bCollisionConfigured=true;
+    for(auto It=CollisionSourceActors.CreateIterator();It;++It)if(!It.Key().IsValid()){for(auto Actor:It.Value())if(Actor.IsValid())Actor->Destroy();It.RemoveCurrent();}
+    for(auto It=CollisionScannedSources.CreateIterator();It;++It)if(!It->IsValid())It.RemoveCurrent();
     struct FSource{TWeakObjectPtr<UStaticMeshComponent> Component;FString Asset;bool Visible;};
     TArray<FSource> Sources;
     for(TActorIterator<AActor> It(GetWorld());It;++It){
+        if(It->ActorHasTag(TEXT("DAoCBridgeCollision"))||It->ActorHasTag(TEXT("DAoCBridgeDoor"))||It->ActorHasTag(TEXT("DAoCBridgeEntity")))continue;
         TInlineComponentArray<UStaticMeshComponent*> Components;It->GetComponents(Components);
         for(auto* C:Components){
+            if(CollisionScannedSources.Contains(C))continue;
             UStaticMesh* Mesh=C->GetStaticMesh();if(!Mesh)continue;
             Sources.Add({C,Mesh->GetPathName(),!It->IsHidden()&&C->IsVisible()&&!C->bHiddenInGame});
             // The scene's sky, water, old proxies and visual foliage must not
@@ -27,10 +33,16 @@ void UDAoCBridgeSubsystem::ConfigureCollisions(){
         }
     }
     FActorSpawnParameters Params;Params.ObjectFlags|=RF_Transient;Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-    auto MakeActor=[&](){AActor* A=GetWorld()->SpawnActor<AActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);A->Tags.Add(TEXT("DAoCBridgeCollision"));A->SetActorHiddenInGame(true);return A;};
+    UStaticMeshComponent* CurrentSource=nullptr;
+    auto Track=[&](AActor* Actor){if(CurrentSource)CollisionSourceActors.FindOrAdd(CurrentSource).Add(Actor);};
+    auto MakeActor=[&](){AActor* A=GetWorld()->SpawnActor<AActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);A->Tags.Add(TEXT("DAoCBridgeCollision"));Track(A);A->SetActorHiddenInGame(true);return A;};
     for(const auto& Source:Sources){
         UStaticMeshComponent* C=Source.Component.Get();auto* Record=NavigationMeshes.Find(Source.Asset);
-        if(!C||!Source.Visible||!Record)continue;
+        if(!C)continue;
+        if(!Record){for(auto& Pair:NavigationMeshes){FString Visual;if(Pair.Value->TryGetStringField(TEXT("visual_asset"),Visual)&&Visual==Source.Asset){Record=&Pair.Value;break;}}}
+        if(!Record){CollisionScannedSources.Add(C);continue;}
+        if(!Source.Visible)continue;
+        CollisionScannedSources.Add(C);CurrentSource=C;
         FString VisualAsset;if((*Record)->TryGetStringField(TEXT("visual_asset"),VisualAsset)){
             if(auto* Visual=LoadObject<UStaticMesh>(nullptr,*VisualAsset)){if(!C->SetStaticMesh(Visual)){C->UnregisterComponent();C->SetStaticMesh(Visual);C->RegisterComponent();}}
             SetupDoors(C,*Record);
@@ -62,7 +74,7 @@ void UDAoCBridgeSubsystem::ConfigureCollisions(){
             Instances->AddInstances(Transforms,false,true,false);Instances->RegisterComponent();TreeColliderInstances+=Transforms.Num();
         }else{
             for(const auto& T:Transforms){
-                auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);A->Tags.Add(TEXT("DAoCBridgeCollision"));
+                auto* A=GetWorld()->SpawnActor<AStaticMeshActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);A->Tags.Add(TEXT("DAoCBridgeCollision"));Track(A);
                 auto* Body=A->GetStaticMeshComponent();Body->SetMobility(EComponentMobility::Movable);Body->SetStaticMesh(Mesh);Body->SetWorldTransform(T);
                 Body->CanCharacterStepUpOn=ECB_Yes;
                 Body->SetCollisionProfileName(TEXT("BlockAll"));Body->SetCollisionEnabled(ECollisionEnabled::QueryOnly);Body->SetCanEverAffectNavigation(false);
@@ -71,7 +83,7 @@ void UDAoCBridgeSubsystem::ConfigureCollisions(){
                 const TArray<TSharedPtr<FJsonValue>>* Parts;
                 if((*Record)->TryGetArrayField(TEXT("sub_colliders"),Parts))for(const auto& Value:*Parts){
                     auto Part=Value->AsObject();auto* PartMesh=LoadObject<UStaticMesh>(nullptr,*Part->GetStringField(TEXT("asset")));if(!PartMesh)continue;
-                    auto* Extra=GetWorld()->SpawnActor<AStaticMeshActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);Extra->Tags.Add(TEXT("DAoCBridgeCollision"));
+                    auto* Extra=GetWorld()->SpawnActor<AStaticMeshActor>(FVector::ZeroVector,FRotator::ZeroRotator,Params);Extra->Tags.Add(TEXT("DAoCBridgeCollision"));Track(Extra);
                     auto* ExtraBody=Extra->GetStaticMeshComponent();ExtraBody->SetMobility(EComponentMobility::Movable);ExtraBody->SetStaticMesh(PartMesh);ExtraBody->SetWorldTransform(T);
                     ExtraBody->CanCharacterStepUpOn=ECB_Yes;ExtraBody->SetCollisionProfileName(TEXT("BlockAll"));ExtraBody->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
                     ExtraBody->SetWalkableSlopeOverride(FWalkableSlopeOverride(WalkableSlope_Increase,FMath::Clamp(float(Part->GetNumberField(TEXT("walkable_angle"))),0.f,65.f)));
@@ -79,6 +91,12 @@ void UDAoCBridgeSubsystem::ConfigureCollisions(){
                 }
             }
         }
+    }
+    // Streaming unloads must not leave historical collider counts or readiness.
+    TerrainColliders=StructureColliders=TreeColliderInstances=0;
+    for(const auto& Pair:CollisionSourceActors)for(const auto& Ref:Pair.Value)if(auto* Actor=Ref.Get())if(auto* Root=Actor->GetRootComponent()){
+        if(Root->ComponentHasTag(TEXT("DAoCBridgeTree"))){if(auto* Instances=Cast<UInstancedStaticMeshComponent>(Root))TreeColliderInstances+=Instances->GetInstanceCount();else ++TreeColliderInstances;}
+        else if(Root->ComponentHasTag(TEXT("DAoCBridgeTerrain")))++TerrainColliders;else ++StructureColliders;
     }
     bNavigationReady=TerrainColliders>0;
 }

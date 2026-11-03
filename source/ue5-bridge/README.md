@@ -1,6 +1,6 @@
 # Godot → Unreal Engine visual bridge
 
-Source snapshot of the Connacht/Ardee integration, 2 November 2026. This is a development prototype within the OfflineDAoC fork, not a new official OfflineDAoC release. It inherits the repository's GPL-3.0 license; see ../../LICENSE and ../../THIRD_PARTY.md.
+Source snapshot of the Connacht/Ardee integration, 3 November 2026. This is a development prototype within the OfflineDAoC fork, not a new official OfflineDAoC release. It inherits the repository's GPL-3.0 license; see ../../LICENSE and ../../THIRD_PARTY.md.
 
 The original OfflineDAoC server and Godot network client retain gameplay authority. Godot runs headlessly and sends bounded, versioned snapshots over loopback TCP. The Unreal runtime plugin renders entities, equipment and effects and returns validated player commands to the original protocol.
 
@@ -35,6 +35,10 @@ Do not run all installer or live-test scripts blindly. An installer may target a
 
 ## Implemented snapshot
 
+- Shared input: idle right-drag orbit, two-button forward movement, wheel zoom and F11 first-person view. Death and seated facing remain locked.
+- Original zone point-light positions, colours and radii travel independently of NPCs and buildings. Unreal creates bounded, shadowless transient lights; brightness is an engine approximation, and day/night scaling remains pending. The current gateway is still restricted to zone 207.
+- Merchant windows block world selection across their scrollbar. NPC conversations use one head bubble with keyword replies. Door fixtures survive streamed actor renaming through spatial matching, and private colliders follow level load/unload. Door geometry/catalogue generation is still required when adding another region.
+
 - Original server-driven combat, death/release, selection/interactions and classic UI state, with viewport resizing and English game text.
 - Weapon/staff/shield and NPC equipment, original attachment references, seated-camera facing lock and training-dummy support.
 - 39 flexible weapon definitions with original clips and independent action clocks; 132 original dye IDs; original shield emblem composition; 94 original permanent weapon effects.
@@ -52,6 +56,8 @@ Converted assets and generated catalogues needed for those definitions are delib
 ## Validation provenance
 
 Before export, the local installed client passed 236 spell/permanent-weapon-effect checks, 1,395 equipment/dye/emblem/flexible-weapon checks and 294 general UI/inventory/combat/posture checks. These groups overlap. Godot transport checks passed. An isolated original-server test confirmed player/NPC equipment IDs, tints, an NPC emblem and permanent effects; its packets were replayed successfully by the installed Unreal client, including a small rendered scene. The disposable fixture was restored and normal shutdown confirmed. Private reports and captures are not published.
+
+The 3 November input/lighting correction passed 313 UI/inventory/combat/posture/equipment checks, 72 native window/input checks, 23 Godot transport checks and 21 world-message checks. A read-only replay of the actual streamed Connacht map found both Ardee door groups and all 28 source point lights; matching interior captures were compared with those lights disabled/enabled. These are automated/replay checks, not a claim of complete play validation. Character trail reduction still needs a real movement review.
 
 Source-package validation is recorded separately in `SOURCE-VALIDATION.md`. Native asset-dependent suites need regenerated local catalogues/fixtures; a clean source checkout alone does not provide them. Ardee FPS are not certified by the empty-scene render or headless tests. Earlier measurements were contended by other editor processes.
 
