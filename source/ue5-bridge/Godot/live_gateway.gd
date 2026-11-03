@@ -101,6 +101,7 @@ func _ready()->void:
     character_lobby.enabled="--bridge-character-menu" in OS.get_cmdline_user_args()
     character_lobby.enter_requested.connect(enter_character)
     server.created.connect(func(ok,why):character_lobby.refresh(server);character_lobby.creation_result(ok,why))
+    server.name_checked.connect(func(name,result):character_lobby.name_result(name,result,server,Time.get_ticks_msec()))
     item_db=load("res://game/ui/item_db.gd");assert(item_db!=null)
     var collisions=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../collision_catalog.json")))
     if collisions is Dictionary:
