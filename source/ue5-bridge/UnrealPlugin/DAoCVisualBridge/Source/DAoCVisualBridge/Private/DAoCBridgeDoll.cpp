@@ -11,6 +11,8 @@
 #include "Components/PointLightComponent.h"
 #include "Rendering/SkeletalMeshRenderData.h"
 #include "Rendering/SkeletalMeshLODRenderData.h"
+#include "SkeletalRenderPublic.h"
+#include "RHI.h"
 
 namespace {
 FString DollString(TSharedPtr<FJsonObject> O,const TCHAR* Key){FString S;if(O)O->TryGetStringField(Key,S);return S;}
@@ -57,6 +59,25 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
             }
             if(Copy){Copy->ComponentTags=Source->ComponentTags;Copy->AttachToComponent(Body,FAttachmentTransformRules::KeepRelativeTransform,Source->GetAttachSocketName());Copy->SetRelativeTransform(Source->GetRelativeTransform());DollMaterials(Source,Copy);}
         }
+        // Cache the frozen, visible skin once per equipment change. Asset bounds also
+        // contain hidden armour variants and the reference pose, shrinking the portrait.
+        ClassicDollFramingPoints.Reset();TArray<USkeletalMeshComponent*> SkinParts;Doll->GetComponents(SkinParts);
+        for(auto* Part:SkinParts)if(Part&&Part->IsVisible()&&!Part->ComponentHasTag(TEXT("DAoCBridgeEquipment"))){
+            auto* Mesh=Part->GetSkeletalMeshAsset();auto* Render=Mesh?Mesh->GetResourceForRendering():nullptr;
+            if(!Render||Render->LODRenderData.IsEmpty())continue;
+            TArray<FFinalSkinVertex> Vertices;
+            if(GUsingNullRHI){
+                const auto Box=Part->CalcBounds(Part->GetComponentTransform().GetRelativeTransform(Doll->GetActorTransform())).GetBox();
+                for(int32 I=0;I<8;++I)ClassicDollFramingPoints.Add(FVector((I&1)?Box.Max.X:Box.Min.X,(I&2)?Box.Max.Y:Box.Min.Y,(I&4)?Box.Max.Z:Box.Min.Z));
+                continue;
+            }
+            Part->GetCPUSkinnedVertices(Vertices,0);
+            const auto Relative=Part->GetComponentTransform().GetRelativeTransform(Doll->GetActorTransform());
+            const auto& LOD=Render->LODRenderData[0];
+            for(const auto& Section:LOD.RenderSections)if(Part->IsMaterialSectionShown(Section.MaterialIndex,0))
+                for(uint32 V=Section.BaseVertexIndex;V<Section.BaseVertexIndex+Section.NumVertices&&V<uint32(Vertices.Num());++V)
+                    ClassicDollFramingPoints.Add(Relative.TransformPosition(FVector(Vertices[V].Position)));
+        }
     }
     if(!ClassicCapture){
         ClassicCaptureActor=GetWorld()->SpawnActor<AActor>();ClassicCapture=NewObject<USceneCaptureComponent2D>(ClassicCaptureActor);ClassicCaptureActor->SetRootComponent(ClassicCapture);ClassicCapture->RegisterComponent();
@@ -75,20 +96,21 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
     TArray<UPointLightComponent*> PreviewLights;ClassicDollActor->GetComponents(PreviewLights);
     for(auto* Light:PreviewLights)Light->SetWorldLocation(Frame.TransformPosition(Light->ComponentHasTag(TEXT("DAoCBridgeDollKeyLight"))?FVector(180,150,200):FVector(-150,-100,130)));
     FVector Center=Feet+FVector(0,0,90);double Distance=200,Elevation=10;
-    FBox PreviewBounds(ForceInit);TArray<UMeshComponent*> PreviewMeshes;ClassicDollActor->GetComponents(PreviewMeshes);
-    for(auto* Part:PreviewMeshes)if(Part&&Part->IsVisible()&&!Part->ComponentHasTag(TEXT("DAoCBridgeEquipment"))){
-        Part->UpdateComponentToWorld();const auto Unrotated=Part->GetComponentTransform().GetRelativeTransform(ClassicDollActor->GetActorTransform())*Frame;
-        PreviewBounds+=Part->CalcBounds(Unrotated).GetBox();
-    }
+    FBox PreviewBounds(ForceInit);
+    for(const auto& Point:ClassicDollFramingPoints)PreviewBounds+=Frame.TransformPosition(Point);
     if(PreviewBounds.IsValid){const FVector Extent=PreviewBounds.GetExtent();
         if(!Extent.ContainsNaN()&&Extent.Z>1){
-            Center=FVector(Feet.X,Feet.Y,PreviewBounds.GetCenter().Z);
+            Center=FVector(Feet.X,Feet.Y,PreviewBounds.GetCenter().Z);Elevation=0;
             const double TanH=FMath::Tan(FMath::DegreesToRadians(ClassicCapture->FOVAngle*.5));
             const double TanV=TanH*ClassicDollTarget->SizeY/FMath::Max(1,ClassicDollTarget->SizeX);
-            const double X=FMath::Max(FMath::Abs(PreviewBounds.Min.X-Center.X),FMath::Abs(PreviewBounds.Max.X-Center.X));
-            const double Y=FMath::Max(FMath::Abs(PreviewBounds.Min.Y-Center.Y),FMath::Abs(PreviewBounds.Max.Y-Center.Y));
-            const double Radius=FMath::Sqrt(X*X+Y*Y);
-            Distance=FMath::Clamp(Radius+FMath::Max(Radius/TanH,Extent.Z/TanV)*1.15,30.,1000.);Elevation=Extent.Z*.04;
+            Distance=30;
+            // Fit every visible point at any yaw. This stays constant during rotation
+            // without reserving empty space for a hidden cape or outstretched weapon.
+            for(const auto& Point:ClassicDollFramingPoints){const FVector Delta=Frame.TransformPosition(Point)-Center;
+                const double Radius=FMath::Sqrt(Delta.X*Delta.X+Delta.Y*Delta.Y);
+                Distance=FMath::Max(Distance,FMath::Max(Radius/FMath::Sin(FMath::Atan(TanH*.94)),Radius+FMath::Abs(Delta.Z)/(TanV*.90)));
+            }
+            Distance=FMath::Clamp(Distance,30.,1000.);
         }
     }
     const FVector Eye=Center+Forward*Distance+FVector(0,0,Elevation);

@@ -587,7 +587,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0){MaximumGameplayFrameMs=FMath::Max(MaximumGameplayFrameMs,WallMs);if(WallMs>=2000)++GameplayStalls;}
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0&&WallMs<2000){RollingFrameMs.Add(WallMs);if(RollingFrameMs.Num()>600)RollingFrameMs.RemoveAt(0,1,EAllowShrinking::No);}
     UpdateProfile(Now,(FPlatformTime::Seconds()-Now)*1000,WallMs);
-    if(bExiting&&bHavePlayer&&Session.IsEmpty()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
+    if(bExiting&&Session.IsEmpty()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
     if(bHavePlayer&&bAutoTest){
         double Elapsed=Now-PlayerStartedAt;
         const bool PoseTest=FParse::Param(FCommandLine::Get(),TEXT("DaocBridgePoseVisualTest"));if(PoseTest)UpdatePoseVisualTest(Elapsed);

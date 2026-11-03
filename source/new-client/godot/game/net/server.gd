@@ -784,6 +784,12 @@ func _on_world_inner(kind: String, d: Dictionary) -> void:
 				get_tree().create_timer(2.5).timeout.connect(func():
 					if logged and not playing:
 						_refresh_character_lists())
+				# An external renderer can keep its own character screen on this connection.
+				if no_world and has_meta("external_character_return"):
+					var external_return: Callable = get_meta("external_character_return")
+					if external_return.is_valid():
+						external_return.call(d)
+						return
 				get_tree().change_scene_to_file("res://game/pregame.tscn")
 			return
 	world.emit(kind, d)

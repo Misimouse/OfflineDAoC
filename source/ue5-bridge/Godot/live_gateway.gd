@@ -98,6 +98,7 @@ func _ready()->void:
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     combat_visual.configure(JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json"))),JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
+    server.set_meta("external_character_return",Callable(self,"return_to_character_menu"))
     interaction.icon_for_model=Callable(server,"item_icon")
     character_lobby=load(folder.path_join("character_lobby.gd")).new()
     character_lobby.enabled="--bridge-character-menu" in OS.get_cmdline_user_args()
@@ -330,7 +331,7 @@ func dispatch_chat(text:String)->bool:
     if word=="/loc":
         var zone_name:=String(server.entry.get("zone_name","Connacht" if int(server.entry.get("zone",0))==207 else str(server.entry.get("zone",0))))
         local_chat("%s: loc=%d,%d,%d dir=%d" % [zone_name,roundi(position.x*40),roundi(position.z*40),roundi(position.y*40),int(heading*360.0/4096.0)%360],"system");return true
-    if word in ["/quit","/q","/logout"]:request_logout();return true
+    if word in ["/quit","/q","/logout"]:request_logout(false);return true
     if word=="/qbar":
         if parts.size()<2 or parts.size()>3 or not String(parts[1]).is_valid_int() or (parts.size()==3 and not String(parts[2]).is_valid_int()):local_chat("Usage: /qbar page[1..10] bar[1..3]");return false
         var page:=int(parts[1]);var bar:=int(parts[2]) if parts.size()==3 else 1
@@ -340,12 +341,26 @@ func dispatch_chat(text:String)->bool:
         trainer.sync(server,server.client,Time.get_ticks_msec());return trainer.request({"action":"trainer_refresh"},server.client,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
     server.command(text);return true
 
-func request_logout()->void:
+func request_logout(exit_application:bool=true)->void:
     if leaving:return
     if player_state.attack_on or player_state.attack_uncertain or bool(player_state.pending.get("on",false)):server.client.call("Attack",false)
     if gm_mode.combat_test or gm_mode.uncertain or gm_mode.pending=="combat":server.client.Command("&bridgegm protected")
     leaving=true;status="Saving and logging out";write_report()
-    server.quit_world(true)
+    server.quit_world(exit_application)
+
+func return_to_character_menu(data:Dictionary)->void:
+    # Invoked only after the original server confirms Quit (saved session).
+    world_event("quit",data)
+    adapter.clear_world()
+    entered=false;leaving=false;home_jump_requested=false;local_model_id=0
+    test_return_attempts=0;test_return_at=-10000;door_states.clear()
+    target_sight_id="";target_sight=false;target_sight_at=0
+    classic_ui.skill_rows.clear();classic_ui.spell_rows.clear();classic_ui.skills_received=false
+    classic_ui.skills_loading=false;classic_ui.spells_loading=false;classic_ui.catalog_loading=false
+    character_lobby.enabled=true;character_lobby.pending=false;character_lobby.ready=false
+    character_lobby.pending_creation.clear();character_lobby.pending_until=0
+    character_lobby.refresh(server)
+    status="Select your character";write_report()
 
 func recover_test_region(now:int)->void:
     if not server.playing or leaving:return

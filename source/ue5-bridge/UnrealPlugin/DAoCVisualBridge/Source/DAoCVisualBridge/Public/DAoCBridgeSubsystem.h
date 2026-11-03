@@ -105,6 +105,17 @@ private:
     int64 CharacterLobbyRevision=-1;
     void ApplyCharacterLobby(TSharedPtr<FJsonObject> State,bool InGame);
     void RefreshCharacterLobby();
+    FString CharacterLobbyScreen=TEXT("select"),CharacterLobbyPreviewSignature;
+    int32 CharacterLobbySlot=0;
+    FVector2D CharacterLobbyViewportSize=FVector2D::ZeroVector;
+    UPROPERTY() TObjectPtr<AActor> CharacterLobbyPreviewActor;
+    UPROPERTY() TObjectPtr<AActor> CharacterLobbyBackdropActor;
+    UPROPERTY() TObjectPtr<AActor> CharacterLobbyCaptureActor;
+    UPROPERTY() TObjectPtr<UTextureRenderTarget2D> CharacterLobbyTarget;
+    USceneCaptureComponent2D* CharacterLobbyCapture=nullptr;
+    TSharedPtr<FSlateBrush> CharacterLobbyPreviewBrush;
+    void RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> Row);
+    void ClearCharacterLobbyPreview();
     void RemoveCharacterLobby();
     void SendCharacterAction(const FString& Action);
     bool TickCharacterLobbyAcceptance();
@@ -281,6 +292,7 @@ private:
     UPROPERTY() TObjectPtr<AActor> ClassicDollActor;
     FString ClassicDollSignature;
     float ClassicDollYaw=0;
+    TArray<FVector> ClassicDollFramingPoints;
     void UpdateClassicDoll();
     USceneCaptureComponent2D* ClassicCapture=nullptr;
     FSlateBrush* ClassicDollBrush=nullptr;

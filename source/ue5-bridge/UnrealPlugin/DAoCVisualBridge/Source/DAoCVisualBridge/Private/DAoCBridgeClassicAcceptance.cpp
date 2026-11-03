@@ -1,3 +1,4 @@
+bool VerifyDAoCClassicDragIcon(const struct FSlateBrush* Icon);
 #include "DAoCBridgeSubsystem.h"
 #include "Widgets/Text/SRichTextBlock.h"
 #include "Widgets/Input/SEditableTextBox.h"
@@ -46,7 +47,7 @@ bool UDAoCBridgeSubsystem::TickClassicAcceptance(){
   bool VaultFixture=false;F->TryGetBoolField(TEXT("vault_fixture"),VaultFixture);TSharedPtr<FJsonObject> SavedVault;if(VaultFixture){SavedVault=F->GetObjectField(TEXT("inventory"))->GetObjectField(TEXT("vault"));F->GetObjectField(TEXT("inventory"))->RemoveField(TEXT("vault"));}
   bool ServerWindowFixture=false;F->TryGetBoolField(TEXT("server_window_fixture"),ServerWindowFixture);TSharedPtr<FJsonObject> SavedServerWindow;if(ServerWindowFixture){SavedServerWindow=F->GetObjectField(TEXT("classic_ui"))->GetObjectField(TEXT("server_window"));F->GetObjectField(TEXT("classic_ui"))->RemoveField(TEXT("server_window"));}
   ApplyInventory(F->GetObjectField(TEXT("inventory")));ApplyPlayerStatus(F->GetObjectField(TEXT("player_status")));ApplyClassicUI(F->GetObjectField(TEXT("classic_ui")));bool TrainerInitiallyOpened=bClassicTrainerOpen&&ClassicTrainerOverlay.IsValid();CloseClassicTrainer();Check(ClassicOverlay.IsValid(),TEXT("complete shared interface root exists"));for(int32 B=0;B<3;++B)Check(ClassicBarBoxes[B].IsValid(),FString::Printf(TEXT("original quickbar %d created"),B+1));
-  Check(ClassicArt(TEXT("charsheet"))!=nullptr&&ClassicArt(TEXT("old_pperdoll"))!=nullptr,TEXT("original character and inventory art loaded"));Check(ClassicIcon(409)!=nullptr,TEXT("original icon atlas resolved"));
+  Check(ClassicArt(TEXT("charsheet"))!=nullptr&&ClassicArt(TEXT("old_pperdoll"))!=nullptr,TEXT("original character and inventory art loaded"));Check(ClassicIcon(409)!=nullptr,TEXT("original icon atlas resolved"));Check(VerifyDAoCClassicDragIcon(ClassicIcon(409)),TEXT("dragging preserves original atlas cell and a visible 48 pixel icon"));
   for(const FString Tab:{TEXT("character"),TEXT("inventory"),TEXT("skills"),TEXT("combat"),TEXT("magic"),TEXT("group")}){SetClassicTab(Tab);Check(ClassicTab==Tab&&bClassicOpen&&ClassicPanelBox->GetChildren()->Num()==1,TEXT("original sheet built: ")+Tab);}
   Session=TEXT("classic-test");bLocalAvailable=true;Socket=ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(NAME_Stream,TEXT("ClassicUI isolated test"),false);
   auto Capture=[&](const FString& Action){Outgoing.Add(0);FString Data=UTF8_TO_TCHAR(reinterpret_cast<const char*>(Outgoing.GetData()));Outgoing.Empty();TSharedPtr<FJsonObject> V;Check(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Data),V)&&V.IsValid()&&V->GetStringField(TEXT("action"))==Action,TEXT("native UI command: ")+Action);return V;};

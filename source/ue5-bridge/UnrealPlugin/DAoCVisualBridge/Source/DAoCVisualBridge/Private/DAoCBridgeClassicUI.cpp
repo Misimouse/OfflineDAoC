@@ -48,14 +48,22 @@ void At(const TSharedRef<SCanvas>& C,FVector2D P,FVector2D Size,const TSharedRef
 TSharedRef<SButton> CB(const TSharedRef<SWidget>& W,TFunction<void()> F){return SNew(SButton).IsFocusable(false).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(0).OnClicked_Lambda([F](){F();return FReply::Handled();})[W];}
 struct FClassicDrag: FDecoratedDragDropOp{
     DRAG_DROP_OPERATOR_TYPE(FClassicDrag,FDecoratedDragDropOp)
+    FSlateBrush IconBrush,BorderBrush;bool HasIcon=false,HasBorder=false;
     void SetLabel(const FText& Text){DefaultHoverText=Text;}
+    void SetIcon(const FSlateBrush* Icon,const FSlateBrush* Border){HasIcon=Icon!=nullptr;HasBorder=Border!=nullptr;if(Icon)IconBrush=*Icon;if(Border)BorderBrush=*Border;}
+    virtual TSharedPtr<SWidget> GetDefaultDecorator() const override {
+        if(!HasIcon)return SNew(SBox).WidthOverride(128).MinDesiredHeight(40)[SNew(SBorder).Padding(4)[SNew(STextBlock).Text(DefaultHoverText.IsEmpty()?FText::FromString(TEXT("Action")):DefaultHoverText).Font(CF(10)).AutoWrapText(true)]];
+        auto Layers=SNew(SOverlay);Layers->AddSlot()[SNew(SImage).Image(&IconBrush)];
+        if(HasBorder)Layers->AddSlot()[SNew(SImage).Image(&BorderBrush)];
+        return SNew(SBox).WidthOverride(48).HeightOverride(48)[Layers];
+    }
     FString Id,Token,ItemToken,VaultToken,ExchangeToken;int64 ExchangeCatalog=-1;int32 Bar=-1,Bank=-1,Slot=-1,InventorySlot=-1;TFunction<void()> Clear;
     virtual void OnDrop(bool Handled,const FPointerEvent& E) override {if(!Handled&&Clear)Clear();FDecoratedDragDropOp::OnDrop(Handled,E);}
 };
 class SClassicAction:public SCompoundWidget{
 public:
  SLATE_BEGIN_ARGS(SClassicAction):_Icon(nullptr),_Border(nullptr),_Bar(-1),_Bank(-1),_Slot(-1),_InventorySlot(-1){} SLATE_ARGUMENT(TSharedPtr<FJsonObject>,Entry) SLATE_ARGUMENT(const FSlateBrush*,Icon) SLATE_ARGUMENT(const FSlateBrush*,Border) SLATE_ARGUMENT(FSlateFontInfo,Font) SLATE_ARGUMENT(int32,Bar) SLATE_ARGUMENT(int32,Bank) SLATE_ARGUMENT(int32,Slot) SLATE_ARGUMENT(int32,InventorySlot) SLATE_ARGUMENT(FString,VaultToken) SLATE_ARGUMENT(TFunction<void()>,Click) SLATE_ARGUMENT(TFunction<void()>,DoubleClick) SLATE_ARGUMENT(TFunction<void()>,Clear) SLATE_ARGUMENT(TFunction<void()>,Inspect) SLATE_ARGUMENT(TFunction<void(TSharedRef<FClassicDrag>)>,Drop) SLATE_ATTRIBUTE(FText,Cooldown) SLATE_END_ARGS()
- void Construct(const FArguments& A){Entry=A._Entry;Bar=A._Bar;Bank=A._Bank;Slot=A._Slot;InventorySlot=A._InventorySlot;VaultToken=A._VaultToken;Click=A._Click;Double=A._DoubleClick;Clear=A._Clear;Inspect=A._Inspect;Drop=A._Drop;
+ void Construct(const FArguments& A){Entry=A._Entry;Icon=A._Icon;Border=A._Border;Bar=A._Bar;Bank=A._Bank;Slot=A._Slot;InventorySlot=A._InventorySlot;VaultToken=A._VaultToken;Click=A._Click;Double=A._DoubleClick;Clear=A._Clear;Inspect=A._Inspect;Drop=A._Drop;
   auto O=SNew(SOverlay);O->AddSlot()[SNew(SImage).Image(A._Icon)];if(A._Border)O->AddSlot()[SNew(SImage).Image(A._Border)];
   if(!A._Icon&&(Bar>=0||CS(Entry,TEXT("kind"))==TEXT("petcmd")||CS(Entry,TEXT("kind"))==TEXT("macro")))O->AddSlot()[SNew(STextBlock).Text(FText::FromString(CS(Entry,TEXT("kind"))==TEXT("petcmd")?CS(Entry,Bar>=0?TEXT("short"):TEXT("label")):CS(Entry,TEXT("name")).Left(14))).Font(A._Font).ColorAndOpacity(Cream).AutoWrapText(true).WrappingPolicy(ETextWrappingPolicy::AllowPerCharacterWrapping)];
   O->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(STextBlock).Text(A._Cooldown).Font(CF(9)).ColorAndOpacity(Gold).ShadowOffset(FVector2D(1,1))];
@@ -63,9 +71,9 @@ public:
  virtual FReply OnMouseButtonDown(const FGeometry&,const FPointerEvent& E)override{if(E.GetEffectingButton()==EKeys::RightMouseButton){if(Inspect&&(!Clear||E.IsShiftDown()))Inspect();else if(Clear)Clear();return FReply::Handled();}if(E.GetEffectingButton()==EKeys::LeftMouseButton){Down=true;Dragged=false;return FReply::Handled().DetectDrag(SharedThis(this),EKeys::LeftMouseButton);}return FReply::Unhandled();}
  virtual FReply OnMouseButtonUp(const FGeometry&,const FPointerEvent& E)override{if(Down&&E.GetEffectingButton()==EKeys::LeftMouseButton){Down=false;if(!Dragged&&Click)Click();return FReply::Handled();}return FReply::Unhandled();}
  virtual FReply OnMouseButtonDoubleClick(const FGeometry&,const FPointerEvent& E)override{if(E.GetEffectingButton()==EKeys::LeftMouseButton){Down=false;Dragged=false;if(Double)Double();return FReply::Handled();}return FReply::Unhandled();}
- virtual FReply OnDragDetected(const FGeometry&,const FPointerEvent&)override{if(!Entry.IsValid()||CS(Entry,TEXT("id" )).IsEmpty()||CS(Entry,TEXT("kind"))==TEXT("effect"))return FReply::Unhandled();Dragged=true;auto D=MakeShared<FClassicDrag>();D->Id=CS(Entry,TEXT("id"));D->Token=CS(Entry,TEXT("token"));D->ItemToken=CS(Entry,TEXT("item_token"));D->ExchangeToken=CS(Entry,TEXT("exchange_token"));D->ExchangeCatalog=int64(CN(Entry,TEXT("catalog_revision"),-1));D->Bar=Bar;D->Bank=Bank;D->Slot=Slot;D->InventorySlot=InventorySlot;D->VaultToken=VaultToken;D->Clear=Clear;D->SetLabel(FText::FromString(CS(Entry,TEXT("name"))));D->Construct();return FReply::Handled().BeginDragDrop(D);}
+ virtual FReply OnDragDetected(const FGeometry&,const FPointerEvent&)override{if(!Entry.IsValid()||CS(Entry,TEXT("id" )).IsEmpty()||CS(Entry,TEXT("kind"))==TEXT("effect"))return FReply::Unhandled();Dragged=true;auto D=MakeShared<FClassicDrag>();D->Id=CS(Entry,TEXT("id"));D->Token=CS(Entry,TEXT("token"));D->ItemToken=CS(Entry,TEXT("item_token"));D->ExchangeToken=CS(Entry,TEXT("exchange_token"));D->ExchangeCatalog=int64(CN(Entry,TEXT("catalog_revision"),-1));D->Bar=Bar;D->Bank=Bank;D->Slot=Slot;D->InventorySlot=InventorySlot;D->VaultToken=VaultToken;D->Clear=Clear;D->SetLabel(FText::FromString(CS(Entry,TEXT("name"),CS(Entry,TEXT("label"),TEXT("Action")))));D->SetIcon(Icon,Border);D->Construct();return FReply::Handled().BeginDragDrop(D);}
  virtual FReply OnDrop(const FGeometry&,const FDragDropEvent& E)override{auto D=E.GetOperationAs<FClassicDrag>();if(D.IsValid()&&Drop){Drop(D.ToSharedRef());return FReply::Handled();}return FReply::Unhandled();}
-private:TSharedPtr<FJsonObject> Entry;FString VaultToken;int32 Bar=-1,Bank=-1,Slot=-1,InventorySlot=-1;bool Down=false,Dragged=false;TFunction<void()> Click,Double,Clear,Inspect;TFunction<void(TSharedRef<FClassicDrag>)> Drop;
+private:const FSlateBrush* Icon=nullptr;const FSlateBrush* Border=nullptr;TSharedPtr<FJsonObject> Entry;FString VaultToken;int32 Bar=-1,Bank=-1,Slot=-1,InventorySlot=-1;bool Down=false,Dragged=false;TFunction<void()> Click,Double,Clear,Inspect;TFunction<void(TSharedRef<FClassicDrag>)> Drop;
 };
 class SClassicConcentrationIcon:public SCompoundWidget{
 public:SLATE_BEGIN_ARGS(SClassicConcentrationIcon){}SLATE_ARGUMENT(const FSlateBrush*,Icon)SLATE_ARGUMENT(const FSlateBrush*,Border)SLATE_ARGUMENT(FString,Tip)SLATE_ARGUMENT(TFunction<void()>,Cancel)SLATE_END_ARGS()
@@ -87,6 +95,12 @@ public:SLATE_BEGIN_ARGS(SClassicMove){}SLATE_ARGUMENT(TSharedPtr<SWidget>,Conten
  virtual FReply OnMouseButtonUp(const FGeometry&,const FPointerEvent&E)override{if(Moving){Moving=false;if(End)End();return FReply::Handled().ReleaseMouseCapture();}return FReply::Unhandled();}
 private:bool Moving=false;TFunction<void(FVector2D)>Move;TFunction<void()>End;
 };
+}
+bool VerifyDAoCClassicDragIcon(const FSlateBrush* Icon){
+    if(!Icon)return false;auto Entry=MakeShared<FJsonObject>();Entry->SetStringField(TEXT("id"),TEXT("srv:skill:drag-test"));Entry->SetStringField(TEXT("name"),TEXT("Minor Revigoration"));Entry->SetStringField(TEXT("token"),TEXT("unchanged-token"));
+    auto Widget=SNew(SClassicAction).Entry(Entry).Icon(Icon).Font(CF());auto Reply=Widget->OnDragDetected(FGeometry(),FPointerEvent());
+    auto Operation=StaticCastSharedPtr<FClassicDrag>(Reply.GetDragDropContent());if(!Operation||Operation->Token!=TEXT("unchanged-token")||Operation->IconBrush.GetResourceObject()!=Icon->GetResourceObject())return false;
+    auto Decorator=Operation->GetDefaultDecorator();if(!Decorator)return false;Decorator->SlatePrepass(1);return Decorator->GetDesiredSize().Equals(FVector2D(48,48),.1);
 }
 float UDAoCBridgeSubsystem::ClassicScale()const{const auto S=UIViewportSize();return FMath::Clamp(float(FMath::Min(S.Y/600.,S.X/800.)*.78),.4f,2.5f);}
 const FSlateBrush* UDAoCBridgeSubsystem::ClassicArt(const FString& Name,FVector2D Min,FVector2D Max){
