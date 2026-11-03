@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "bindings": [
+    {
+      "maps": [
+        "/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba",
+        "/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01"
+      ],
+      "release_id": "RDE-1.0.0-9a6d5608994c6af8",
+      "layer": "/Game/DAoC/Rios_DAoC_Enhanced/v1/Ardee/L_Ardee_River_Approved_v1",
+      "tag": "RDE_Ardee_Approved_v1",
+      "terrain_mesh": "/Game/DAoC/Reference/ArdeeReference/StaticMeshes/Connacht_Terrain_Original_257.Connacht_Terrain_Original_257",
+      "terrain_material": "/Game/DAoC/Water/Ardee_River_Full_v15/Materials/M_Ardee_RiverBed_Full_v15.M_Ardee_RiverBed_Full_v15",
+      "previous_terrain_material": "/Game/DAoC/Connacht_v01/Environment_Trial_v01/Materials/M_Connacht_Surface_Zones_v16.M_Connacht_Surface_Zones_v16",
+      "old_water_mesh": "/Game/DAoC/Reference/ArdeeReference/StaticMeshes/Connacht_River_Original.Connacht_River_Original"
+    }
+  ]
+}

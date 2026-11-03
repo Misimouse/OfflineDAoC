@@ -83,6 +83,14 @@ Helmet validation passed 2,462 native checks and 2,468 with rendered preview val
 
 Original armour/weapon skill refusals now finish the outstanding equipment request immediately and display the original English reason. The bridge changes no item, coin or item token on a refusal. Exact server replies apply only to equipment moves; NPC speech, unrelated messages, purchases and backpack-only moves cannot acknowledge them. Validation covers 11 refusal-state checks, 35 inventory, 25 vault, 46 exchange and 26 transport checks, gateway parsing, and ten disposable-server checks including immediate leather/plate refusal for a normal-privilege Magician. Server equipment rules and the GM exception remain unchanged.
 
+## Approved environment layers
+
+The launcher passes an optional private `environment_catalog.json` using `-DaocBridgeEnvironmentCatalog=`. See `environment_catalog.example.json`. Bindings name exact host map packages, an approved additive level, its terrain override and the obsolete water mesh. The renderer reuses a saved level reference or adds one transient reference if an art-map save omitted it. It never saves the host map, edits library resources, or copies one whole map over another. A different terrain material requires an explicit merge rather than automatic replacement.
+
+Approved actors are excluded when identifying obsolete water: the new surface and underside can deliberately reuse the old water mesh with different materials. Native diagnostics report layer references, loaded actors/components/instances, wood/algae/aquatic components, material binding and obsolete-water visibility. `ProtocolQA/verify_approved_environment.py <native-report> <approved-audit>` compares these with the independent approved scene audit. Loaded-component checks do not establish pixel visibility; inspect native screenshots separately.
+
+Ardee repair was checked in the installed native client and in WORK reference views: one layer, 36 actors, 483 components, 8,193 instances, 14 log components, four algae films and 221 aquatic components. Tests covered both a saved reference and recovery from a map without that reference, followed by hash-verified restoration of the integrated map. The existing general and 72 viewport regressions passed. These were isolated replays, not new transactions in the played database. Packaged builds must explicitly include the approved layer and its dependencies in cooking/staging; this development-client repair does not certify a cooked distribution.
+
 ## Original appearance preparation (inactive)
 
 Character creation still uses the default appearance. The separate preparation tools retain original per-race heads and all non-null hairstyle meshes, including sparse glTF morph targets, instead of merging away their face/hair deformation data. They do not change the active body or equipment catalogues, creation UI, server rules, or maps.

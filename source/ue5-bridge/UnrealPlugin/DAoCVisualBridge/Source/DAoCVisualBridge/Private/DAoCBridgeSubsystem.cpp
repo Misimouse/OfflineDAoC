@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeApprovedEnvironment.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/FileManager.h"
 #include "DAoCBridgeCharacter.h"
@@ -438,6 +439,7 @@ void UDAoCBridgeSubsystem::WriteReport(){
     O->SetBoolField(TEXT("standalone_game"),GetWorld()->IsGameWorld());O->SetBoolField(TEXT("capture_requested"),bCaptured);
     double Elapsed=PlayerStartedAt>0?FPlatformTime::Seconds()-PlayerStartedAt:0;O->SetBoolField(TEXT("auto_walk_active"),bAutoWalk&&Elapsed>=20&&Elapsed<52);
     O->SetStringField(TEXT("map"),GetWorld()->GetMapName());
+    O->SetObjectField(TEXT("approved_environment"),InspectDAoCApprovedEnvironment(GetWorld()));
     O->SetStringField(TEXT("quality"),Quality);O->SetNumberField(TEXT("foliage_components_optimized"),OptimizedFoliageComponents);O->SetNumberField(TEXT("foliage_instances_with_distance_policy"),OptimizedFoliageInstances);
     O->SetNumberField(TEXT("frame_ms"),FApp::GetDeltaTime()*1000);O->SetNumberField(TEXT("gameplay_stalls_over_2s"),GameplayStalls);O->SetNumberField(TEXT("maximum_gameplay_frame_ms"),MaximumGameplayFrameMs);
     auto* GameViewport=GetWorld()->GetGameViewport();O->SetBoolField(TEXT("viewport_focused"),GameViewport&&GameViewport->Viewport&&GameViewport->Viewport->HasFocus());

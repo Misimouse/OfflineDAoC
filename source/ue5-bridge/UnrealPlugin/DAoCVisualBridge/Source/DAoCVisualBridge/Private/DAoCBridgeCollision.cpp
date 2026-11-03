@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeApprovedEnvironment.h"
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
@@ -15,7 +16,9 @@
 void UDAoCBridgeSubsystem::GeometryLevelChanged(ULevel*,UWorld* World){if(World==GetWorld()){bCollisionConfigured=false;GeometryUpdateAfter=FPlatformTime::Seconds()+.1;}}
 
 void UDAoCBridgeSubsystem::ConfigureCollisions(){
-    if(bCollisionConfigured)return;bCollisionConfigured=true;
+    if(bCollisionConfigured)return;
+    EnsureDAoCApprovedEnvironment(GetWorld());
+    bCollisionConfigured=true;
     for(auto It=CollisionSourceActors.CreateIterator();It;++It)if(!It.Key().IsValid()){for(auto Actor:It.Value())if(Actor.IsValid())Actor->Destroy();It.RemoveCurrent();}
     for(auto It=CollisionScannedSources.CreateIterator();It;++It)if(!It->IsValid())It.RemoveCurrent();
     struct FSource{TWeakObjectPtr<UStaticMeshComponent> Component;FString Asset;bool Visible;};

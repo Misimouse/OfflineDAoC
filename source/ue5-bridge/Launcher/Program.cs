@@ -97,6 +97,8 @@ try{
         "-DaocBridgeCatalog="+catalogFile,"-DaocBridgeReport="+Path.Combine(reports,"unreal_session.json")})start.ArgumentList.Add(value);
     if(menuTesting)start.ArgumentList.Add("-DaocBridgeCharacterLobbyLiveProbe="+Path.Combine(root,"Reports/character_lobby/live_menu.json"));
     start.ArgumentList.Add("-DaocBridgeCollisionCatalog="+Path.Combine(root,"collision_catalog.json"));
+    var environmentCatalog=Path.Combine(root,"environment_catalog.json");
+    if(File.Exists(environmentCatalog))start.ArgumentList.Add("-DaocBridgeEnvironmentCatalog="+environmentCatalog);
     if(args.Contains("--motion-test"))start.ArgumentList.Add("-DaocBridgeRemoteMotionProbe="+Path.Combine(root,"Reports/movement/live_visual_samples.json"));
     if(args.Contains("--interaction-test"))start.ArgumentList.Add("-DaocBridgeAutoInteractionTest");
     if(args.Contains("--inventory-test"))start.ArgumentList.Add("-DaocBridgeOpenInventory");
