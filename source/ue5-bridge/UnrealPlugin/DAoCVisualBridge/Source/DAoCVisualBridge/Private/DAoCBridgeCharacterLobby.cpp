@@ -2,6 +2,7 @@
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
+#include "GameFramework/PlayerController.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBorder.h"
@@ -32,12 +33,26 @@ TSharedRef<SButton> LobbyButton(const FString& Text,TFunction<void()> Action){re
 }
 
 void UDAoCBridgeSubsystem::RemoveCharacterLobby(){
+    const bool WasOpen=CharacterLobbyOverlay.IsValid();
     if(CharacterLobbyOverlay&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(CharacterLobbyOverlay.ToSharedRef());
     CharacterLobbyOverlay.Reset();CharacterLobbyPanel.Reset();CharacterLobbyState.Reset();CharacterLobbyRevision=-1;
+    if(WasOpen&&GetWorld())if(auto* PC=GetWorld()->GetFirstPlayerController()){
+        FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Mode);PC->bShowMouseCursor=true;
+        if(auto* V=GetWorld()->GetGameViewport()){V->SetMouseCaptureMode(EMouseCaptureMode::CaptureDuringRightMouseDown);V->SetMouseLockMode(EMouseLockMode::DoNotLock);}
+    }
 }
 
 void UDAoCBridgeSubsystem::ApplyCharacterLobby(TSharedPtr<FJsonObject> State,bool InGame){
     if(InGame||!LobbyFlag(State,TEXT("enabled"))){if(CharacterLobbyOverlay)RemoveCharacterLobby();return;}
+    // The menu precedes the player pawn, which used to be the only cursor setup.
+    // Restore a visible, unlocked pointer without stealing focus from typed names.
+    if(auto* PC=GetWorld()->GetFirstPlayerController()){
+        const bool ResetMouse=!CharacterLobbyOverlay.IsValid()||bMouseLook||!PC->bShowMouseCursor;
+        bMouseLookToggle=false;SetMouseLook(false);
+        if(ResetMouse){FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Mode);
+            if(auto* V=GetWorld()->GetGameViewport()){V->SetMouseCaptureMode(EMouseCaptureMode::NoCapture);V->SetMouseLockMode(EMouseLockMode::DoNotLock);}}
+        PC->bShowMouseCursor=true;PC->DefaultMouseCursor=EMouseCursor::Default;PC->CurrentMouseCursor=EMouseCursor::Default;
+    }
     if(!CharacterLobbyOverlay){RemoveClassicUI();RemoveInventoryUI();RemoveInteractionUI();RemovePlayerStatusUI();}
     CharacterLobbyState=State;const int64 Revision=LobbyNumber(State,TEXT("revision"));
     if(CharacterLobbyOverlay&&CharacterLobbyRevision==Revision)return;
@@ -113,6 +128,12 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
         if(Fixture){
             auto State=Fixture->GetObjectField(TEXT("character_lobby"));Check(LobbyFlag(State,TEXT("ready")),TEXT("server supplied a complete character list"));
             ApplyCharacterLobby(State,false);Check(CharacterLobbyOverlay.IsValid()&&CharacterLobbyPanel.IsValid(),TEXT("selection and creation screen opens before world entry"));
+            if(auto* PC=GetWorld()->GetFirstPlayerController()){
+                Check(PC->bShowMouseCursor&&!bMouseLook,TEXT("character menu shows the cursor before a player pawn exists"));
+                PC->bShowMouseCursor=false;ApplyCharacterLobby(State,false);
+                Check(PC->bShowMouseCursor,TEXT("unchanged lobby revision restores a lost cursor"));
+                Check(GetWorld()->GetGameViewport()->GetMouseCaptureMode()==EMouseCaptureMode::NoCapture,TEXT("character menu does not capture the pointer"));
+            }
             const bool BeforeView=bFirstPerson;bLocalAvailable=true;ToggleFirstPerson();Check(bFirstPerson==BeforeView,TEXT("character menu blocks gameplay camera toggles"));bLocalAvailable=false;
             TArray<TSharedPtr<SEditableTextBox>> Inputs;TFunction<void(TSharedRef<SWidget>)> Visit;Visit=[&](TSharedRef<SWidget> W){if(W->GetTypeAsString()==TEXT("SEditableTextBox"))Inputs.Add(StaticCastSharedRef<SEditableTextBox>(W));auto* Children=W->GetChildren();for(int32 I=0;Children&&I<Children->Num();++I)Visit(Children->GetChildAt(I));};
             if(CharacterLobbyPanel)Visit(CharacterLobbyPanel.ToSharedRef());Check(Inputs.Num()==1,TEXT("character name has an editable input"));if(!Inputs.IsEmpty())Inputs[0]->SetText(FText::FromString(TEXT("Previewhero")));

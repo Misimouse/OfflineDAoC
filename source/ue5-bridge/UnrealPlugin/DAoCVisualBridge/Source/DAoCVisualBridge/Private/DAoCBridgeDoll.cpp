@@ -34,7 +34,7 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
         FActorSpawnParameters P;P.ObjectFlags|=RF_Transient;P.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
         auto* Doll=GetWorld()->SpawnActor<ASkeletalMeshActor>(FVector(0,0,-100000),FRotator::ZeroRotator,P);if(!Doll)return;
         ClassicDollActor=Doll;ClassicDollSignature=Signature;Doll->SetActorScale3D(Local->GetActorScale3D());Doll->SetActorEnableCollision(false);
-        for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Doll);Doll->AddInstanceComponent(Light);Light->SetupAttachment(Doll->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(180,150,200):FVector(-150,-100,130));Light->SetIntensity(I==0?12000.f:6000.f);Light->SetAttenuationRadius(500);Light->SetCastShadows(false);Light->RegisterComponent();}
+        for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Doll);Doll->AddInstanceComponent(Light);Light->ComponentTags.Add(I==0?TEXT("DAoCBridgeDollKeyLight"):TEXT("DAoCBridgeDollFillLight"));Light->SetupAttachment(Doll->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(180,150,200):FVector(-150,-100,130));Light->SetIntensity(I==0?12000.f:6000.f);Light->SetAttenuationRadius(500);Light->SetCastShadows(false);Light->RegisterComponent();}
         auto* Body=Doll->GetSkeletalMeshComponent();Body->SetSkeletalMesh(Original->GetSkeletalMeshAsset());Body->SetRelativeTransform(Original->GetRelativeTransform());Body->SetAnimationMode(EAnimationMode::AnimationSingleNode);
         auto* Definition=ModelCatalog.Find(FString::FromInt(EntityModels.FindRef(TEXT("player:local"))));const FString Idle=Definition?DollString(*Definition,TEXT("idle")):TEXT("");
         if(!Idle.IsEmpty())if(auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Idle))Body->PlayAnimation(Clip,false);
@@ -55,28 +55,40 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
             }else if(auto* Rigid=Cast<UStaticMeshComponent>(Source)){
                 auto* C=NewObject<UStaticMeshComponent>(Doll);C->SetStaticMesh(Rigid->GetStaticMesh());Doll->AddInstanceComponent(C);C->RegisterComponent();Copy=C;
             }
-            if(Copy){Copy->AttachToComponent(Body,FAttachmentTransformRules::KeepRelativeTransform,Source->GetAttachSocketName());Copy->SetRelativeTransform(Source->GetRelativeTransform());DollMaterials(Source,Copy);}
+            if(Copy){Copy->ComponentTags=Source->ComponentTags;Copy->AttachToComponent(Body,FAttachmentTransformRules::KeepRelativeTransform,Source->GetAttachSocketName());Copy->SetRelativeTransform(Source->GetRelativeTransform());DollMaterials(Source,Copy);}
         }
     }
     if(!ClassicCapture){
         ClassicCaptureActor=GetWorld()->SpawnActor<AActor>();ClassicCapture=NewObject<USceneCaptureComponent2D>(ClassicCaptureActor);ClassicCaptureActor->SetRootComponent(ClassicCapture);ClassicCapture->RegisterComponent();
         ClassicCapture->bCaptureEveryFrame=false;ClassicCapture->bCaptureOnMovement=false;ClassicCapture->PrimitiveRenderMode=ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;ClassicCapture->CaptureSource=ESceneCaptureSource::SCS_FinalColorLDR;ClassicCapture->FOVAngle=40;ClassicCapture->PostProcessSettings.bOverride_AutoExposureBias=true;ClassicCapture->PostProcessSettings.AutoExposureBias=2.f;
         ClassicCapture->ShowFlags.SetAtmosphere(false);ClassicCapture->ShowFlags.SetFog(false);ClassicCapture->ShowFlags.SetMotionBlur(false);ClassicCapture->ShowFlags.SetGlobalIllumination(false);ClassicCapture->ShowFlags.SetDynamicShadows(false);ClassicCapture->ShowFlags.SetAmbientOcclusion(false);
+        // World-space underwater/fog blendables must not affect an inventory portrait.
+        ClassicCapture->ShowFlags.SetPostProcessMaterial(false);
         ClassicDollTarget=NewObject<UTextureRenderTarget2D>(this);ClassicDollTarget->ClearColor=FLinearColor(.08,.08,.08,1);ClassicDollTarget->InitAutoFormat(256,384);ClassicCapture->TextureTarget=ClassicDollTarget;RefreshClassicPanel();
     }
     ClassicCapture->ClearShowOnlyComponents();ClassicCapture->ShowOnlyActorComponents(ClassicDollActor,true);
-    const FVector Feet=ClassicDollActor->GetActorLocation(),Forward=FRotator(0,90+ClassicDollYaw,0).Vector();
+    // Turn the figure about its own feet. The camera and framing stay fixed;
+    // recomputing a projected width for every viewing angle caused visible zoom.
+    ClassicDollActor->SetActorRotation(FRotator(0,-ClassicDollYaw,0));
+    const FVector Feet=ClassicDollActor->GetActorLocation(),Forward(0,1,0);
+    const FTransform Frame(FQuat::Identity,Feet,ClassicDollActor->GetActorScale3D());
+    TArray<UPointLightComponent*> PreviewLights;ClassicDollActor->GetComponents(PreviewLights);
+    for(auto* Light:PreviewLights)Light->SetWorldLocation(Frame.TransformPosition(Light->ComponentHasTag(TEXT("DAoCBridgeDollKeyLight"))?FVector(180,150,200):FVector(-150,-100,130)));
     FVector Center=Feet+FVector(0,0,90);double Distance=200,Elevation=10;
     FBox PreviewBounds(ForceInit);TArray<UMeshComponent*> PreviewMeshes;ClassicDollActor->GetComponents(PreviewMeshes);
-    for(auto* Part:PreviewMeshes)if(Part&&Part->IsVisible()){Part->UpdateComponentToWorld();PreviewBounds+=Part->CalcBounds(Part->GetComponentTransform()).GetBox();}
+    for(auto* Part:PreviewMeshes)if(Part&&Part->IsVisible()&&!Part->ComponentHasTag(TEXT("DAoCBridgeEquipment"))){
+        Part->UpdateComponentToWorld();const auto Unrotated=Part->GetComponentTransform().GetRelativeTransform(ClassicDollActor->GetActorTransform())*Frame;
+        PreviewBounds+=Part->CalcBounds(Unrotated).GetBox();
+    }
     if(PreviewBounds.IsValid){const FVector Extent=PreviewBounds.GetExtent();
         if(!Extent.ContainsNaN()&&Extent.Z>1){
-            Center=PreviewBounds.GetCenter();const FVector Right=FVector::CrossProduct(FVector::UpVector,Forward);
+            Center=FVector(Feet.X,Feet.Y,PreviewBounds.GetCenter().Z);
             const double TanH=FMath::Tan(FMath::DegreesToRadians(ClassicCapture->FOVAngle*.5));
             const double TanV=TanH*ClassicDollTarget->SizeY/FMath::Max(1,ClassicDollTarget->SizeX);
-            const double Width=FMath::Abs(Right.X)*Extent.X+FMath::Abs(Right.Y)*Extent.Y;
-            const double Depth=FMath::Abs(Forward.X)*Extent.X+FMath::Abs(Forward.Y)*Extent.Y;
-            Distance=FMath::Clamp(Depth+FMath::Max(Width/TanH,Extent.Z/TanV)*1.15,30.,1000.);Elevation=Extent.Z*.04;
+            const double X=FMath::Max(FMath::Abs(PreviewBounds.Min.X-Center.X),FMath::Abs(PreviewBounds.Max.X-Center.X));
+            const double Y=FMath::Max(FMath::Abs(PreviewBounds.Min.Y-Center.Y),FMath::Abs(PreviewBounds.Max.Y-Center.Y));
+            const double Radius=FMath::Sqrt(X*X+Y*Y);
+            Distance=FMath::Clamp(Radius+FMath::Max(Radius/TanH,Extent.Z/TanV)*1.15,30.,1000.);Elevation=Extent.Z*.04;
         }
     }
     const FVector Eye=Center+Forward*Distance+FVector(0,0,Elevation);

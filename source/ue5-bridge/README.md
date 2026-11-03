@@ -83,6 +83,12 @@ Helmet validation passed 2,462 native checks and 2,468 with rendered preview val
 
 Original armour/weapon skill refusals now finish the outstanding equipment request immediately and display the original English reason. The bridge changes no item, coin or item token on a refusal. Exact server replies apply only to equipment moves; NPC speech, unrelated messages, purchases and backpack-only moves cannot acknowledge them. Validation covers 11 refusal-state checks, 35 inventory, 25 vault, 46 exchange and 26 transport checks, gateway parsing, and ten disposable-server checks including immediate leather/plate refusal for a normal-privilege Magician. Server equipment rules and the GM exception remain unchanged.
 
+## Character-menu pointer and inventory preview
+
+The character menu initializes its visible, unlocked pointer before any player pawn exists and restores gameplay capture on leaving the menu. Unchanged lobby snapshots can recover a lost pointer without rebuilding the panel or stealing focus from a typed name. This fixes input in the existing menu; migration of the original pregame layouts remains separate.
+
+Inventory rotation turns the independent frozen figure about its feet with a fixed camera, angle-independent framing and fixed preview lights. Held weapon tips do not determine body zoom. World underwater postprocess materials are excluded from the portrait capture. Acceptance checks keep the camera/pivot stable across five angles and confirm that the live character is untouched. Local validation covered 16 menu checks, 2,471 armour/helmet/preview checks per rendered case, Celt front/side and Firbolg side captures, 314 general checks and 72 viewport checks. These are automated checks, not a substitute for the owner's input/visual review.
+
 ## Approved environment layers
 
 The launcher passes an optional private `environment_catalog.json` using `-DaocBridgeEnvironmentCatalog=`. See `environment_catalog.example.json`. Bindings name exact host map packages, an approved additive level, its terrain override and the obsolete water mesh. The renderer reuses a saved level reference or adds one transient reference if an art-map save omitted it. It never saves the host map, edits library resources, or copies one whole map over another. A different terrain material requires an explicit merge rather than automatic replacement.

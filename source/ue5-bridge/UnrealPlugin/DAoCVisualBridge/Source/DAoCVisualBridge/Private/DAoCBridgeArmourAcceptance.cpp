@@ -109,6 +109,13 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
                     bool Fits=true;double Low=100,High=-100;
                     for(int32 Corner=0;Corner<8;++Corner){const FVector Point((Corner&1)?Box.Max.X:Box.Min.X,(Corner&2)?Box.Max.Y:Box.Min.Y,(Corner&4)?Box.Max.Z:Box.Min.Z);const FVector Delta=Point-Eye;const double Depth=FVector::DotProduct(Delta,Forward);if(Depth<=0){Fits=false;continue;}const double X=FVector::DotProduct(Delta,Right)/(Depth*TanH),Y=FVector::DotProduct(Delta,Up)/(Depth*TanV);Fits&=FMath::Abs(X)<.99&&FMath::Abs(Y)<.99;Low=FMath::Min(Low,Y);High=FMath::Max(High,Y);}
                     Check(Fits,TEXT("preview keeps full body and hood inside the image"));Check(High-Low>=1,TEXT("preview frames small and large races at a useful scale"));
+                    const float SavedYaw=ClassicDollYaw;const FVector Pivot=Doll->GetActorLocation(),CameraPosition=ClassicCapture->GetComponentLocation();const FRotator CameraRotation=ClassicCapture->GetComponentRotation(),PlayerRotation=Actor->GetActorRotation();
+                    bool CameraFixed=true,PivotFixed=true,FigureTurns=true;
+                    for(float Yaw:{0.f,45.f,90.f,180.f,270.f}){
+                        ClassicDollYaw=Yaw;UpdateClassicDoll();CameraFixed&=ClassicCapture->GetComponentLocation().Equals(CameraPosition,.01)&&ClassicCapture->GetComponentRotation().Equals(CameraRotation,.01);PivotFixed&=Doll->GetActorLocation().Equals(Pivot,.01);FigureTurns&=Doll->GetActorRotation().Equals(FRotator(0,-Yaw,0),.01);
+                    }
+                    Check(CameraFixed,TEXT("turning the preview cannot move its camera or change its zoom"));Check(PivotFixed&&FigureTurns,TEXT("preview turns about its own fixed pivot"));Check(Actor->GetActorRotation().Equals(PlayerRotation,.01),TEXT("preview rotation never rotates the live character"));
+                    ClassicDollYaw=SavedYaw;UpdateClassicDoll();
                 }
             }
             ApplyBodyArmour(Actor,nullptr);Correct=true;Visible=0;for(auto V:Sections){auto S=V->AsObject();if(S->GetStringField(TEXT("slot"))!=TEXT("body"))continue;const int32 Index=S->GetIntegerField(TEXT("index"));if(Body->IsMaterialSectionShown(Index,0)){++Visible;Correct&=S->GetIntegerField(TEXT("variant"))==Clothes->GetObjectField(TEXT("body"))->GetIntegerField(TEXT("variant"));}}
