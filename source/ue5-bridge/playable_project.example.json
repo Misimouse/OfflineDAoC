@@ -1,0 +1,5 @@
+{
+  "project": "../DAoC-Enhanced-Unreal/DAoCEnhanced.uproject",
+  "map": "/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01",
+  "enable_plugins": ["DAoCVisualBridge"]
+}

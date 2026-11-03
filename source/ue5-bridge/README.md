@@ -107,6 +107,16 @@ Set `DAOC_BRIDGE_WORKSPACE` to the private bridge workspace containing `models.j
 
 Local preparation verified ten figures, 62 parts, 393 morph targets, 23,262 vertices and 286 textures. Five unsaved editor captures checked example face/hair/eye/tattoo/tint and morph combinations; this is a resource proof, not complete customization or an installed creator feature. Connecting validated choices to creation, persistence, animated accessories, helmets/hoods and the inventory miniature remains pending. Keep the existing default-appearance behavior until that integration passes its own tests.
 
+## Shared art and playable project
+
+An optional private `playable_project.json` selects the Unreal project, exact existing `/Game` map and plugins enabled for the game process. See `playable_project.example.json`. Paths may be absolute or relative to the bridge workspace. Without this file the existing bridge client remains the fallback. `--show-target` prints the resolved destination before reading credentials or starting any server; `--bridge-root=<workspace>` selects another workspace. Missing projects/maps and invalid package/plugin names are rejected.
+
+Run `prepare_art_project.py --bridge-root <workspace> --art-project <art-project.uproject> --map <package>` for a read-only preview; add `--apply` to back up project settings, link the validated bridge plugin and write the private launcher destination. Existing art plugins, startup maps, content and existing interface profiles are preserved. The bridge plugin stays disabled for ordinary art editing and is enabled explicitly by the game launcher. Imported interface profiles are copied only when absent. Runtime libraries remain in the bridge workspace; this binds a single playable art project without duplicating its map.
+
+`restore_art_project.py --bridge-root <workspace>` previews rollback; `--apply` restores backed-up settings and removes only the owned junction and unchanged imported profiles. Hash guards refuse to overwrite later edits. Launcher binary installation has its own backup and must be restored separately. No map or art-library rollback is performed. Close the game before either installation or rollback.
+
+Validation covered seven launcher destination cases, a disposable project binding/rollback fixture, the original menu on the shared project and a real isolated server round trip: player/NPC entry, confirmed `/quit`, old-world cleanup and entry with a different character in the same native process. The shared map retained one approved river layer with 36 actors and 8,193 instances; a separate rendered underwater replay checked vegetation and wood. The played database was not used for these transactions. These checks do not certify final frame rate, complete appearance customization or every manual input interaction.
+
 ## Upstream and maintenance
 
 The original author has put OfflineDAoC on hold. Source changes after 0.37c exist upstream at `12992146a16dc888f91ec611d18d9d891d3e11e1`; they have been reviewed but not merged wholesale into this snapshot. They include navigation-memory fixes, Godot loading fixes, appearance and gameplay changes. Whole-file replacement can remove this fork's art hooks and introduce dependencies; port and test by feature.

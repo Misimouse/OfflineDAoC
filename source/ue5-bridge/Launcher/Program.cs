@@ -4,7 +4,10 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 
-string root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../"));
+string root=Path.GetFullPath(args.FirstOrDefault(a=>a.StartsWith("--bridge-root="))?.Split('=',2)[1]??Path.Combine(AppContext.BaseDirectory,"../../../../"));
+bool requiresTarget=args.Contains("--show-target")||(!args.Contains("--probe")&&!args.Contains("--session-only"));
+var playableTarget=requiresTarget?PlayableTarget.Load(root):new PlayableTarget("","",[]);
+if(args.Contains("--show-target")){Console.WriteLine(JsonSerializer.Serialize(new{project=playableTarget.Project,map=playableTarget.Map,enable_plugins=playableTarget.EnabledPlugins}));return;}
 string install=Environment.GetEnvironmentVariable("DAOC_INSTALL") ?? throw new InvalidOperationException("Set DAOC_INSTALL to your playable OfflineDAoC folder.");
 string reports=Path.Combine(root,"Reports/live");Directory.CreateDirectory(reports);
 string logout=Path.Combine(reports,"logout.request");if(File.Exists(logout))File.Delete(logout);
@@ -88,13 +91,14 @@ try{
     }
     if(probe){await Task.Delay(12000);return;}
     if(sessionOnly){Console.WriteLine("Session-only mode. Close this window to request normal logout.");await godot.WaitForExitAsync();return;}
-    string project=Path.Combine(root,"Client/DAoCBridgeClient.uproject");
+    string project=playableTarget.Project;
     var start=new ProcessStartInfo(Path.Combine(Environment.GetEnvironmentVariable("DAOC_UE_ENGINE") ?? @"C:\Program Files\Epic Games\UE_5.8\Engine","Binaries/Win64/UnrealEditor.exe")){
         WorkingDirectory=Path.GetDirectoryName(project)!,UseShellExecute=false
     };
-    foreach(var value in new[]{project,menuTesting?"/Engine/Maps/Entry":"/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba","-game","-DaocBridge","-windowed","-ResX=1920","-ResY=1080","-d3d11","-nosplash",
+    foreach(var value in new[]{project,menuTesting?"/Engine/Maps/Entry":playableTarget.Map,"-game","-DaocBridge","-windowed","-ResX=1920","-ResY=1080","-d3d11","-nosplash",
         "-DaocBridgeHeights="+Path.Combine(install,"new-client/godot/content/zones/zone207/heights.f32"),
         "-DaocBridgeCatalog="+catalogFile,"-DaocBridgeReport="+Path.Combine(reports,"unreal_session.json")})start.ArgumentList.Add(value);
+    if(playableTarget.EnabledPlugins.Length>0)start.ArgumentList.Add("-EnablePlugins="+string.Join(",",playableTarget.EnabledPlugins));
     if(menuTesting)start.ArgumentList.Add("-DaocBridgeCharacterLobbyLiveProbe="+Path.Combine(root,"Reports/character_lobby/live_menu.json"));
     start.ArgumentList.Add("-DaocBridgeCollisionCatalog="+Path.Combine(root,"collision_catalog.json"));
     var environmentCatalog=Path.Combine(root,"environment_catalog.json");
