@@ -131,6 +131,7 @@ func characters_ready(realm:String)->void:
     if realm!="hib" or entered:return
     character_lobby.refresh(server)
     if character_lobby.enabled:return
+    if server.character_list_pending():return
     var list:Array=server.characters_in("hib")
     if list.is_empty():status="No Hibernia characters available";write_report();return
     var chosen:Dictionary=list[0]
