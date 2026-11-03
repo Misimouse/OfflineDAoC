@@ -223,7 +223,7 @@ func world_event(kind:String,data:Dictionary)->void:
             chat_lines.append(text.left(240));if chat_lines.size()>8:chat_lines.pop_front()
     if kind in ["you","region_changed","quit"]:interaction.reset();inventory.reset()
     vault.observe(kind,data,interaction,adapter.entities,position)
-    inventory.observe(kind)
+    inventory.observe(kind,data)
     player_state.consume(kind,data,int(server.me_oid),Time.get_ticks_msec())
     var release_revision:int=release_state.revision
     release_state.consume(kind,data,int(server.me_oid))

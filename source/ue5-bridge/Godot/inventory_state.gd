@@ -20,10 +20,16 @@ var inventory_events:=0
 func reset()->void:
     items.clear();vault.clear();money.clear();gear.clear();pending.clear();fingerprint="";feedback="";weapon_set="standard";weight_now=-1;weight_max=-1;state_revision+=1;revision+=1;inventory_events=0
 
-func observe(kind:String)->void:
+func observe(kind:String,data:Dictionary={})->void:
     if kind=="inventory":
         if inventory_events==0:revision+=1
         inventory_events+=1
+    elif kind=="message" and bool(pending.get("equipment_request",false)):
+        var text:=String(data.get("text",""))
+        # These exact original server replies reject the outstanding equipment move.
+        # Keep items/coins/tokens authoritative; only finish the rejected request.
+        if text in ["You have no skill in wearing this armor type!","You have no skill in using this weapon type!"]:
+            pending.clear();feedback=text;rejected+=1;revision+=1
 
 func sync(rows:Array,coins:Dictionary,appearance:Dictionary,weapons:String,carried:int,capacity:int,now:int,vault_state:Dictionary={})->void:
     vault=vault_state.duplicate(true)
@@ -131,7 +137,7 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
             if source<40 or source>79:return fail("You can only sell backpack items.")
             client.call("Target",int(id.get_slice(":",1)),0xE000)
             client.call("SellItem",x,y,source)
-    requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events};revision+=1;return true
+    requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events,"equipment_request":action in ["inventory_equip","inventory_move"] and destination in EQUIPMENT};revision+=1;return true
 
 func snapshot()->Dictionary:
     var rows:Array=[]

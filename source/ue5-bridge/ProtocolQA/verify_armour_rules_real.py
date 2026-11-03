@@ -2,7 +2,7 @@ from qa_runtime import *
 import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
 D=ROOT/'Reports/armour_rules';D.mkdir(exist_ok=True)
-SOURCE=ROOT/'Godot'
+SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
 backup=ROOT/'Backups'/('ArmourRulesProtocolQA_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -90,6 +90,9 @@ try:
   send('inventory_equip',slot=slot,item_token=armour['token'],inventory_revision=inv()['state_revision'])
   wait(lambda:json.dumps(snapshot).count('You have no skill in wearing this armor type!')>previous_denials,'Original class restriction reply')
   result['checks'][label+'_original_server_refusal']=True
+  if os.environ.get('DAOC_BRIDGE_QA_DENIAL_ACK')=='1':
+   wait(lambda:not inv()['pending'] and inv()['feedback']=='You have no skill in wearing this armor type!','Class refusal immediately finishes the equipment request',3)
+   result['checks'][label+'_immediate_original_feedback']=True
   assert item(slot) and item(slot)['model']==armour['model'] and item(25)['model']==cloth['model'],label+' was equipped by a normal magician'
   result['checks'][label+'_rejected']=True
   wait(lambda:not inv()['pending'],'Rejected armour leaves inventory usable',20);settle()
