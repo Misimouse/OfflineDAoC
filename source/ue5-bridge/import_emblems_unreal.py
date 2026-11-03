@@ -1,6 +1,7 @@
-import unreal,json,traceback
+import unreal,json,traceback,sys
 from pathlib import Path
 R=Path(__file__).resolve().parent
+if str(R) not in sys.path:sys.path.insert(0,str(R))
 D=R/'Reports/training_staff_fx_pets'
 assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
 tools=unreal.AssetToolsHelpers.get_asset_tools()
@@ -27,27 +28,8 @@ try:
         if row.get('clamp'):
             tex.set_editor_property('address_x',unreal.TextureAddress.TA_CLAMP);tex.set_editor_property('address_y',unreal.TextureAddress.TA_CLAMP)
         assets.save_loaded_asset(tex);report['textures']+=1
-    m=unreal.load_asset(root+'/M_OriginalShieldEmblem')
-    if not m:
-        m=tools.create_asset('M_OriginalShieldEmblem',root,unreal.Material,unreal.MaterialFactoryNew())
-    lib.delete_all_material_expressions(m)
-    m.set_editor_property('two_sided',False)
-    def node(cls,x,y):return lib.create_material_expression(m,cls,x,y)
-    samples=[]
-    for i,(param,uvindex,default) in enumerate([('Surface',0,'Surface_sh_wood01'),('Pattern',3,'Pattern_512'),('Logo',1,'Logo_1')]):
-        uv=node(unreal.MaterialExpressionTextureCoordinate,-1100,i*200);uv.set_editor_property('coordinate_index',uvindex)
-        tex=node(unreal.MaterialExpressionTextureSampleParameter2D,-900,i*200);tex.set_editor_property('parameter_name',param);tex.set_editor_property('texture',unreal.load_asset(root+'/Textures/'+default));tex.set_editor_property('sampler_type',unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
-        lib.connect_material_expressions(uv,'',tex,'Coordinates');samples.append(tex)
-    has=node(unreal.MaterialExpressionScalarParameter,-650,550);has.set_editor_property('parameter_name','HasLogo');has.set_editor_property('default_value',0)
-    one=node(unreal.MaterialExpressionConstant,-650,430);one.set_editor_property('r',1)
-    logo=node(unreal.MaterialExpressionLinearInterpolate,-400,400);lib.connect_material_expressions(one,'',logo,'A');lib.connect_material_expressions(samples[2],'R',logo,'B');lib.connect_material_expressions(has,'',logo,'Alpha')
-    mul=node(unreal.MaterialExpressionMultiply,-400,0);lib.connect_material_expressions(samples[0],'RGB',mul,'A');lib.connect_material_expressions(samples[1],'RGB',mul,'B')
-    double=node(unreal.MaterialExpressionMultiply,-200,0);double.set_editor_property('const_b',2);lib.connect_material_expressions(mul,'',double,'A')
-    product=node(unreal.MaterialExpressionMultiply,0,0);lib.connect_material_expressions(double,'',product,'A');lib.connect_material_expressions(logo,'',product,'B')
-    clamp=node(unreal.MaterialExpressionClamp,200,0);lib.connect_material_expressions(product,'',clamp,'Input')
-    linear=node(unreal.MaterialExpressionPower,400,0);linear.set_editor_property('const_exponent',2.2);lib.connect_material_expressions(clamp,'',linear,'Base');lib.connect_material_property(linear,'',unreal.MaterialProperty.MP_BASE_COLOR)
-    rough=node(unreal.MaterialExpressionConstant,400,200);rough.set_editor_property('r',.9);lib.connect_material_property(rough,'',unreal.MaterialProperty.MP_ROUGHNESS)
-    lib.recompile_material(m);assets.save_loaded_asset(m)
+    from shield_emblem_material import build_shield_material
+    m=build_shield_material(root)
     # Imported emblem meshes must retain the original pattern and logo UV sets.
     c=json.loads((R/'equipment_catalog_v01.json').read_text())['models']
     mesh_editor=unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem)
