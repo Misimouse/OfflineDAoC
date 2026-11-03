@@ -98,6 +98,9 @@ func _ready()->void:
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     combat_visual.configure(JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json"))),JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
+    # Optional local installation rule; keep the original CLI behavior otherwise.
+    # It only filters creation choices, never changes a server class or grants it.
+    if config is Dictionary and config.has("custom_class"):server.custom_class=bool(config.custom_class)
     server.set_meta("external_character_return",Callable(self,"return_to_character_menu"))
     interaction.icon_for_model=Callable(server,"item_icon")
     character_lobby=load(folder.path_join("character_lobby.gd")).new()

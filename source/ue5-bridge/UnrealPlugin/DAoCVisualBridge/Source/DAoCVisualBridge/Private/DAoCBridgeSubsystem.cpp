@@ -599,7 +599,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
         if((ClassicCapturesReady||Elapsed>180)&&Elapsed>(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeClassicVisualTest"))?55:EquipmentTest?70:PoseTest?60:bAutoWalk?60:30)&&!bExiting){Send(TEXT("logout"));bExiting=true;Status=TEXT("Test complete. Saving session...");}
         if(Elapsed>40&&Session.IsEmpty()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
     }
-    if(GEngine)GEngine->AddOnScreenDebugMessage(19727,0,FColor::White,
+    if(GEngine&&!CharacterLobbyOverlay.IsValid())GEngine->AddOnScreenDebugMessage(19727,0,FColor::White,
         FString::Printf(TEXT("DAoC Enhanced | %s | NPC/Mobs: %d | %.0f FPS\n%s\nWASD: run | Shift: walk | Right drag/F3: camera | F4/F5: sensitivity %.2f | Click: target | Tab: nearby enemy | Right click/E: interact | I: inventory | M: map | C: attack | N: sit | Enter: chat | F1: GM protection | F6: combat test | F2: loc | Esc: quit"),*Character,NpcCount,1./FMath::Max(FApp::GetDeltaTime(),.0001),*Status,MouseSensitivity));
     if(Now-LastReport>1){WriteReport();LastReport=Now;}
 }

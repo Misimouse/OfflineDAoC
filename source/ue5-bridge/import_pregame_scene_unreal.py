@@ -4,10 +4,11 @@ from pathlib import Path
 import unreal
 
 root=Path(os.environ['DAOC_BRIDGE_WORKSPACE'])
-folder=Path(os.environ.get('DAOC_BRIDGE_PREGAME_SOURCE',str(root/'SourcePregame_v01')))
+fidelity=os.environ.get('DAOC_BRIDGE_PREGAME_FIDELITY','1')!='0'
+folder=Path(os.environ.get('DAOC_BRIDGE_PREGAME_SOURCE',str(root/('SourcePregame_v02' if fidelity else 'SourcePregame_v01'))))
 folder.mkdir(parents=True,exist_ok=True)
 source=folder/'hibernia_lobby.glb'
-destination='/DAoCVisualBridge/Pregame_v01'
+destination='/DAoCVisualBridge/Pregame_v02' if fidelity else '/DAoCVisualBridge/Pregame_v01'
 assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
 tools=unreal.AssetToolsHelpers.get_asset_tools()
 lib=unreal.MaterialEditingLibrary
@@ -16,10 +17,13 @@ try:
     raw=source.read_bytes();length=struct.unpack_from('<I',raw,12)[0]
     document=json.loads(raw[20:20+length]);binary=raw[28+length:]
     assert sum(document['accessors'][p['indices']]['count']//3 for m in document['meshes'] for p in m['primitives'])==62798
-    assert len(document['meshes'])==1 and len(document['materials'])==28
+    assert len(document['meshes'])==1 and 0<len(document['materials'])<=256
+    sidecar={x['name']:x for x in json.loads(Path(str(source)+'.materials.json').read_text())} if fidelity else {}
     unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous([destination],True)
     meshes=[assets.load_asset(p) for p in assets.list_assets(destination,True,False) if isinstance(assets.load_asset(p),unreal.StaticMesh)]
-    if not meshes or len(meshes[0].get_editor_property('static_materials'))!=len(document['materials']):
+    previous=json.loads((folder/'lobby_import.json').read_text()) if (folder/'lobby_import.json').exists() else {}
+    source_changed=previous.get('source_sha256')!=hashlib.sha256(raw).hexdigest()
+    if not meshes or len(meshes[0].get_editor_property('static_materials'))!=len(document['materials']) or (fidelity and source_changed):
         task=unreal.AssetImportTask();task.filename=str(source);task.destination_path=destination;task.automated=True;task.save=True;task.replace_existing=True
         tools.import_asset_tasks([task])
         meshes=[assets.load_asset(p) for p in assets.list_assets(destination,True,False) if isinstance(assets.load_asset(p),unreal.StaticMesh)]
@@ -36,6 +40,14 @@ try:
         texture=assets.load_asset(path);assert isinstance(texture,unreal.Texture2D);textures.append(texture)
     material_assets={}
     for definition in document['materials']:
+        if fidelity:
+            import sys
+            sys.path.insert(0,str(Path(__file__).parent))
+            from pregame_material_unreal import build
+            name=definition['name'];path=destination+'/M_Layered_'+name
+            material=build(destination,'M_Layered_'+name,sidecar[name],folder)
+            material_assets[name]=material
+            continue
         name=definition['name'];path=destination+'/M_Original_v2_'+name
         material=assets.load_asset(path)
         if material is None:

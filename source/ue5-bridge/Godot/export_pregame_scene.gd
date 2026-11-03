@@ -45,20 +45,31 @@ func run()->void:
     assert(not output.is_empty());export_folder=output.get_base_dir()
     var scene=load("res://game/nif_scene.gd").new();root.add_child(scene)
     assert(scene.load_scene("res://content/pregame/hib/scene.gltf"))
+    var camera:=Camera3D.new();root.add_child(camera)
+    camera.position=Vector3(-.727,-3.81,-4.28);camera.look_at(Vector3(-4.5,-3.865,-1));camera.make_current()
+    # Evaluate source visibility, billboard pivots and the initial animation pose.
+    # Exporting the unposed base mesh left animated roof pieces disconnected.
+    scene.call("_step",0.0)
     var combined:=ArrayMesh.new();var surfaces:=0;var groups:Dictionary={}
     for node in scene.find_children("*","MeshInstance3D",true,false):
         var instance:MeshInstance3D=node
         if instance.mesh==null or not instance.is_visible_in_tree():continue
+        var posed:Mesh=instance.mesh
+        if instance.mesh.get_blend_shape_count()>0:
+            posed=instance.bake_mesh_from_current_blend_shape_mix()
+            assert(posed!=null)
         for surface in instance.mesh.get_surface_count():
             var material:Material=standard(instance.get_active_material(surface))
             var key:=str(material.get_instance_id())
             if material is StandardMaterial3D:
-                key=str(material.albedo_texture.get_instance_id() if material.albedo_texture else 0)+str(material.albedo_color)+str(material.transparency)
+                # Sharing only the base texture discarded distinct light maps and
+                # vertex/alpha settings. Keep the complete original surface identity.
+                key=JSON.stringify(material.get_meta("source_spec",{}),"",true)+JSON.stringify(material.get_meta("source_layers",{}),"",true)
             if not groups.has(key):
                 material.resource_name="PGM%03d" % groups.size()
                 export_materials.append({"name":material.resource_name,"spec":material.get_meta("source_spec",{}),"layers":material.get_meta("source_layers",{})})
                 var builder:=SurfaceTool.new();builder.begin(Mesh.PRIMITIVE_TRIANGLES);builder.set_material(material);groups[key]=builder
-            groups[key].append_from(instance.mesh,surface,instance.global_transform)
+            groups[key].append_from(posed,surface,instance.global_transform)
     assert(groups.size()<=256)
     for builder in groups.values():builder.commit(combined);surfaces+=1
     var holder:=Node3D.new();root.add_child(holder);holder.name="Original_Hibernia_Lobby"

@@ -16,7 +16,12 @@ func refresh(server:Node)->void:
     if not enabled or server.playing:return
     roster=[];choices=[]
     for c in server.characters_in(realm):
-        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":String(c.get("class_name","")),"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"overview":c.get("server",{}).duplicate(true)})
+        var caption:=String(c.get("class_name",""))
+        # Some overview packets omit a base-class caption. The numeric class is
+        # still authoritative; do not render an incomplete "NAME THE" heading.
+        if caption.is_empty():
+            caption=String({51:"Magician",52:"Guardian",53:"Naturalist",54:"Stalker",57:"Forester"}.get(int(c.get("class_id",0)),""))
+        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"overview":c.get("server",{}).duplicate(true)})
     for race_name in ["Celt","Firbolg","Elf","Lurikeen","Sylvan"]:
         var race_id:int=int(server.RACE_BY_NAME[race_name])
         for female in [false,true]:

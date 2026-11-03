@@ -28,6 +28,7 @@ class UTexture2D;
 class UTextureRenderTarget2D;
 class USceneCaptureComponent2D;
 struct FSlateBrush;
+struct FButtonStyle;
 class AHUD;
 class UCanvas;
 struct FCompositeFont;
@@ -427,6 +428,7 @@ private:
     double GeometryUpdateAfter=0;
     TSet<TWeakObjectPtr<UStaticMeshComponent>> CollisionScannedSources;
     TMap<TWeakObjectPtr<UStaticMeshComponent>,TArray<TWeakObjectPtr<AActor>>> CollisionSourceActors;
+    TArray<TSharedPtr<FButtonStyle>> CharacterLobbyButtonStyles;
     FString ZoneLightSignature;
     TArray<TWeakObjectPtr<AActor>> ZoneLightActors;
     void ApplyZoneLights(const TSharedPtr<FJsonObject>& Snapshot);
