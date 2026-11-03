@@ -13,6 +13,8 @@ def write():output.write_text(json.dumps(report,indent=2),encoding='utf-8')
 try:
     data=json.loads((ROOT/'SourceArmour/exported.json').read_text(encoding='utf-8-sig'))
     models=json.loads((ROOT/'models.json').read_text(encoding='utf-8-sig'))
+    additional=ROOT/'models_additional_figures_candidate.json'
+    if additional.exists():models.update(json.loads(additional.read_text(encoding='utf-8-sig')))
     source=json.loads((ROOT/'SourceArmour/textures.json').read_text(encoding='utf-8-sig'))
     library='/DAoCVisualBridge/ModularArmor_v01'
     textures={};tasks=[]
@@ -51,9 +53,10 @@ try:
         meshes=[m for m in meshes if isinstance(m,unreal.SkeletalMesh)]
         assert len(meshes)==1,(race,len(meshes))
         mesh=meshes[0];skeleton=mesh.get_editor_property('skeleton')
-        base_id={'cel_m':'1984','cel_f':'310','elf_m':'382','elf_f':'388','fir_m':'352','fir_f':'1983','lur_m':'318','lur_f':'378','syl_m':'700'}.get(race)
+        base_id={'cel_m':'1984','cel_f':'310','elf_m':'382','elf_f':'388','fir_m':'352','fir_f':'1983','lur_m':'318','lur_f':'378','syl_m':'700','syl_f':'708'}.get(race)
+        original_asset=previous.get(race,{}).get('original_asset',models[base_id]['asset'] if base_id else '')
         if base_id:
-            original=unreal.load_asset(models[base_id]['asset']).get_editor_property('skeleton')
+            original=unreal.load_asset(original_asset).get_editor_property('skeleton')
             skeleton.add_compatible_skeleton(original);assets.save_loaded_asset(skeleton)
         sections=[]
         for index,slot_material in enumerate(mesh.get_editor_property('materials')):
@@ -61,7 +64,7 @@ try:
             descriptor=next((s for s in row['sections'] if s['material']==name),None)
             assert descriptor,(race,index,name)
             sections.append(dict(descriptor,index=index))
-        report['races'][race]={'asset':mesh.get_path_name(),'skeleton':skeleton.get_path_name(),'base_id':base_id,'original_asset':models[base_id]['asset'] if base_id else '', 'sections':sections,'clothes':row['clothes'],'variants':row['variants'],'source_sha256':source_sha}
+        report['races'][race]={'asset':mesh.get_path_name(),'skeleton':skeleton.get_path_name(),'base_id':base_id,'original_asset':original_asset,'sections':sections,'clothes':row['clothes'],'variants':row['variants'],'source_sha256':source_sha}
         write()
     armour={'figures':{v['asset']:dict(v,gender='f' if k.endswith('_f') else 'm') for k,v in report['races'].items()},'models':source['models'],'textures':textures,'material':material.get_path_name(),'missing_textures':source['missing']}
     equipment=json.loads((ROOT/'equipment_catalog_v01.json').read_text(encoding='utf-8-sig'));armour['dyes']=equipment.get('dyes',{});equipment['armour']=armour

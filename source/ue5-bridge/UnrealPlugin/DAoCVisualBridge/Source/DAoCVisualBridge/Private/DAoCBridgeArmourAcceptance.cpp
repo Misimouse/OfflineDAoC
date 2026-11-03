@@ -23,6 +23,7 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
     static bool Ran=false;static double Started=0;static int32 Checks=0;static TArray<TSharedPtr<FJsonValue>> Failures;static TSharedPtr<FJsonObject> Report;
     auto Check=[&](bool Ok,const FString& Label){++Checks;if(!Ok)Failures.Add(MakeShared<FJsonValueString>(Label));};
     FString Capture;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCapture="),Capture);
+    FString CaptureFigure=TEXT("1984");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureFigure="),CaptureFigure);
     if(!Ran){
         Ran=true;Started=FPlatformTime::Seconds();Report=MakeShared<FJsonObject>();Check(Socket==nullptr,TEXT("no live session"));Check(ArmourCatalog.IsValid(),TEXT("original armour catalogue loaded"));
         const TSharedPtr<FJsonObject>* Figures=nullptr;
@@ -45,8 +46,8 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
             for(int32 N=0;N<4;++N){auto Piece=MakeShared<FJsonObject>();Piece->SetNumberField(TEXT("slot"),PartSlots[N]);Piece->SetNumberField(TEXT("model"),PartModels[N]);Worn.Add(MakeShared<FJsonValueObject>(Piece));Gear->SetArrayField(TEXT("items"),Worn);ApplyBodyArmour(Actor,Gear);bool Textured=false;for(auto V:Sections){auto S=V->AsObject();const int32 Index=S->GetIntegerField(TEXT("index"));if(S->GetStringField(TEXT("slot"))==PartNames[N]&&Body->IsMaterialSectionShown(Index,0)){UTexture* Image=nullptr;if(auto* Material=Body->GetMaterial(Index))Textured|=Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("ArmorTexture")),Image)&&Image!=nullptr;}}Check(Textured,TEXT("original equipment slot dresses ")+FString(PartNames[N]));}
             FString Idle;(*Base)->TryGetStringField(TEXT("idle"),Idle);auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Idle);if(Clip){Body->PlayAnimation(Clip,true);Body->TickAnimation(.1f,false);Body->RefreshBoneTransforms();}
             Check(Clip&&Body->GetSingleNodeInstance()&&Body->GetSingleNodeInstance()->GetAnimationAsset()==Clip,TEXT("original animation runs on the modular figure"));
-            if(BaseId==TEXT("1984")&&!Capture.IsEmpty()){
-                Entities.Add(TEXT("player:local"),Actor);InventoryState=Gear;InventoryState->SetNumberField(TEXT("state_revision"),1);UpdateClassicDoll();
+            if(BaseId==CaptureFigure&&!Capture.IsEmpty()){
+                Entities.Add(TEXT("player:local"),Actor);EntityModels.Add(TEXT("player:local"),FCString::Atoi(*BaseId));InventoryState=Gear;InventoryState->SetNumberField(TEXT("state_revision"),1);UpdateClassicDoll();
                 auto* Doll=Cast<ASkeletalMeshActor>(ClassicDollActor);bool Same=Doll!=nullptr;
                 if(Doll)for(auto V:Sections){const int32 Index=V->AsObject()->GetIntegerField(TEXT("index"));Same&=Doll->GetSkeletalMeshComponent()->IsMaterialSectionShown(Index,0)==Body->IsMaterialSectionShown(Index,0);}
                 Check(Same,TEXT("independent preview copies worn section visibility"));

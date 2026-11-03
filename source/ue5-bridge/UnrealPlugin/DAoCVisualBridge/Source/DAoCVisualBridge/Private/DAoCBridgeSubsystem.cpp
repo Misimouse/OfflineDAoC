@@ -143,7 +143,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){ClearSpellVisuals();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){RemoveCharacterLobby();ClearSpellVisuals();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -220,13 +220,18 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     if(!M->TryGetStringField(TEXT("session"),S)||S!=Session||!M->TryGetNumberField(TEXT("seq"),Seq)||Seq<=Sequence||
        !M->TryGetNumberField(TEXT("zone_id"),Zone)||Zone!=207||!M->TryGetArrayField(TEXT("entities"),Rows)||Rows->Num()>2048||
        !M->TryGetArrayField(TEXT("origin_m"),Origin)||!ValidPoint(*Origin,3)||(*Origin)[0]->AsNumber()!=1364||(*Origin)[1]->AsNumber()!=130||(*Origin)[2]->AsNumber()!=1263)return;
+    bool InGame=false;M->TryGetBoolField(TEXT("in_game"),InGame);const TSharedPtr<FJsonObject>* Lobby=nullptr;
+    if(M->TryGetObjectField(TEXT("character_lobby"),Lobby))ApplyCharacterLobby(*Lobby,InGame);
+    if(!CharacterLobbyOverlay.IsValid()){
     const TSharedPtr<FJsonObject>* Interaction=nullptr;
     if(M->TryGetObjectField(TEXT("interaction"),Interaction))ApplyInteraction(*Interaction);
     const TSharedPtr<FJsonObject>* Inventory=nullptr;
     if(M->TryGetObjectField(TEXT("inventory"),Inventory))ApplyInventory(*Inventory);
     const TSharedPtr<FJsonObject>* PlayerStatus=nullptr;if(M->TryGetObjectField(TEXT("player_status"),PlayerStatus))ApplyPlayerStatus(*PlayerStatus);
     const TSharedPtr<FJsonObject>* Classic=nullptr;if(M->TryGetObjectField(TEXT("classic_ui"),Classic))ApplyClassicUI(*Classic);
-    ApplyChat(M);ApplyZoneLights(M);
+    ApplyChat(M);
+    }
+    ApplyZoneLights(M);
     Sequence=static_cast<int64>(Seq);LastSnapshot=FPlatformTime::Seconds();TSet<FString> Seen;NpcCount=0;
     M->TryGetStringField(TEXT("character"),Character);M->TryGetStringField(TEXT("status"),Status);
     double Speed=0;if(M->TryGetNumberField(TEXT("max_speed_mps"),Speed)&&FMath::IsFinite(Speed))ServerRunSpeed=FMath::Clamp(float(Speed*100),0.f,1432.5f);
@@ -305,6 +310,7 @@ void UDAoCBridgeSubsystem::SetMouseLook(bool Enabled){
     bMouseLook=Enabled;
 }
 void UDAoCBridgeSubsystem::UpdateControls(float Dt){
+    if(CharacterLobbyOverlay.IsValid())return;
     APlayerController* PC=GetWorld()->GetFirstPlayerController();if(!PC||!bHavePlayer)return;
     if(!PlayerPawn){
         if(APawn* Old=PC->GetPawn()){
@@ -528,6 +534,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     UpdateUILayout();
     UpdateChatInput();
     if(TickViewportAcceptance())return;
+    if(TickCharacterLobbyAcceptance())return;
     if(TickClassicAcceptance())return;
     if(TickCombatVisualAcceptance())return;
     if(TickArmourAcceptance())return;

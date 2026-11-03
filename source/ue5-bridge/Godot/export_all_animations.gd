@@ -56,6 +56,8 @@ func standard(original:Material)->Material:
 	return m
 func run()->void:
 	var base:String=get_script().resource_path.get_base_dir().path_join("../SourceAnimations_v02")
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--output="):base=arg.trim_prefix("--output=")
 	export_folder=base
 	var tasks=JSON.parse_string(FileAccess.get_file_as_string(base.path_join("tasks.json")))
 	var results:Array=[];var limit:int=tasks.size();var only_ids:PackedStringArray=[]

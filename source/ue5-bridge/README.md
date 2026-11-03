@@ -35,6 +35,8 @@ Do not run all installer or live-test scripts blindly. An installer may target a
 
 ## Implemented snapshot
 
+- Hibernia character selection and creation use the original server roster and race/class/name rules. New characters start with default appearance and class-based starting attributes. The launcher normally opens this menu; `--character=<name>` retains direct entry and `--character-menu` explicitly requests selection. Game access still targets the Connacht laboratory. Apply the accompanying realm-queue update and `character_list_pending()` helper in `source/new-client/godot/game/net/server.gd` when porting this menu; preserve any unrelated local changes to that script.
+
 - Shared input: idle right-drag orbit, two-button forward movement, wheel zoom and F11 first-person view. Death and seated facing remain locked.
 - Original zone point-light positions, colours and radii travel independently of NPCs and buildings. Unreal creates bounded, shadowless transient lights; brightness is an engine approximation, and day/night scaling remains pending. The current gateway is still restricted to zone 207.
 - Merchant windows block world selection across their scrollbar. NPC conversations use one head bubble with keyword replies. Door fixtures survive streamed actor renaming through spatial matching, and private colliders follow level load/unload. Door geometry/catalogue generation is still required when adding another region.
@@ -47,7 +49,7 @@ Do not run all installer or live-test scripts blindly. An installer may target a
 
 Run `prepare_merchant_ui.py` alongside the existing classic UI asset preparation to include the merchant skin. The merchant uses the same item icon sheets as the inventory.
 
-The current bridge also includes an independent, frozen inventory figure with rotation controls, explicit equip/unequip actions and the original merchant window layout, icon lookup and coin fields. Original-server tests cover equipment moves, purchasing, selling and the horse-ticket icon. Modular armour supports the nine Hibernian figures already exported for Connacht, with original textures, mesh variants and animation skeletons; helmets, cloaks and individual character face/hair customization remain separate work. Two texture names are absent in the source content.
+The current bridge also includes an independent, frozen inventory figure with rotation controls, explicit equip/unequip actions and the original merchant window layout, icon lookup and coin fields. Original-server tests cover equipment moves, purchasing, selling and the horse-ticket icon. Modular armour supports the ten Hibernian figures already exported for Connacht, with original textures, mesh variants and animation skeletons; helmets, cloaks and individual character face/hair customization remain separate work. Two texture names are absent in the source content.
 
 To generate the optional modular armour library, run `Godot/export_modular_armor.gd` with the local Godot project and output path, then `prepare_modular_armor.py` and `import_modular_armor_unreal.py` in the private Unreal host. Inspect and test the generated candidate catalogues before activating them. Imported assets stay out of Git.
 
@@ -60,6 +62,8 @@ Before export, the local installed client passed 236 spell/permanent-weapon-effe
 The 3 November input/lighting correction passed 313 UI/inventory/combat/posture/equipment checks, 72 native window/input checks, 23 Godot transport checks and 21 world-message checks. A read-only replay of the actual streamed Connacht map found both Ardee door groups and all 28 source point lights; matching interior captures were compared with those lights disabled/enabled. These are automated/replay checks, not a claim of complete play validation. Character trail reduction still needs a real movement review.
 
 Source-package validation is recorded separately in `SOURCE-VALIDATION.md`. Native asset-dependent suites need regenerated local catalogues/fixtures; a clean source checkout alone does not provide them. Ardee FPS are not certified by the empty-scene render or headless tests. Earlier measurements were contended by other editor processes.
+
+The character-menu addition was checked separately: 16 lobby rules, 7 original-server realm-queue regressions, 13 native menu checks, a rendered TCP snapshot replay, six disposable-server creation/entry checks and 142 ten-figure armour checks (144 with the Sylvan female preview). The 313 general regressions and 72 window/input checks also passed. The realm queue now accepts an authoritative reply even when a locked account returns a different realm; creation stays disabled until initial roster requests finish.
 
 ## Upstream and maintenance
 

@@ -98,6 +98,16 @@ private:
     TWeakObjectPtr<AActor> EquipmentActor;
     TSharedPtr<FJsonObject> EquipmentCatalog;
     TSharedPtr<FJsonObject> ArmourCatalog;
+    TSharedPtr<FJsonObject> CharacterLobbyState;
+    TSharedPtr<SWidget> CharacterLobbyOverlay,CharacterLobbyPanel;
+    FString CharacterLobbyName,CharacterLobbyRace=TEXT("Celt"),CharacterLobbyChoice,CharacterLobbySelected;
+    bool bCharacterLobbyFemale=false;
+    int64 CharacterLobbyRevision=-1;
+    void ApplyCharacterLobby(TSharedPtr<FJsonObject> State,bool InGame);
+    void RefreshCharacterLobby();
+    void RemoveCharacterLobby();
+    void SendCharacterAction(const FString& Action);
+    bool TickCharacterLobbyAcceptance();
     void ApplyBodyArmour(AActor* Actor,TSharedPtr<FJsonObject> Equipment);
     FString EquipmentFingerprint;
     int32 EquipmentMissingModels=0,EquipmentMissingBones=0;

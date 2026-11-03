@@ -315,6 +315,10 @@ func _pump() -> void:
 	client.call("RequestCharacters", int(REALM_IDS.get(_asking, 0)))
 
 
+func character_list_pending() -> bool:
+	return _asking != "" or not _want.is_empty()
+
+
 func characters_in(realm: String) -> Array:
 	return characters.get(realm, [])
 
@@ -323,7 +327,8 @@ func _on_characters(realm_id: int, list: Array) -> void:
 	var key := _asking if _asking != "" else String(REALM_KEYS.get(realm_id, ""))
 	if not list.is_empty():                                 # the characters' own realm decides
 		key = String(REALM_KEYS.get(int(list[0].get("realm", 0)), key))
-	if key == _asking or protocol_profile == "lab":
+	# The reply also completes the request when a realm-locked account returns another realm.
+	if key == _asking or realm_id == int(REALM_IDS.get(_asking, -1)) or protocol_profile == "lab":
 		_asking = ""
 	_pump.call_deferred()
 	if key == "":

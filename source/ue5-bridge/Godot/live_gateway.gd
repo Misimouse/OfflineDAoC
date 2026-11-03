@@ -4,6 +4,8 @@ var transport:Node
 var adapter:Node
 var interaction:RefCounted
 var inventory:RefCounted
+var character_lobby:RefCounted
+var local_model_id:=0
 var vault:RefCounted
 var player_state:RefCounted
 var combat_visual:RefCounted
@@ -95,6 +97,10 @@ func _ready()->void:
     combat_visual.configure(JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json"))),JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
     interaction.icon_for_model=Callable(server,"item_icon")
+    character_lobby=load(folder.path_join("character_lobby.gd")).new()
+    character_lobby.enabled="--bridge-character-menu" in OS.get_cmdline_user_args()
+    character_lobby.enter_requested.connect(enter_character)
+    server.created.connect(func(ok,why):character_lobby.refresh(server);character_lobby.creation_result(ok,why))
     item_db=load("res://game/ui/item_db.gd");assert(item_db!=null)
     var collisions=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../collision_catalog.json")))
     if collisions is Dictionary:
@@ -122,6 +128,8 @@ func _ready()->void:
 
 func characters_ready(realm:String)->void:
     if realm!="hib" or entered:return
+    character_lobby.refresh(server)
+    if character_lobby.enabled:return
     var list:Array=server.characters_in("hib")
     if list.is_empty():status="No Hibernia characters available";write_report();return
     var chosen:Dictionary=list[0]
@@ -130,6 +138,16 @@ func characters_ready(realm:String)->void:
             var desired:=arg.trim_prefix("--bridge-character=")
             for c in list:
                 if String(c.name).nocasecmp_to(desired)==0:chosen=c;break
+    enter_character(chosen)
+
+func enter_character(chosen:Dictionary)->void:
+    if entered or server.playing:return
+    var task_file:String=folder.path_join("../SourceModels/tasks.json")
+    if FileAccess.file_exists(task_file):
+        var tasks=JSON.parse_string(FileAccess.get_file_as_string(task_file))
+        if tasks is Array:
+            for task in tasks:
+                if String(task.get("info",{}).get("race",""))==String(chosen.get("prefix","")):local_model_id=int(task.id);break
     adapter.player_level=int(chosen.get("level",1));adapter.player_realm=3
     entered=true;character_name=chosen.name
     var legacy:String=server.quickbars_path(character_name)
@@ -214,6 +232,8 @@ func world_event(kind:String,data:Dictionary)->void:
 func command(value:Dictionary)->void:
     var action:=String(value.get("action",""))
     if action=="logout":request_logout();return
+    if action in ["character_enter","character_create","character_refresh"]:
+        character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
     if action=="vault_close":vault.close(value);sync_inventory(Time.get_ticks_msec());return
     if action=="conc_cancel":
@@ -374,7 +394,7 @@ func _process(_delta:float)->void:
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             var angle:=-float(heading)*TAU/4096.0
             var health:=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
-            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":0,
+            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":local_model_id,
                 "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"state":"dead" if player_state.ready and health<=0 else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)
@@ -395,6 +415,7 @@ func _process(_delta:float)->void:
         if chat_state!=null:transport.snapshot_metadata["chat"]=chat_state.snapshot()
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
+        transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states
@@ -406,6 +427,7 @@ func _process(_delta:float)->void:
         player_snapshot["release"]=release_state.snapshot()
         transport.snapshot_metadata["player_status"]=player_snapshot
         transport.publish(rows,207,"live-offlinedaoc")
+    character_lobby.tick(now,server)
     if now-last_report>1000:last_report=now;write_report()
 
 func sync_party(now:int)->void:
@@ -482,6 +504,7 @@ func write_report()->void:
     report["test_region_return"]={"attempts":test_return_attempts,"last_at_ms":test_return_at,"entry_revision":entry_revision}
     report["inventory"]={"slots":inventory.items.size(),"revision":inventory.state_revision,"requests":inventory.requests,"rejected":inventory.rejected,"pending":not inventory.pending.is_empty(),"feedback":inventory.feedback}
     report["combat_visual"]={"packets":combat_visual.packets,"emitted":combat_visual.emitted,"suppressed_ranged":combat_visual.suppressed_ranged}
+    report["character_lobby"]=character_lobby.snapshot()
     report["player_status"]=player_state.snapshot();report["player_status_events"]=player_state.status_events;report["attack_mode_events"]=player_state.mode_events;report["combat_events"]=player_state.combat_events;report["player_state_requests"]=player_state.requests;report["player_state_rejected"]=player_state.rejected
     if adapter.record_motion and not server.playing and ever_played:
         var trace:=FileAccess.open(folder.path_join("../Reports/movement/server_trace.json"),FileAccess.WRITE)

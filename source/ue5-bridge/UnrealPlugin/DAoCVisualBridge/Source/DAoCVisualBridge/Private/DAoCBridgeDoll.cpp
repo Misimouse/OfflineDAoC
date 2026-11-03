@@ -36,7 +36,7 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
         ClassicDollActor=Doll;ClassicDollSignature=Signature;Doll->SetActorScale3D(Local->GetActorScale3D());Doll->SetActorEnableCollision(false);
         for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Doll);Doll->AddInstanceComponent(Light);Light->SetupAttachment(Doll->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(180,150,200):FVector(-150,-100,130));Light->SetIntensity(I==0?12000.f:6000.f);Light->SetAttenuationRadius(500);Light->SetCastShadows(false);Light->RegisterComponent();}
         auto* Body=Doll->GetSkeletalMeshComponent();Body->SetSkeletalMesh(Original->GetSkeletalMeshAsset());Body->SetRelativeTransform(Original->GetRelativeTransform());Body->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-        auto* Definition=ModelCatalog.Find(TEXT("0"));const FString Idle=Definition?DollString(*Definition,TEXT("idle")):TEXT("");
+        auto* Definition=ModelCatalog.Find(FString::FromInt(EntityModels.FindRef(TEXT("player:local"))));const FString Idle=Definition?DollString(*Definition,TEXT("idle")):TEXT("");
         if(!Idle.IsEmpty())if(auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Idle))Body->PlayAnimation(Clip,false);
         Body->TickAnimation(0,false);Body->RefreshBoneTransforms();Body->bPauseAnims=true;Body->SetComponentTickEnabled(false);DollMaterials(Original,Body);
         TArray<UMeshComponent*> Components;Local->GetComponents(Components);

@@ -21,6 +21,8 @@ bool equipmentTesting=args.Contains("--equipment-test");
 bool classicTesting=args.Contains("--ui-test");
 string catalogFile=Path.Combine(root,poseTesting?"models_combat_samples.json":"models.json");
 string? character=args.FirstOrDefault(a=>a.StartsWith("--character="))?.Split('=',2)[1];
+bool menuTesting=args.Contains("--menu-test");
+bool characterMenu=menuTesting||args.Contains("--character-menu")||(character==null&&!probe&&!sessionOnly&&!args.Any(a=>a.EndsWith("-test")));
 // Do not read, print, copy or rewrite the credential file. Invoke the normal launcher's provider.
 string runtime=Path.Combine(install,"runtime");
 if(!File.Exists(Path.Combine(runtime,"account.txt")))throw new InvalidOperationException("Use the normal launcher to create the local account first.");
@@ -47,6 +49,7 @@ godotStart.Environment["APPDATA"]=Path.Combine(reports,"isolated-save");
 foreach(var value in new[]{"--headless","--path",Path.Combine(install,"new-client/godot"),"--script",Path.Combine(root,"Godot/gateway_main.gd"),"--","--server=127.0.0.1","--no-world","--account="+account,"--password="+password})godotStart.ArgumentList.Add(value);
 if(args.Contains("--record-motion"))godotStart.ArgumentList.Add("--bridge-motion-record");
 if(character!=null)godotStart.ArgumentList.Add("--bridge-character="+character);
+if(characterMenu)godotStart.ArgumentList.Add("--bridge-character-menu");
 if(args.Contains("--door-test"))godotStart.ArgumentList.Add("--bridge-door-test");
 if(args.Contains("--shack-door-test")||args.Contains("--interaction-test"))godotStart.ArgumentList.Add("--bridge-shack-door-test");
 using var godot=new Process{StartInfo=godotStart};
@@ -54,22 +57,23 @@ using var godot=new Process{StartInfo=godotStart};
 godot.OutputDataReceived+=(_,_)=>{};godot.ErrorDataReceived+=(_,_)=>{};
 godot.Start();godot.BeginOutputReadLine();godot.BeginErrorReadLine();
 account="";password="";
-Console.WriteLine("Godot session started. Waiting for the Hibernia character...");
+Console.WriteLine(characterMenu?"Connecting to character selection...":"Godot session started. Waiting for the Hibernia character...");
 Process? unreal=null;
 try{
     var deadline=DateTime.UtcNow.AddSeconds(80);bool ready=false;
     while(DateTime.UtcNow<deadline&&!godot.HasExited){
         try{
             using var report=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(reports,"godot_session.json")));
-            if(report.RootElement.GetProperty("playing").GetBoolean()&&report.RootElement.GetProperty("zone").GetInt32()==207){ready=true;break;}
+            if(characterMenu&&report.RootElement.TryGetProperty("character_lobby",out var lobby)&&lobby.TryGetProperty("ready",out var menuReady)&&menuReady.GetBoolean()){ready=true;break;}
+            if(!characterMenu&&report.RootElement.GetProperty("playing").GetBoolean()&&report.RootElement.GetProperty("zone").GetInt32()==207){ready=true;break;}
         }catch(IOException){}catch(JsonException){}
         await Task.Delay(500);
     }
-    if(!ready){Console.WriteLine("Session did not enter Connacht. See the sanitized session status.");return;}
-    Console.WriteLine("Connected to Connacht.");
+    if(!ready){Console.WriteLine("The character session did not become ready. See the sanitized session status.");return;}
+    Console.WriteLine(characterMenu?"Character selection ready.":"Connected to Connacht.");
     // Pick the available base race matching the real selected character.
     // Equipment and face customization remain a separate visual integration step.
-    using(var state=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(reports,"godot_session.json")))){
+    if(!characterMenu)using(var state=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(reports,"godot_session.json")))){
         string prefix=state.RootElement.GetProperty("player_prefix").GetString()??"";
         using var tasks=JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root,"SourceModels/tasks.json")));
         var catalog=System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(catalogFile))!.AsObject();
@@ -88,9 +92,10 @@ try{
     var start=new ProcessStartInfo(Path.Combine(Environment.GetEnvironmentVariable("DAOC_UE_ENGINE") ?? @"C:\Program Files\Epic Games\UE_5.8\Engine","Binaries/Win64/UnrealEditor.exe")){
         WorkingDirectory=Path.GetDirectoryName(project)!,UseShellExecute=false
     };
-    foreach(var value in new[]{project,"/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba","-game","-DaocBridge","-windowed","-ResX=1920","-ResY=1080","-d3d11","-nosplash",
+    foreach(var value in new[]{project,menuTesting?"/Engine/Maps/Entry":"/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba","-game","-DaocBridge","-windowed","-ResX=1920","-ResY=1080","-d3d11","-nosplash",
         "-DaocBridgeHeights="+Path.Combine(install,"new-client/godot/content/zones/zone207/heights.f32"),
         "-DaocBridgeCatalog="+catalogFile,"-DaocBridgeReport="+Path.Combine(reports,"unreal_session.json")})start.ArgumentList.Add(value);
+    if(menuTesting)start.ArgumentList.Add("-DaocBridgeCharacterLobbyLiveProbe="+Path.Combine(root,"Reports/character_lobby/live_menu.json"));
     start.ArgumentList.Add("-DaocBridgeCollisionCatalog="+Path.Combine(root,"collision_catalog.json"));
     if(args.Contains("--motion-test"))start.ArgumentList.Add("-DaocBridgeRemoteMotionProbe="+Path.Combine(root,"Reports/movement/live_visual_samples.json"));
     if(args.Contains("--interaction-test"))start.ArgumentList.Add("-DaocBridgeAutoInteractionTest");
