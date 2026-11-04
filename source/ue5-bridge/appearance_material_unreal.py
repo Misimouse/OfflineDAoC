@@ -38,6 +38,11 @@ def build_appearance_material(root,name,texture,cutout=False):
         detail=node(unreal.MaterialExpressionDivide,-900,1300);link(base,'RGB',detail,'A');link(floor,'',detail,'B')
         restored=node(unreal.MaterialExpressionMultiply,-650,1200);link(reference,'RGB',restored,'A');link(detail,'',restored,'B')
         enabled=node(unreal.MaterialExpressionScalarParameter,-650,1450);enabled.set_editor_property('parameter_name','HasOriginalColor');enabled.set_editor_property('default_value',0)
+        # Some enhanced exports are fully opaque. Their alpha cannot identify
+        # bare skin. The source texture retains the original clothing mask.
+        source_alpha=node(unreal.MaterialExpressionLinearInterpolate,-1400,180)
+        link(base,'A',source_alpha,'A');link(reference,'A',source_alpha,'B');link(enabled,'',source_alpha,'Alpha')
+        link(source_alpha,'',mask,'Value')
         colour=node(unreal.MaterialExpressionLinearInterpolate,-450,1100);link(base,'RGB',colour,'A');link(restored,'',colour,'B');link(enabled,'',colour,'Alpha')
     tinted=node(unreal.MaterialExpressionMultiply,-450,0);link(colour,'RGB' if colour==base else '',tinted,'A');link(choose,'',tinted,'B')
     has_eye=node(unreal.MaterialExpressionScalarParameter,-1200,530);has_eye.set_editor_property('parameter_name','HasEye');has_eye.set_editor_property('default_value',0)

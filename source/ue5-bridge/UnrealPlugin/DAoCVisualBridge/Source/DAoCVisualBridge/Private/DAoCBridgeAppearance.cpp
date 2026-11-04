@@ -52,6 +52,11 @@ bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<F
     auto Attach=[Actor,Parent](USkeletalMesh* Mesh){auto* C=NewObject<USkeletalMeshComponent>(Actor,NAME_None,RF_Transient);Actor->AddInstanceComponent(C);C->SetSkeletalMesh(Mesh);C->SetupAttachment(Parent);C->SetRelativeTransform(FTransform::Identity);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCanEverAffectNavigation(false);C->SetCastShadow(false);C->RegisterComponent();C->SetLeaderPoseComponent(Parent,false,true);C->SetForcedLOD(1);C->SetTextureForceResidentFlag(true);return C;};
     auto* Head=Attach(HeadMesh);Head->ComponentTags.Add(TEXT("DAoCBridgeAppearanceHead"));Head->SetVisibility(!FullHelmet);auto* Material=UMaterialInstanceDynamic::Create(Master,Head);Material->SetTextureParameterValue(TEXT("FigureTexture"),FaceTexture);
     auto Tones=Arr(Meta,TEXT("skin_tones"));FLinearColor Skin=FLinearColor::White;if(!Tones.IsEmpty())Skin=Tint(Tones[FMath::Clamp(Num(Look,TEXT("skin")),0,Tones.Num()-1)]->AsArray(),true);
+    // Keep the original saved tone index and palette metadata. An optional
+    // display calibration reduces excessive tint chroma at equal luminance.
+    double Chroma=1;Figure->TryGetNumberField(TEXT("skin_tint_chroma"),Chroma);
+    const float Luma=.2126f*Skin.R+.7152f*Skin.G+.0722f*Skin.B;
+    Skin=FMath::Lerp(FLinearColor(Luma,Luma,Luma,1),Skin,float(FMath::Clamp(Chroma,0.,1.)));
     Material->SetVectorParameterValue(TEXT("FigureTint"),Skin);SourceColour(Material,Str(Face,TEXT("tex")),FaceTexture);
     // Original alpha-masked starter clothes expose skin on hands/arms on some
     // races. Real equipped armour keeps its separate dye/material behaviour.
@@ -99,6 +104,6 @@ void ConfigureCharacterPreviewCapture(USceneCaptureComponent2D* Capture){
     PP.bOverride_AutoExposureApplyPhysicalCameraExposure=true;PP.AutoExposureApplyPhysicalCameraExposure=false;
     PP.bOverride_AutoExposureBias=true;PP.AutoExposureBias=0;
     PP.AmbientCubemap=LoadObject<UTextureCube>(nullptr,TEXT("/DAoCVisualBridge/AppearanceColour_v02/T_CharacterAmbient.T_CharacterAmbient"));
-    PP.bOverride_AmbientCubemapIntensity=true;PP.AmbientCubemapIntensity=1;
+    PP.bOverride_AmbientCubemapIntensity=true;PP.AmbientCubemapIntensity=.75f;
     PP.bOverride_AmbientCubemapTint=true;PP.AmbientCubemapTint=FLinearColor::White;
 }
