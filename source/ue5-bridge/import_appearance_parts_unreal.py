@@ -5,7 +5,10 @@ import unreal,sys
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from densify_appearance_morphs import densify,moving_morph_names
 R=Path(os.environ.get('DAOC_BRIDGE_WORKSPACE',Path(__file__).resolve().parent));D=R/'Reports/appearance';D.mkdir(parents=True,exist_ok=True)
-A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();library='/DAoCVisualBridge/Appearance_v02'
+A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();library=os.environ.get('DAOC_APPEARANCE_LIBRARY','/DAoCVisualBridge/Appearance_v02')
+assert library.startswith('/DAoCVisualBridge/') and '..' not in library
+expected_figures=int(os.environ.get('DAOC_APPEARANCE_EXPECTED_FIGURES','10'));expected_parts=int(os.environ.get('DAOC_APPEARANCE_EXPECTED_PARTS','62'))
+assert expected_figures>0 and expected_parts>=expected_figures
 report={'passed':False,'installed':False,'parts':{},'errors':[],'active_catalogues_changed':False}
 def write():(D/'import_parts.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 try:
@@ -33,8 +36,8 @@ try:
    figure['parts'][part]=entry;report['parts'][key]=entry
    if len(report['parts'])%10==0:write();unreal.SystemLibrary.collect_garbage()
   catalog['figures'][str(row['base_id'])]=figure
- assert len(catalog['figures'])==10 and len(report['parts'])==62
+ assert len(catalog['figures'])==expected_figures and len(report['parts'])==expected_parts
  assert before==[hashlib.sha256(p.read_bytes()).hexdigest() for p in guarded]
- (R/'appearance_catalog_candidate.json').write_text(json.dumps(catalog,indent=2),encoding='utf-8');report['figures']=10;report['morph_targets']=sum(len(p['morphs']) for p in report['parts'].values());report['passed']=True
+ (R/'appearance_catalog_candidate.json').write_text(json.dumps(catalog,indent=2),encoding='utf-8');report['figures']=expected_figures;report['morph_targets']=sum(len(p['morphs']) for p in report['parts'].values());report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
 write();assert report['passed'],report['errors']
