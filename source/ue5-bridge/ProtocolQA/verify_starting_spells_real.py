@@ -6,6 +6,8 @@ import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47,39,58,62],required=True)
 parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,50])
 parser.add_argument('--expansion-proposal',type=Path)
+parser.add_argument('--career-proposal',type=Path)
+parser.add_argument('--expansion-power',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
@@ -20,6 +22,8 @@ training_mode=args.bainshee_training or args.expansion_training
 training_lines={39:['Spectral Guard','Phantasmal Wail','Ethereal Shriek'],58:['Dementia','Shadow Mastery','Vampiiric Embrace'],62:['Aura Manipulation','Magnetism','Power Strikes']}
 trainer_types={39:'BainsheeTrainer',58:'VampiirTrainer',62:'HiberniaMaulerTrainer'}
 training_level=5 if class_id==62 else 4
+assert not args.expansion_power or (args.career_proposal and not training_mode and not args.expansion_self_buff),'Power fixture requires career data and a separate run'
+assert not args.career_proposal or class_id in [58,62]
 assert not(args.bainshee_proposal and args.expansion_proposal)
 proposal_path=args.bainshee_proposal or args.expansion_proposal
 assert (class_id in [39,58,62])==bool(proposal_path),'Expansion classes require an explicit isolated data proposal'
@@ -36,7 +40,7 @@ assert not args.bainshee_training or (class_id==39 and level==50 and not args.ba
 assert not args.expansion_self_buff or args.expansion_training,'Self buff requires the original training fixture'
 assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -104,7 +108,11 @@ try:
   dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
   char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
   if class_id in [39,58,62]:install_probe_data(db)
-  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat else 3,'Realm':3})
+  if args.career_proposal:
+   import importlib.util
+   spec=importlib.util.spec_from_file_location('expansion_career_data',Path(__file__).with_name('expansion_career_data.py'));career=importlib.util.module_from_spec(spec);spec.loader.exec_module(career)
+   result['isolated_career_data']=career.install(db,args.career_proposal,RUN.name,class_id)
+  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat or args.expansion_power else 3,'Realm':3})
   values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
   if class_id==39:
    creation_model={9:310,11:342,12:326}[args.bainshee_race]
@@ -130,6 +138,10 @@ try:
    values.update(Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
    update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Bainshee Target','ClassType':'DOL.GS.GameNPC','Guild':'','Model':118,'Level':50,'Realm':0,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos'],'Y':char['Ypos']+400,'Z':char['Zpos']})
+  if args.expansion_power:
+   values.update(Health=10000,Mana=0,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+   npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Power Target','ClassType':'DOL.GS.GameNPC','Guild':'','Model':118,'Level':45,'Realm':0,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos'],'Y':char['Ypos']+60,'Z':char['Zpos']})
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
  if args.bainshee_promotion:
@@ -191,6 +203,12 @@ try:
  (D/'druid_level1_snapshot.json').write_text(json.dumps(snapshot),encoding='utf-8')
  result['checks']['starting_list']=True
  result['entries']=[{'name':e.get('name'),'group':e.get('group'),'id':e.get('id')} for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell']
+ if args.career_proposal:
+  required={58:{152,153,154,155,341},62:{69,68,67}}[class_id]
+  received={int(e['id']) for e in snapshot['qa_skill_audit']['skills']}
+  assert required<=received,('Missing original career ability IDs',required-received)
+  result['career_abilities']=[e for e in snapshot['qa_skill_audit']['skills'] if int(e['id']) in required]
+  result['checks']['original_career_abilities_received']=True
  audit=snapshot['qa_skill_audit'];expected={str(x['name']) for x in audit['skills'] if int(x['page']) in [3,4]}
  for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
  actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
@@ -200,6 +218,42 @@ try:
  if args.bainshee_promotion:
   assert len(expected)==7 and 'Gleam Ray' not in expected,'Promotion must replace the base-class list, not append stale entries'
   result['checks']['promotion_replaces_base_spell_list']=True
+ if args.expansion_power:
+  wait(lambda:snapshot.get('player_status',{}).get('ready') and any(e.get('name')=='Codex Power Target' for e in snapshot.get('entities',[])),'Normal power fixture ready')
+  target=next(e for e in snapshot['entities'] if e.get('name')=='Codex Power Target');power_target=target['id']
+  def face_power_target():
+   player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+   send('move',position_m=player['position_m'],forward_xz=[0,1],speed_mps=0,target_in_view=True,target_entity_id=power_target)
+  send('target',entity_id=power_target);face_power_target();settle(2)
+  vitals=lambda:snapshot['player_status']['vitals']
+  assert vitals()['mana']==0,'Power must start empty; no grant during combat'
+  initial_health=vitals()['health'];target_health=target['health'];power_samples=[]
+  send('combat_attack',on=True,entity_id=power_target,player_generation=snapshot['player_status']['generation'])
+  deadline=time.monotonic()+35;next_face=0
+  while time.monotonic()<deadline:
+   pump()
+   if time.monotonic()>next_face:face_power_target();next_face=time.monotonic()+.2
+   if not power_samples or vitals()!=power_samples[-1]:power_samples.append(dict(vitals()))
+   if vitals()['mana']>0:break
+   assert vitals()['health_pct']>=65,'Stop bounded fixture before unsafe health loss'
+  send('combat_attack',on=False)
+  wait(lambda:not snapshot['player_status'].get('attack_on') and not snapshot['player_status'].get('attack_pending'),'Original attack stops')
+  assert any(row['mana']>0 for row in power_samples),'No actual combat power gain'
+  if class_id==62:assert min(row['health'] for row in power_samples)<initial_health,'Mauler must actually receive damage'
+  else:assert any(e['id']==power_target and e['health']<target_health for e in snapshot['entities']),'Vampiir must actually damage target'
+  result['combat_power']={'normal_player_privileges':True,'initial_mana':0,'samples':power_samples,'player_initial_health':initial_health,'target_initial_health':target_health,'no_resource_grants':True,'native_collision_acceptance':False}
+  result['checks']['original_combat_power_generation']=True
+  # A stopped player attack does not pacify the ordinary NPC. Walk out of
+  # reach before the normal seated logout, without a GM command or heal.
+  departure=list(next(e for e in snapshot['entities'] if e['id']=='player:local')['position_m'])
+  for step in range(1,41):
+   point=list(departure);point[2]-=step*.6
+   send('move',position_m=point,forward_xz=[0,-1],speed_mps=6,target_in_view=False,target_entity_id=power_target)
+   settle(.1)
+  send('move',position_m=point,forward_xz=[0,-1],speed_mps=0,target_in_view=False,target_entity_id=power_target)
+  settle(15)
+  assert vitals()['health']>0,'Power fixture must disengage alive'
+  result['combat_power']['walked_out_of_melee_before_quit']=True
  if training_mode:
   player=next(e for e in snapshot['entities'] if e['id']=='player:local')
   send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0)
@@ -333,7 +387,7 @@ try:
   result['checks']['original_timer_restores_appearance_and_inventory']=True
   result['combat_damage_tested']=False
  send('chat',text='/quit')
- wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if args.bainshee_combat or training_mode else 45)
+ wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if args.bainshee_combat or training_mode or args.expansion_power else 45)
  lobby=snapshot['character_lobby'];assert all(int(c['class_id'])!=63 for c in lobby['choices'])
  result['custom_disabled_choice_hidden']=True
  row=next(c for c in lobby['characters'] if c['name']=='Codexdruid')
