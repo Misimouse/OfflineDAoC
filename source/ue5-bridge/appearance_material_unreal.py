@@ -1,7 +1,7 @@
 """Original figure surface math for separate morph-capable head/hair candidates."""
 import unreal
 
-def build_appearance_material(root,name,texture,cutout=False):
+def build_appearance_material(root,name,texture,cutout=False,original_colour_strength=1.0,skin_colour_scale=None,normal_texture=None,normal_strength=.5):
     assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
     tools=unreal.AssetToolsHelpers.get_asset_tools();lib=unreal.MaterialEditingLibrary
     material=unreal.load_asset(root+'/'+name)
@@ -43,7 +43,15 @@ def build_appearance_material(root,name,texture,cutout=False):
         source_alpha=node(unreal.MaterialExpressionLinearInterpolate,-1400,180)
         link(base,'A',source_alpha,'A');link(reference,'A',source_alpha,'B');link(enabled,'',source_alpha,'Alpha')
         link(source_alpha,'',mask,'Value')
-        colour=node(unreal.MaterialExpressionLinearInterpolate,-450,1100);link(base,'RGB',colour,'A');link(restored,'',colour,'B');link(enabled,'',colour,'Alpha')
+        strength=node(unreal.MaterialExpressionScalarParameter,-650,1650);strength.set_editor_property('parameter_name','OriginalColourStrength');strength.set_editor_property('default_value',original_colour_strength)
+        recovery=node(unreal.MaterialExpressionMultiply,-450,1450);link(enabled,'',recovery,'A');link(strength,'',recovery,'B')
+        colour=node(unreal.MaterialExpressionLinearInterpolate,-450,1100);link(base,'RGB',colour,'A');link(restored,'',colour,'B');link(recovery,'',colour,'Alpha')
+        if skin_colour_scale is not None:
+            # A global linear calibration retains the new anatomical detail;
+            # the source alpha still separates skin from untinted leather.
+            scale=node(unreal.MaterialExpressionVectorParameter,-650,1850);scale.set_editor_property('parameter_name','SkinColourScale');scale.set_editor_property('default_value',unreal.LinearColor(*skin_colour_scale,1))
+            skin_scale=node(unreal.MaterialExpressionLinearInterpolate,-450,1850);link(scale,'RGB',skin_scale,'A');link(one,'',skin_scale,'B');link(mask,'',skin_scale,'Alpha')
+            calibrated=node(unreal.MaterialExpressionMultiply,-200,1100);link(colour,'',calibrated,'A');link(skin_scale,'',calibrated,'B');colour=calibrated
     tinted=node(unreal.MaterialExpressionMultiply,-450,0);link(colour,'RGB' if colour==base else '',tinted,'A');link(choose,'',tinted,'B')
     has_eye=node(unreal.MaterialExpressionScalarParameter,-1200,530);has_eye.set_editor_property('parameter_name','HasEye');has_eye.set_editor_property('default_value',0)
     eye_factor=node(unreal.MaterialExpressionLinearInterpolate,-950,400);link(one,'',eye_factor,'A');link(eye,'RGB',eye_factor,'B');link(has_eye,'',eye_factor,'Alpha')
@@ -56,6 +64,12 @@ def build_appearance_material(root,name,texture,cutout=False):
     if cutout:output(base,'A',unreal.MaterialProperty.MP_OPACITY_MASK)
     for property,value,y in [(unreal.MaterialProperty.MP_ROUGHNESS,.85,200),(unreal.MaterialProperty.MP_SPECULAR,.3,350)]:
         constant=node(unreal.MaterialExpressionConstant,50,y);constant.set_editor_property('r',value);output(constant,'',property)
+    if normal_texture is not None:
+        surface_normal=node(unreal.MaterialExpressionTextureSampleParameter2D,-650,2100);surface_normal.set_editor_property('parameter_name','SurfaceNormalTexture');surface_normal.set_editor_property('texture',normal_texture);surface_normal.set_editor_property('sampler_type',unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        strength=node(unreal.MaterialExpressionScalarParameter,-650,2350);strength.set_editor_property('parameter_name','SurfaceNormalStrength');strength.set_editor_property('default_value',normal_strength)
+        flat=node(unreal.MaterialExpressionConstant3Vector,-650,2500);flat.set_editor_property('constant',unreal.LinearColor(0,0,1,1))
+        blend=node(unreal.MaterialExpressionLinearInterpolate,-350,2100);link(flat,'',blend,'A');link(surface_normal,'RGB',blend,'B');link(strength,'',blend,'Alpha')
+        normal=node(unreal.MaterialExpressionNormalize,-100,2100);link(blend,'',normal,'VectorInput');output(normal,'',unreal.MaterialProperty.MP_NORMAL)
     lib.set_material_usage(material,unreal.MaterialUsage.MATUSAGE_SKELETAL_MESH)
     lib.set_material_usage(material,unreal.MaterialUsage.MATUSAGE_MORPH_TARGETS)
     lib.recompile_material(material);assets.save_loaded_asset(material)

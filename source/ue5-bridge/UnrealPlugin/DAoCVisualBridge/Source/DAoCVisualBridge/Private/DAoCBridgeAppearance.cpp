@@ -63,7 +63,14 @@ bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<F
     const TMap<FString,FString> Slots={{TEXT("body"),TEXT("torso")},{TEXT("arms"),TEXT("arms")},{TEXT("gloves"),TEXT("gloves")},{TEXT("boots"),TEXT("boots")},{TEXT("legs"),TEXT("legs")}};
     auto Tinted=Obj(Meta,TEXT("skin_tint_parts")),Clothes=Obj(Meta,TEXT("clothes"));
     for(auto V:Arr(Definition,TEXT("sections"))){auto S=V->AsObject();const FString Slot=Str(S,TEXT("slot"));bool IsTinted=false;if(Tinted)Tinted->TryGetBoolField(Slot,IsTinted);auto Clothing=Obj(Clothes,Slot);if(!IsTinted||Str(Clothing,TEXT("chan"))!=TEXT("a")||!Slots.Contains(Slot)||Num(Worn,*Slots.FindRef(Slot))>0)continue;
-        if(auto* T=Texture(Str(Clothing,TEXT("tex")))){auto* M=UMaterialInstanceDynamic::Create(Master,Parent);M->SetTextureParameterValue(TEXT("FigureTexture"),T);M->SetVectorParameterValue(TEXT("FigureTint"),Skin);M->SetScalarParameterValue(TEXT("UseSkinMask"),1);SourceColour(M,Str(Clothing,TEXT("tex")),T);Parent->SetMaterial(Num(S,TEXT("index")),M);}
+        const FString TextureName=Str(Clothing,TEXT("tex"));
+        if(auto* T=Texture(TextureName)){
+            // Optional surface-specific detail materials leave the face,
+            // other bare parts and equipped armour on their existing path.
+            auto* SurfaceMaster=Master;const FString SurfacePath=Str(Obj(Catalog,TEXT("surface_materials")),TextureName.ToLower());
+            if(!SurfacePath.IsEmpty())if(auto* Override=LoadObject<UMaterialInterface>(nullptr,*SurfacePath))SurfaceMaster=Override;
+            auto* M=UMaterialInstanceDynamic::Create(SurfaceMaster,Parent);M->SetTextureParameterValue(TEXT("FigureTexture"),T);M->SetVectorParameterValue(TEXT("FigureTint"),Skin);M->SetScalarParameterValue(TEXT("UseSkinMask"),1);SourceColour(M,TextureName,T);Parent->SetMaterial(Num(S,TEXT("index")),M);
+        }
     }
     auto Eyes=Arr(Meta,TEXT("eyes"));if(!Eyes.IsEmpty())if(auto* T=Texture(Eyes[FMath::Clamp(Num(Look,TEXT("eyes")),0,Eyes.Num()-1)]->AsString())){Material->SetTextureParameterValue(TEXT("EyeTexture"),T);Material->SetScalarParameterValue(TEXT("HasEye"),1);}
     if(Num(Look,TEXT("tattoo"))>0)if(auto* T=Texture(Str(Choice(Meta,TEXT("tattoos"),Num(Look,TEXT("tattoo"))),TEXT("tex")))){Material->SetTextureParameterValue(TEXT("TattooTexture"),T);Material->SetScalarParameterValue(TEXT("HasTattoo"),1);}
