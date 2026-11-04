@@ -3,8 +3,13 @@ import argparse
 from qa_runtime import *
 import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
-parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47],required=True);class_id=parser.parse_args().class_id
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id));D.mkdir(parents=True,exist_ok=True)
+parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47,39],required=True)
+parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,50])
+args=parser.parse_args();class_id=args.class_id
+assert (class_id==39)==bool(args.bainshee_proposal),'Bainshee requires an explicit isolated data proposal'
+assert args.level is None or class_id==39,'Advanced-level data probes are limited to Bainshee'
+level=args.level or (3 if class_id==52 else 1)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -13,6 +18,23 @@ config=RUN/'bridge_config.json';config_bytes=config.read_bytes()
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
+
+def install_probe_data(db):
+ proposal=json.loads(args.bainshee_proposal.read_text())
+ assert proposal['proposal_only'] and proposal['source_commit']=='b5b29c2ada7695414b94f5fa110eb505a477d007'
+ assert len(proposal['spells'])==123 and len(proposal['line_spells'])==130
+ for spell_id,expected in proposal['preserved_rows'].items():
+  current=dict(db.execute('SELECT * FROM Spell WHERE SpellID=?',(int(spell_id),)).fetchone())
+  assert hashlib.sha256(json.dumps(current,sort_keys=True,separators=(',',':')).encode()).hexdigest()==expected['sha256']
+ for name,count in proposal['expected_existing_line_counts'].items():
+  assert count==0 and db.execute('SELECT COUNT(*) FROM LineXSpell WHERE LineName=?',(name,)).fetchone()[0]==0
+ for table,key in [('Spell','spells'),('LineXSpell','line_spells')]:
+  columns={r['name'] for r in db.execute('PRAGMA table_info("'+table+'")')}
+  for row in proposal[key]:
+   assert set(row)<=columns
+   if table=='Spell':assert not db.execute('SELECT 1 FROM Spell WHERE SpellID=? OR Spell_ID=?',(row['SpellID'],row['Spell_ID'])).fetchone()
+   keys=list(row);db.execute('INSERT INTO "'+table+'" ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[row[k] for k in keys])
+ result['isolated_bainshee_data']={'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'not_creation_enablement':True}
 def send(action,**values):
  global serial
  serial+=1;sock.sendall((json.dumps(dict(type='command',session=session,id='cloak:'+str(serial),action=action,**values))+'\n').encode())
@@ -46,8 +68,11 @@ try:
  with checked() as db:
   dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
   char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
+  if class_id==39:install_probe_data(db)
   update(db,'Account','Name',char['AccountName'],{'PrivLevel':3,'Realm':3})
-  update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],{'Class':class_id,'Level':3 if class_id==52 else 1,'Experience':0,'SerializedSpecs':''})
+  values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
+  if class_id==39:values.update(Gender=1,Race=9,CreationModel=310,CurrentModel=310)
+  update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
  for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
  p=RUN/'Godot/live_gateway.gd';p.write_text(p.read_text().replace('var states:Array=[]','transport.snapshot_metadata[\"qa_skill_audit\"]={\"skills\":server.skills,\"spell_lines\":server.spell_lines}\n        var states:Array=[]'))
@@ -78,7 +103,8 @@ try:
  audit=snapshot['qa_skill_audit'];expected={str(x['name']) for x in audit['skills'] if int(x['page']) in [3,4]}
  for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
  actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
- result['class_id']=class_id;result['expected_spells']=sorted(expected);result['visible_spells']=sorted(actual);result['complete']=expected==actual
+ result['class_id']=class_id;result['level']=level;result['expected_spells']=sorted(expected);result['visible_spells']=sorted(actual);result['complete']=expected==actual
+ if class_id==39:assert expected,'Candidate Bainshee must receive actual spells, not merely an empty matching list'
  assert result['complete'],(expected,actual)
  send('chat',text='/quit')
  wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',45)
