@@ -25,7 +25,21 @@ def build_appearance_material(root,name,texture,cutout=False):
     masked=node(unreal.MaterialExpressionLinearInterpolate,-950,-150);link(tint,'RGB',masked,'A');link(one,'',masked,'B');link(mask,'',masked,'Alpha')
     use_mask=node(unreal.MaterialExpressionScalarParameter,-950,-400);use_mask.set_editor_property('parameter_name','UseSkinMask');use_mask.set_editor_property('default_value',0)
     choose=node(unreal.MaterialExpressionLinearInterpolate,-700,-120);link(tint,'RGB',choose,'A');link(masked,'',choose,'B');link(use_mask,'',choose,'Alpha')
-    tinted=node(unreal.MaterialExpressionMultiply,-450,0);link(base,'RGB',tinted,'A');link(choose,'',tinted,'B')
+    colour=base
+    if not cutout:
+        # Preserve enhanced high-frequency detail while recovering the source
+        # skin colour. Both colour textures are decoded from sRGB by the engine.
+        reference=sample('OriginalColorTexture',-1400,1200)
+        low=sample('FigureTexture',-1400,1450)
+        low.set_editor_property('mip_value_mode',unreal.TextureMipValueMode.TMVM_MIP_BIAS)
+        bias=node(unreal.MaterialExpressionScalarParameter,-1650,1600);bias.set_editor_property('parameter_name','OriginalColorMipBias');bias.set_editor_property('default_value',3)
+        link(bias,'',low,'Bias')
+        floor=node(unreal.MaterialExpressionMax,-1150,1450);floor.set_editor_property('const_b',.003);link(low,'RGB',floor,'A')
+        detail=node(unreal.MaterialExpressionDivide,-900,1300);link(base,'RGB',detail,'A');link(floor,'',detail,'B')
+        restored=node(unreal.MaterialExpressionMultiply,-650,1200);link(reference,'RGB',restored,'A');link(detail,'',restored,'B')
+        enabled=node(unreal.MaterialExpressionScalarParameter,-650,1450);enabled.set_editor_property('parameter_name','HasOriginalColor');enabled.set_editor_property('default_value',0)
+        colour=node(unreal.MaterialExpressionLinearInterpolate,-450,1100);link(base,'RGB',colour,'A');link(restored,'',colour,'B');link(enabled,'',colour,'Alpha')
+    tinted=node(unreal.MaterialExpressionMultiply,-450,0);link(colour,'RGB' if colour==base else '',tinted,'A');link(choose,'',tinted,'B')
     has_eye=node(unreal.MaterialExpressionScalarParameter,-1200,530);has_eye.set_editor_property('parameter_name','HasEye');has_eye.set_editor_property('default_value',0)
     eye_factor=node(unreal.MaterialExpressionLinearInterpolate,-950,400);link(one,'',eye_factor,'A');link(eye,'RGB',eye_factor,'B');link(has_eye,'',eye_factor,'Alpha')
     eye_colour=node(unreal.MaterialExpressionMultiply,-200,0);link(tinted,'',eye_colour,'A');link(eye_factor,'',eye_colour,'B')

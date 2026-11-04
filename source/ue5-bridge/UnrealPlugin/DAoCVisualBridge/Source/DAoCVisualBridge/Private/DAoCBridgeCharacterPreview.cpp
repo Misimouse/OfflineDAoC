@@ -90,10 +90,7 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
     // final LDR here applied gamma twice; the cinematic tone curve also crushed
     // the original lobby's dark colours. Keep the original linear presentation.
     auto* Capture=CharacterLobbyCapture;Capture->bCaptureEveryFrame=false;Capture->bCaptureOnMovement=false;Capture->PrimitiveRenderMode=ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;Capture->CaptureSource=ESceneCaptureSource::SCS_FinalColorHDR;Capture->FOVAngle=40;
-    Capture->ShowFlags.SetAtmosphere(false);Capture->ShowFlags.SetFog(false);Capture->ShowFlags.SetMotionBlur(false);Capture->ShowFlags.SetGlobalIllumination(false);Capture->ShowFlags.SetDynamicShadows(false);Capture->ShowFlags.SetPostProcessMaterial(false);
-    Capture->PostProcessSettings.bOverride_AutoExposureMethod=true;Capture->PostProcessSettings.AutoExposureMethod=EAutoExposureMethod::AEM_Manual;
-    Capture->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure=true;Capture->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure=false;
-    Capture->PostProcessSettings.bOverride_AutoExposureBias=true;Capture->PostProcessSettings.AutoExposureBias=0;
+    ConfigureCharacterPreviewCapture(Capture);
     FVector2D ViewSize;GetWorld()->GetGameViewport()->GetViewportSize(ViewSize);const int32 TargetHeight=FMath::Clamp(FMath::RoundToInt(ViewSize.Y),768,2160);
     const double Aspect=ViewSize.X/FMath::Max(1.,ViewSize.Y);Capture->FOVAngle=FMath::RadiansToDegrees(2*FMath::Atan(FMath::Tan(FMath::DegreesToRadians(20.))*Aspect));
     CharacterLobbyTarget=NewObject<UTextureRenderTarget2D>(this);CharacterLobbyTarget->ClearColor=FLinearColor(.02,.03,.02,1);CharacterLobbyTarget->InitAutoFormat(FMath::RoundToInt(TargetHeight*Aspect),TargetHeight);Capture->TextureTarget=CharacterLobbyTarget;
@@ -134,8 +131,8 @@ bool UDAoCBridgeSubsystem::HandleLobbyPointer(FKey Key,bool Down,FVector2D Point
     return true;
 }
 bool UDAoCBridgeSubsystem::HandleLobbyWheel(float Steps,FVector2D Point){
-    if(!CharacterLobbyOverlay||CharacterLobbyScreen!=TEXT("customize")||!LobbySceneHit(Point)||!FMath::IsFinite(Steps)||FMath::Abs(Steps)>10)return false;
-    LobbyZoom=FMath::Clamp(LobbyZoom*FMath::Pow(.9f,Steps),.25f,2.5f);UpdateLobbyCamera();return true;
+    if(!CharacterLobbyOverlay||(CharacterLobbyScreen!=TEXT("customize")&&CharacterLobbyScreen!=TEXT("select"))||!LobbySceneHit(Point)||!FMath::IsFinite(Steps)||FMath::Abs(Steps)>10)return false;
+    LobbyZoom=FMath::Clamp(LobbyZoom*FMath::Pow(.9f,Steps),.25f,CharacterLobbyScreen==TEXT("customize")?5.f:2.5f);UpdateLobbyCamera();return true;
 }
 void UDAoCBridgeSubsystem::UpdateLobbyCamera(){
     if(!CharacterLobbyCapture||!CharacterLobbyPreviewActor)return;
@@ -145,12 +142,24 @@ void UDAoCBridgeSubsystem::UpdateLobbyCamera(){
     if(CharacterLobbyScreen==TEXT("customize")){
         const float Scale=CharacterLobbyPreviewActor->GetActorScale3D().X;Center=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,160*Scale);
         if(auto* Figure=Cast<ASkeletalMeshActor>(CharacterLobbyPreviewActor.Get())){auto* Body=Figure->GetSkeletalMeshComponent();for(const FName Bone:{FName(TEXT("Bip01_Head")),FName(TEXT("Bip01 Head"))})if(Body->GetBoneIndex(Bone)>=0){Center=Body->GetBoneLocation(Bone)+FVector(0,0,4*Scale);break;}}
-        Offset=(OriginalEye-CharacterLobbyPreviewActor->GetActorLocation()).GetSafeNormal()*95*Scale;
+        // At close range frame the face; pull the pivot down to the body as we
+        // zoom out, instead of keeping feet below the bottom of the viewport.
+        const FVector Feet=CharacterLobbyPreviewActor->GetActorLocation();
+        const FVector BodyCenter=Feet+FVector(0,0,(Center.Z-Feet.Z)*.52f);
+        Center=FMath::Lerp(Center,BodyCenter,FMath::Clamp((LobbyZoom-1.f)/3.f,0.f,1.f));
+        Offset=(OriginalEye-Feet).GetSafeNormal()*95*Scale;
     }
     Offset=FQuat(FVector::UpVector,FMath::DegreesToRadians(LobbyOrbitYaw)).RotateVector(Offset);
     const FVector Right=FVector::CrossProduct(Offset.GetSafeNormal(),FVector::UpVector).GetSafeNormal();Offset=FQuat(Right,FMath::DegreesToRadians(LobbyOrbitPitch)).RotateVector(Offset);
-    const FVector Eye=Center+Offset*LobbyZoom;
-    FVector Look=Center;if(CharacterLobbyScreen==TEXT("select")&&FMath::IsNearlyZero(LobbyOrbitYaw)&&FMath::IsNearlyZero(LobbyOrbitPitch)&&FMath::IsNearlyEqual(LobbyZoom,1.f))Look=Origin+FVector(-4.5,-1,-3.865)*100;
+    FVector Eye=Center+Offset*LobbyZoom;
+    FVector Look=Center;
+    if(CharacterLobbyScreen==TEXT("select")){
+        const FVector OriginalLook=Origin+FVector(-4.5,-1,-3.865)*100;
+        const FVector BodyCenter=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,90*CharacterLobbyPreviewActor->GetActorScale3D().X);
+        Look=FMath::Lerp(OriginalLook,BodyCenter,FMath::Clamp((LobbyZoom-1.f)/1.5f,0.f,1.f));
+        // Translate along the original camera direction; selection never orbits.
+        Eye=Look+(OriginalEye-OriginalLook)*LobbyZoom;
+    }
     CharacterLobbyCapture->SetWorldLocationAndRotation(Eye,(Look-Eye).Rotation());
     if(CharacterLobbyScreen==TEXT("customize")){FVector2D View;GetWorld()->GetGameViewport()->GetViewportSize(View);const double Width=FMath::Max(1024.,768.*View.X/FMath::Max(View.Y,1.));const double Ndc=-268./Width;const double Half=FMath::Tan(FMath::DegreesToRadians(CharacterLobbyCapture->FOVAngle*.5));CharacterLobbyCapture->AddLocalRotation(FRotator(0,-FMath::RadiansToDegrees(FMath::Atan(Ndc*Half)),0));}
     if(CharacterLobbyMotion)CharacterLobbyMotion->SetCamera(Eye-Origin);

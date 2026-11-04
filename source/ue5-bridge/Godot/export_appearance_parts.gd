@@ -15,6 +15,13 @@ func run()->void:
         assert(ids.has(race))
         var reader=factory.new();root.add_child(reader);assert(reader.load_figure(race))
         var meta:Dictionary=reader.meta.duplicate(true)
+        # Original feature codes, not HM/FM indices, bind facial hair to the face.
+        var original:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/races/"+String(race)+"/figure.gltf"))
+        var original_morphs:Dictionary={}
+        for node in original.get("nodes",[]):
+            if node.has("mesh"):original_morphs[String(node.get("name",""))]=original.meshes[int(node.mesh)].get("extras",{})
+        var head_morphs:Dictionary=original_morphs.get("head",{})
+
         var names:Array=[]
         for item in meta.get("faces",[]):names.append(String(item.get("tex","")))
         for item in meta.get("tattoos",[]):names.append(String(item.get("tex","")))
@@ -57,7 +64,12 @@ func run()->void:
             for player in holder.find_children("*","AnimationPlayer",true,false):player.free()
             var doc:=GLTFDocument.new();var state:=GLTFState.new();assert(doc.append_from_scene(holder,state)==OK)
             var file:=export_folder.path_join("appearance.glb");assert(doc.write_to_filesystem(state,file)==OK)
-            result.parts[part]={"file":file,"morphs":morphs,"hair_style":int(pieces[part])}
+            var bindings:Dictionary={};var part_morphs:Dictionary=original_morphs.get(String(part),{})
+            var codes:Array=part_morphs.get("codes",[]);var target_names:Array=part_morphs.get("targetNames",[])
+            for i in head_morphs.get("codes",[]).size():
+                var code:=int(head_morphs.codes[i])
+                if code>0 and code<21 and codes.has(code):bindings[String(head_morphs.targetNames[i])]=String(target_names[codes.find(code)])
+            result.parts[part]={"file":file,"morphs":morphs,"hair_style":int(pieces[part]),"facial_morphs":bindings}
             holder.free();await process_frame
             print("BRIDGE_APPEARANCE_PART_EXPORTED ",race,"/",part)
         report.races[race]=result

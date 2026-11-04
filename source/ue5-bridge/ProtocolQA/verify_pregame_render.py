@@ -19,6 +19,10 @@ def main():
     parser.add_argument('--project', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--engine', type=Path, default=Path(os.environ.get('DAOC_UE_ENGINE', r'C:/Program Files/Epic Games/UE_5.8/Engine')))
+    parser.add_argument('--map', dest='host_map', default='/Engine/Maps/Entry', help='Read-only host map for equivalent lighting comparisons')
+    parser.add_argument('--zoom', type=float, help='Diagnostic camera distance multiplier')
+    parser.add_argument('--sliders', type=float, nargs=4, help='Diagnostic original nose, eyes, lips and jaw values (0..8)')
+    parser.add_argument('--gallery', action='store_true', help='Capture every Celt skin tone and four lips/jaw extremes')
     parser.add_argument('--width', type=int, default=1920)
     parser.add_argument('--height', type=int, default=1080)
     parser.add_argument('--screen', choices=('select', 'create', 'customize'), default='select')
@@ -41,7 +45,7 @@ def main():
     staged.write_text(json.dumps(fixture), encoding='utf-8')
     shot = args.output / (args.screen + '.png')
     command = [str(args.engine / 'Binaries/Win64/UnrealEditor-Cmd.exe'), str(args.project),
-               '/Engine/Maps/Entry', '-game', '-EnablePlugins=DAoCVisualBridge', '-DaocBridge',
+               args.host_map, '-game', '-EnablePlugins=DAoCVisualBridge', '-DaocBridge',
                '-DaocBridgeCatalog=' + str(args.workspace / 'models.json'),
                '-DaocBridgeEquipmentCatalog=' + str(args.workspace / 'equipment_catalog_v01.json'),
                '-DaocBridgeCharacterLobbyTest=' + str(staged),
@@ -49,6 +53,16 @@ def main():
                '-DaocBridgeCharacterLobbyScreen=' + args.screen,
                '-unattended', '-nosound', '-nosplash', '-d3d11', '-RenderOffscreen',
                '-windowed', '-ForceRes', '-ResX=' + str(args.width), '-ResY=' + str(args.height)]
+    assert args.host_map.startswith(('/Engine/', '/Game/'))
+    if args.zoom is not None:
+        assert .25 <= args.zoom <= 5
+        command.append('-DaocBridgeLobbyTestZoom=' + str(args.zoom))
+    if args.sliders:
+        assert all(0 <= v <= 8 for v in args.sliders)
+        command.append('-DaocBridgeLobbyTestSliders=' + ','.join(map(str,args.sliders)))
+    if args.gallery:
+        assert args.screen == 'customize' and args.prefix in (None,'cel_m')
+        command.append('-DaocBridgeLobbyAppearanceGallery=' + str(args.output / 'appearance'))
     if args.motion:
         assert args.motion.is_file()
         command += ['-DaocBridgeLobbyMotion=' + str(args.motion), '-DaocBridgeLobbyTestOrbit=' + str(args.orbit), '-DaocBridgeLobbyTestPitch=' + str(args.pitch)]
@@ -75,6 +89,12 @@ def main():
     assert (report['preview_width'], report['preview_height']) == (args.width, args.height), report
     assert report['backdrop_lods'] == [{'triangles': 62798, 'uv_channels': 4}], report
     images = [shot, Path(str(shot) + '.scene.png')]
+    if args.gallery:
+        assert len(report['appearance_gallery']) == 12
+        assert report['gallery_color_space'] == 'display_srgb'
+        images += [Path(p) for p in report['appearance_gallery']]
+    if args.sliders:
+        assert report['rendered_look']['sliders'] == args.sliders
     if args.motion:
         assert report['moving_surfaces'] == 325, report
         images += [Path(str(shot) + '.motion-mid.png'), Path(str(shot) + '.orbit.png')]

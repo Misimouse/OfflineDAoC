@@ -1,9 +1,11 @@
 """Import original morph-capable heads/hair into a candidate library, without activation."""
 import os,hashlib,json,re,traceback
 from pathlib import Path
-import unreal
+import unreal,sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from densify_appearance_morphs import densify,moving_morph_names
 R=Path(os.environ.get('DAOC_BRIDGE_WORKSPACE',Path(__file__).resolve().parent));D=R/'Reports/appearance';D.mkdir(parents=True,exist_ok=True)
-A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();library='/DAoCVisualBridge/Appearance_v01'
+A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();library='/DAoCVisualBridge/Appearance_v02'
 report={'passed':False,'installed':False,'parts':{},'errors':[],'active_catalogues_changed':False}
 def write():(D/'import_parts.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 try:
@@ -14,19 +16,20 @@ try:
  for race,row in manifest['races'].items():
   body=unreal.load_asset(models[str(row['base_id'])]['asset']);source=unreal.SkeletonModifier();assert source.set_skeletal_mesh(body);bones={normal(n):n for n in source.get_all_bone_names()};figure={'race':race,'meta':row['meta'],'parts':{}}
   for part,data in row['parts'].items():
-   key=race+'/'+part;sha=hashlib.sha256(Path(data['file']).read_bytes()).hexdigest();dest=library+'/'+race+'/'+part+'_'+sha[:12]
+   key=race+'/'+part;source_file=Path(data['file']);sha=hashlib.sha256(source_file.read_bytes()).hexdigest();dense_file=R/'AppearanceDenseSources'/race/(part+'.glb');dense_report=densify(source_file,dense_file);dense_sha=hashlib.sha256(dense_file.read_bytes()).hexdigest();dest=library+'/'+race+'/'+part+'_'+dense_sha[:12]
    existing=A.list_assets(dest,recursive=True,include_folder=False)
    if not existing:
-    task=unreal.AssetImportTask();task.filename=data['file'];task.destination_path=dest;task.automated=True;task.save=True;task.replace_existing=False;T.import_asset_tasks([task]);existing=A.list_assets(dest,recursive=True,include_folder=False)
+    pipeline=unreal.InterchangeGenericAssetsPipeline();pipeline.get_editor_property('mesh_pipeline').set_editor_property('morph_threshold_position',0.0);overrides=unreal.InterchangePipelineStackOverride();overrides.add_pipeline(pipeline)
+    task=unreal.AssetImportTask();task.filename=str(dense_file);task.destination_path=dest;task.automated=True;task.save=True;task.replace_existing=False;task.options=overrides;T.import_asset_tasks([task]);existing=A.list_assets(dest,recursive=True,include_folder=False)
    meshes=[A.load_asset(p) for p in existing if 'SkeletalMesh' in str(A.find_asset_data(p).asset_class_path)];assert len(meshes)==1,(key,len(meshes));mesh=meshes[0]
-   morphs=[m.get_name() for m in mesh.get_editor_property('morph_targets')];assert set(morphs)==set(data['morphs']),(key,'morph targets changed',morphs,data['morphs'])
+   morphs=[m.get_name() for m in mesh.get_editor_property('morph_targets')];moving,empty=moving_morph_names(source_file);assert moving<=set(morphs)<=set(data['morphs']),(key,'nonzero morph targets changed',morphs,sorted(moving));assert set(data['morphs'])-set(morphs)<=empty
    target=unreal.SkeletonModifier();assert target.set_skeletal_mesh(mesh)
    for name in target.get_all_bone_names():
     assert normal(name) in bones,(key,'missing leader bone',str(name));a=source.get_bone_transform(bones[normal(name)],True);b=target.get_bone_transform(name,True)
     assert a.translation.distance(b.translation)<.1,(key,'reference position mismatch',str(name))
     assert abs(sum(getattr(a.rotation,v)*getattr(b.rotation,v) for v in ['x','y','z','w']))>.99999,(key,'reference rotation mismatch',str(name))
    skeleton=mesh.get_editor_property('skeleton');skeleton.add_compatible_skeleton(body.get_editor_property('skeleton'));A.save_loaded_asset(skeleton)
-   entry={'asset':mesh.get_path_name(),'morphs':morphs,'source_sha256':sha,'hair_style':data.get('hair_style'),'material_slots':[str(m.material_slot_name) for m in mesh.get_editor_property('materials')]}
+   entry={'asset':mesh.get_path_name(),'morphs':data['morphs'],'imported_morphs':morphs,'empty_source_morphs':sorted(empty),'source_sha256':sha,'dense_sha256':dense_sha,'dense_verification':dense_report,'hair_style':data.get('hair_style'),'facial_morphs':data.get('facial_morphs',{}),'material_slots':[str(m.material_slot_name) for m in mesh.get_editor_property('materials')]}
    figure['parts'][part]=entry;report['parts'][key]=entry
    if len(report['parts'])%10==0:write();unreal.SystemLibrary.collect_garbage()
   catalog['figures'][str(row['base_id'])]=figure

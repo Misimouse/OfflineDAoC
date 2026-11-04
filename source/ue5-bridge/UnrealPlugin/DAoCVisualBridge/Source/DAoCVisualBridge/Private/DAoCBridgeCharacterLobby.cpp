@@ -3,6 +3,7 @@
 #include "DAoCBridgeAppearance.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
 #include "Widgets/SOverlay.h"
@@ -243,7 +244,7 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
             if(Step<6){++Step;LastStep=FPlatformTime::Seconds();return true;}
         }
         static bool CameraChecked=false;
-        if(Phase==1&&!CameraChecked&&CharacterLobbyCapture&&CharacterLobbyPreviewActor){
+        if(Phase==1&&!CameraChecked&&CharacterLobbyCapture&&CharacterLobbyPreviewActor&&CharacterLobbyPanel->GetCachedGeometry().GetLocalSize().X>100&&FPlatformTime::Seconds()-Started>.5){
             CameraChecked=true;const FVector BodyPosition=CharacterLobbyPreviewActor->GetActorLocation(),Eye=CharacterLobbyCapture->GetComponentLocation();
             FString AppearancePath;
             if(CharacterLobbyScreen==TEXT("create")&&!DAoCAppearancePath().IsEmpty()){
@@ -257,8 +258,17 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
             const FRotator Before=CharacterLobbyPreviewActor->GetActorRotation();bLobbyLeftHeld=true;LobbyLastPointer=FVector2D(100,100);HandleLobbyPointer(FKey(),false,FVector2D(150,100),true);bLobbyLeftHeld=false;
             Check(CharacterLobbyPreviewActor->GetActorRotation().Equals(Before,.1)!=(CharacterLobbyScreen==TEXT("customize")),TEXT("figure rotation is available only during appearance customization"));
             LobbyOrbitYaw=SavedYaw;LobbyOrbitPitch=SavedPitch;LobbyZoom=.6f;UpdateLobbyCamera();Check(!CharacterLobbyCapture->GetComponentLocation().Equals(Eye,.1),TEXT("lobby zoom changes the camera position"));
+            LobbyOrbitYaw=SavedYaw;LobbyOrbitPitch=SavedPitch;LobbyZoom=SavedZoom;UpdateLobbyCamera();
+            const FVector2D ScenePoint=CharacterLobbyPanel->GetCachedGeometry().LocalToAbsolute(FVector2D(500,300));
+            const bool WheelAccepted=HandleLobbyWheel(-1,ScenePoint);
+            Check(WheelAccepted==(CharacterLobbyScreen!=TEXT("create")),TEXT("real wheel input zooms selection/customization and leaves race/class fixed"));
+            Check(CharacterLobbyPreviewActor->GetActorLocation().Equals(BodyPosition,.01),TEXT("wheel never moves the character"));
             LobbyFigureYaw=SavedFigure;LobbyOrbitYaw=SavedYaw;LobbyOrbitPitch=SavedPitch;LobbyZoom=SavedZoom;CharacterLobbyPreviewActor->SetActorRotation(Before);UpdateLobbyCamera();
             Check(CharacterLobbyCapture->GetComponentLocation().Equals(Eye,.01),TEXT("lobby camera returns to its original position"));
+        }
+        float TestZoom=0;if(Phase==1&&FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestZoom="),TestZoom)){LobbyZoom=FMath::Clamp(TestZoom,.25f,5.f);UpdateLobbyCamera();}
+        FString TestSliders;if(Phase==1&&CharacterLobbyLook&&FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestSliders="),TestSliders,false)){
+            TArray<FString> Tokens;TestSliders.ParseIntoArray(Tokens,TEXT(","));TArray<TSharedPtr<FJsonValue>> V;for(const FString& Token:Tokens)V.Add(MakeShared<FJsonValueNumber>(FMath::Clamp(FCString::Atof(*Token),0.f,8.f)));CharacterLobbyLook->SetArrayField(TEXT("sliders"),V);UpdateCharacterLobbyAppearance(CharacterLobbyLook);
         }
         int32 TestSkin=-1;if(Phase==1&&FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestSkin="),TestSkin)&&CharacterLobbyLook&&CharacterLobbyScreen==TEXT("customize")){CharacterLobbyLook->SetNumberField(TEXT("skin"),FMath::Clamp(TestSkin,0,7));UpdateCharacterLobbyAppearance(CharacterLobbyLook);}
         if(Phase==1&&CharacterLobbyMotion){
@@ -278,8 +288,32 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
         FlushRenderingCommands();FBufferArchive PreviewBytes;
         Check(CharacterLobbyTarget&&FImageUtils::ExportRenderTarget2DAsPNG(CharacterLobbyTarget,PreviewBytes)&&FFileHelper::SaveArrayToFile(PreviewBytes,*(Capture+TEXT(".scene.png"))),TEXT("full scene target exported"));
     }
+    TArray<TSharedPtr<FJsonValue>> GalleryImages;FString Gallery;
+    if(CharacterLobbyScreen==TEXT("customize")&&CharacterLobbyLook&&FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyAppearanceGallery="),Gallery)){
+        FString Saved;FJsonSerializer::Serialize(CharacterLobbyLook.ToSharedRef(),TJsonWriterFactory<>::Create(&Saved));
+        auto SaveScene=[&](const FString& Tag){
+            UpdateCharacterLobbyAppearance(CharacterLobbyLook);
+            TArray<USkeletalMeshComponent*> Parts;CharacterLobbyPreviewActor->GetComponents(Parts);
+            for(auto* Part:Parts)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead"))||Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHair")))for(const auto& Curve:Part->GetMorphTargetCurves())if(Curve.Value>.001f){
+                const auto* Target=Part->GetSkeletalMeshAsset()->FindMorphTarget(Curve.Key);const int32* Index=Part->ActiveMorphTargets.Find(Target);
+                Check(Index&&Part->MorphTargetWeights.IsValidIndex(*Index)&&FMath::IsNearlyEqual(Part->MorphTargetWeights[*Index],Curve.Value),TEXT("render buffer receives facial morph ")+Curve.Key.ToString());
+            }
+            GetWorld()->SendAllEndOfFrameUpdates();CharacterLobbyCapture->CaptureScene();FlushRenderingCommands();FBufferArchive Bytes;
+            // These are display previews, unlike the separately retained linear
+            // scene target. Encode sRGB once, as Slate does on the real menu.
+            TArray<FLinearColor> LinearPixels;TArray<FColor> Pixels;
+            const bool Read=CharacterLobbyTarget->GameThread_GetRenderTargetResource()->ReadLinearColorPixels(LinearPixels);
+            Pixels.Reserve(LinearPixels.Num());for(const auto& Pixel:LinearPixels)Pixels.Add(Pixel.ToFColor(true));
+            if(Read)FImageUtils::CompressImageArray(CharacterLobbyTarget->SizeX,CharacterLobbyTarget->SizeY,Pixels,Bytes);
+            const FString File=Gallery+TEXT("_")+Tag+TEXT(".png");const bool Ok=Read&&!Bytes.IsEmpty()&&FFileHelper::SaveArrayToFile(Bytes,*File);Check(Ok,TEXT("appearance gallery captures ")+Tag);if(Ok)GalleryImages.Add(MakeShared<FJsonValueString>(File));
+        };
+        for(int32 Skin=0;Skin<8;++Skin){CharacterLobbyLook->SetNumberField(TEXT("skin"),Skin);SaveScene(FString::Printf(TEXT("skin_%d"),Skin));}
+        CharacterLobbyLook->SetNumberField(TEXT("skin"),1);
+        for(int32 Lips:{0,8})for(int32 Jaw:{0,8}){TArray<TSharedPtr<FJsonValue>> V;for(int32 N:{4,4,Lips,Jaw})V.Add(MakeShared<FJsonValueNumber>(N));CharacterLobbyLook->SetArrayField(TEXT("sliders"),V);SaveScene(FString::Printf(TEXT("lips_%d_jaw_%d"),Lips,Jaw));}
+        FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Saved),CharacterLobbyLook);UpdateCharacterLobbyAppearance(CharacterLobbyLook);
+    }
     if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeLobbyAmbientTest")))Check(CharacterLobbyMotion&&CharacterLobbyMotion->CheckAmbientMotion(),TEXT("original ambient particles move, face orbit camera and preserve source diameter"));
-    auto Report=MakeShared<FJsonObject>();Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetArrayField(TEXT("failures"),Failures);Report->SetBoolField(TEXT("live_account"),false);
+    auto Report=MakeShared<FJsonObject>();Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetArrayField(TEXT("failures"),Failures);Report->SetArrayField(TEXT("appearance_gallery"),GalleryImages);Report->SetStringField(TEXT("gallery_color_space"),TEXT("display_srgb"));Report->SetBoolField(TEXT("live_account"),false);if(CharacterLobbyLook)Report->SetObjectField(TEXT("rendered_look"),CharacterLobbyLook);Report->SetNumberField(TEXT("rendered_zoom"),LobbyZoom);
     if(CharacterLobbyTarget){Report->SetNumberField(TEXT("preview_width"),CharacterLobbyTarget->SizeX);Report->SetNumberField(TEXT("preview_height"),CharacterLobbyTarget->SizeY);}
     Report->SetNumberField(TEXT("moving_surfaces"),CharacterLobbyMotion?CharacterLobbyMotion->MovingSurfaces():0);
     Report->SetNumberField(TEXT("ambient_emitters"),CharacterLobbyMotion?CharacterLobbyMotion->AmbientEmitters():0);Report->SetNumberField(TEXT("ambient_particles"),CharacterLobbyMotion?CharacterLobbyMotion->AmbientParticles():0);
