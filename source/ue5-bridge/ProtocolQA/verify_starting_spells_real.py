@@ -12,8 +12,13 @@ parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--bainshee-effect',choices=['ward','barrier'])
 parser.add_argument('--bainshee-training',action='store_true')
+parser.add_argument('--expansion-training',action='store_true')
 parser.add_argument('--bainshee-combat',action='store_true')
 args=parser.parse_args();class_id=args.class_id
+training_mode=args.bainshee_training or args.expansion_training
+training_lines={39:['Spectral Guard','Phantasmal Wail','Ethereal Shriek'],58:['Dementia','Shadow Mastery','Vampiiric Embrace'],62:['Aura Manipulation','Magnetism','Power Strikes']}
+trainer_types={39:'BainsheeTrainer',58:'VampiirTrainer',62:'HiberniaMaulerTrainer'}
+training_level=5 if class_id==62 else 4
 assert not(args.bainshee_proposal and args.expansion_proposal)
 proposal_path=args.bainshee_proposal or args.expansion_proposal
 assert (class_id in [39,58,62])==bool(proposal_path),'Expansion classes require an explicit isolated data proposal'
@@ -27,8 +32,9 @@ assert args.server_source is None or args.bainshee_promotion
 assert not args.bainshee_effect or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_form_cycle)
 assert args.bainshee_race==9 or args.bainshee_form_cycle or args.bainshee_promotion
 assert not args.bainshee_training or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle)
+assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if args.bainshee_training else '')+('_combat' if args.bainshee_combat else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -96,7 +102,7 @@ try:
   dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
   char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
   if class_id in [39,58,62]:install_probe_data(db)
-  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if args.bainshee_training or args.bainshee_combat else 3,'Realm':3})
+  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat else 3,'Realm':3})
   values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
   if class_id==39:
    creation_model={9:310,11:342,12:326}[args.bainshee_race]
@@ -114,10 +120,10 @@ try:
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
    update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Bainshee Trainer','ClassType':'DOL.GS.Trainer.BainsheeTrainer','Guild':'Bainshee Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
    result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='bainshee_item'").fetchone())
-  if args.bainshee_training:
+  if training_mode:
    values.update(Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
-   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Bainshee Trainer','ClassType':'DOL.GS.Trainer.BainsheeTrainer','Guild':'Bainshee Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Expansion Trainer','ClassType':'DOL.GS.Trainer.'+trainer_types[class_id],'Guild':'Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
   if args.bainshee_combat:
    values.update(Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
@@ -192,25 +198,33 @@ try:
  if args.bainshee_promotion:
   assert len(expected)==7 and 'Gleam Ray' not in expected,'Promotion must replace the base-class list, not append stale entries'
   result['checks']['promotion_replaces_base_spell_list']=True
- if args.bainshee_training:
+ if training_mode:
   player=next(e for e in snapshot['entities'] if e['id']=='player:local')
   send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0)
-  wait(lambda:any(e.get('name')=='Codex Bainshee Trainer' for e in snapshot.get('entities',[])),'Original trainer visible')
-  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex Bainshee Trainer');send('interact',entity_id=npc['id']);send('trainer_refresh')
+  wait(lambda:any(e.get('name')=='Codex Expansion Trainer' for e in snapshot.get('entities',[])),'Original trainer visible')
+  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex Expansion Trainer');send('interact',entity_id=npc['id']);send('trainer_refresh')
   trainer=lambda:snapshot.get('classic_ui',{}).get('trainer',{})
   wait(lambda:trainer().get('ready') and not trainer().get('pending'),'Original trainer list ready')
   points_before=trainer()['spec_points'];trained=[]
-  for line in ['Spectral Guard','Phantasmal Wail','Ethereal Shriek']:
-   for target_level in range(2,5):
+  for line in training_lines[class_id]:
+   for target_level in range(2,training_level+1):
     row=next(e for e in trainer()['specs'] if e['name']==line);assert row['level']==target_level-1 and row['can_train']
     points=trainer()['spec_points'];cost=row['cost'];assert cost==target_level
     send('trainer_train',training_kind='spec',training_index=row['index'],training_token=row['token'])
     wait(lambda:any(e['name']==line and e['level']==target_level for e in trainer().get('specs',[])) and not trainer().get('pending'),'Server confirms trained '+line+' level '+str(target_level))
     wait(lambda:trainer()['spec_points']==points-cost,'Original specialization point cost')
-   trained.append({'line':line,'level':4})
-  learned={'Deafening Screech','Disconcerting Yell','Diminishing Yell','Clamorous Concussion'}
-  wait(lambda:learned<={e.get('name') for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'},'Trained spells reach actual usable list')
-  assert trainer()['spec_points']==points_before-27
+   trained.append({'line':line,'level':training_level})
+  proposed_names={int(e['SpellID']):str(e['Name']) for e in candidate['spells']}
+  unlocked={proposed_names[int(e['SpellID'])] for e in candidate['line_spells'] if e['LineName'] in training_lines[class_id] and 1<int(e['Level'])<=training_level}-expected
+  top_rank={proposed_names[int(e['SpellID'])] for e in candidate['line_spells'] if e['LineName'] in training_lines[class_id] and int(e['Level'])==training_level}
+  wait(lambda:top_rank<={e.get('name') for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'},'New highest-rank spells reach actual usable list')
+  trained_audit=snapshot['qa_skill_audit'];received_trained={str(e['name']) for e in trained_audit['skills'] if int(e['page']) in [3,4]}
+  for line in trained_audit['spell_lines']:received_trained.update(str(e['name']) for e in line['spells'])
+  actual_trained={str(e['name']) for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
+  assert received_trained==actual_trained,'Trained received/UI spell lists differ'
+  learned=actual_trained-expected
+  assert learned and learned<=unlocked,'Training must unlock original source spells'
+  assert trainer()['spec_points']==points_before-len(training_lines[class_id])*sum(range(2,training_level+1))
   result['training']={'normal_player_privileges':True,'lines':trained,'points_before':points_before,'points_after':trainer()['spec_points'],'learned_spells':sorted(learned)}
   result['checks']['original_training_points_and_spells']=True
  if args.bainshee_combat:
@@ -303,15 +317,15 @@ try:
   result['checks']['original_timer_restores_appearance_and_inventory']=True
   result['combat_damage_tested']=False
  send('chat',text='/quit')
- wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if args.bainshee_combat or args.bainshee_training else 45)
+ wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if args.bainshee_combat or training_mode else 45)
  lobby=snapshot['character_lobby'];assert all(int(c['class_id'])!=63 for c in lobby['choices'])
  result['custom_disabled_choice_hidden']=True
  row=next(c for c in lobby['characters'] if c['name']=='Codexdruid')
  result['base_class_caption']=row['class_name'];assert class_id!=51 or row['class_name']=='Magician'
- if args.bainshee_training:
+ if training_mode:
   with checked() as db:
    saved=db.execute("SELECT SerializedSpecs FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]
-   assert all(line in saved for line in ['Spectral Guard','Phantasmal Wail','Ethereal Shriek'])
+   assert all(line in saved for line in training_lines[class_id])
   send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
   wait(lambda:snapshot.get('classic_ui',{}).get('skills_ready') and learned<={e.get('name') for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell'},'Trained spells survive saved reentry',40)
   result['checks']['trained_spells_survive_saved_reentry']=True
