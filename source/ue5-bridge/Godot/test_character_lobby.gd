@@ -52,6 +52,15 @@ func run()->void:
     chosen.sliders[0]=8
     check(lobby.roster[0].look.sliders[0]==1,"saved appearance does not share the incoming command arrays")
     server.calls.clear()
+    var legacy:Dictionary={"face":15,"hair":15,"hair_color":15,"skin":15,"eyes":15,"sliders":[15,-1,4,8,12],"old_format":true}
+    server.characters[0]["look"]=legacy.duplicate(true);lobby.refresh(server)
+    check(server.characters[0].look==legacy and server.calls.is_empty(),"opening an old character never rewrites its original look store")
+    check(lobby.roster[0].look.sliders==[8,0,4,8] and not lobby.roster[0].look.has("old_format"),"legacy server face bytes become an editable bounded view")
+    check(lobby.validated_look(lobby.roster[0].look,"cel_m").ok,"unchanged compatibility view can be saved by the current editor")
+    check(not lobby.execute({"action":"character_customize","lobby_revision":lobby.revision,"name":"Existinghero","look":legacy},server,0) and server.calls.is_empty(),"client commands cannot opt into legacy normalization")
+    check(lobby.execute({"action":"character_customize","lobby_revision":lobby.revision,"name":"Existinghero","look":lobby.roster[0].look},server,0) and server.calls.size()==1,"old character saves only after an explicit valid customization action")
+    check(lobby.validated_look(lobby.stored_look({"prefix":"cel_m","look":null}),"cel_m").ok,"malformed local look storage falls back to valid original defaults without a crash")
+    server.calls.clear()
     check(not lobby.execute({"action":"character_create","lobby_revision":-1},server,0) and server.calls.is_empty(),"stale selection sends no creation packet")
     check(not lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Celt:m:999","name":"Newhero"},server,0) and server.calls.is_empty(),"unsupported class cannot be requested")
     check(not create(lobby,server,"bad name") and server.calls.is_empty(),"invalid name rejected before packet")

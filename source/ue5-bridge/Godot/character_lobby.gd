@@ -17,6 +17,15 @@ func validated_look(value:Variant,prefix:String)->Dictionary:
     if appearance==null:appearance=load(get_script().resource_path.get_base_dir().path_join("character_appearance.gd")).new()
     return appearance.normalise(value,prefix)
 
+func stored_look(character:Dictionary)->Dictionary:
+    # Only original server/local-store data uses this compatibility view.
+    # Commands remain strict and opening a menu never rewrites saved appearance.
+    if appearance==null:appearance=load(get_script().resource_path.get_base_dir().path_join("character_appearance.gd")).new()
+    var original:Variant=character.get("look",{})
+    if not original is Dictionary:original={}
+    var checked:Dictionary=appearance.normalise(original,String(character.get("prefix","")),true)
+    return checked.look if checked.ok else original.duplicate(true)
+
 func refresh(server:Node)->void:
     if not enabled or server.playing:return
     roster=[];choices=[]
@@ -26,7 +35,7 @@ func refresh(server:Node)->void:
         # still authoritative; do not render an incomplete "NAME THE" heading.
         if caption.is_empty():
             caption=String({51:"Magician",52:"Guardian",53:"Naturalist",54:"Stalker",57:"Forester"}.get(int(c.get("class_id",0)),""))
-        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"look":c.get("look",{}).duplicate(true),"overview":c.get("server",{}).duplicate(true)})
+        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"look":stored_look(c),"overview":c.get("server",{}).duplicate(true)})
     for race_name in ["Celt","Firbolg","Elf","Lurikeen","Sylvan"]:
         var race_id:int=int(server.RACE_BY_NAME[race_name])
         for female in [false,true]:

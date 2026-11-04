@@ -161,7 +161,7 @@ func enter_character(chosen:Dictionary)->void:
             for task in tasks:
                 if String(task.get("info",{}).get("race",""))==String(chosen.get("prefix","")):local_model_id=int(task.id);break
     adapter.player_level=int(chosen.get("level",1));adapter.player_realm=3
-    entered=true;character_name=chosen.name;local_look=chosen.get("look",{}).duplicate(true)
+    entered=true;character_name=chosen.name;local_look=character_lobby.stored_look(chosen)
     var legacy:String=server.quickbars_path(character_name)
     if not FileAccess.file_exists(legacy) and character_name.is_valid_filename():
         legacy=ProjectSettings.globalize_path("res://../save/Godot/app_userdata/MMOEngine/server_quickbars/"+character_name.to_lower()+".json").simplify_path()

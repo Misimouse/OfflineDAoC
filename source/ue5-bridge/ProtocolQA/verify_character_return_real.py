@@ -12,6 +12,8 @@ appearance_probe=os.environ.get('DAOC_BRIDGE_QA_APPEARANCE')=='1'
 look_store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
 assert look_store.resolve().is_relative_to(RUN.resolve())
 look_store_before=look_store.read_bytes() if appearance_probe and look_store.exists() else None
+legacy_probe=appearance_probe and os.environ.get('DAOC_BRIDGE_QA_LEGACY_LOOK')=='1'
+legacy_look={'face':15,'hair':15,'hair_color':15,'skin':15,'eyes':15,'sliders':[15,-1,4,8,12],'old_format':True}
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
@@ -41,6 +43,10 @@ def inv():return snapshot.get('inventory',{})
 def gear():return inv().get('gear',{})
 def item(slot):return next((i for i in inv().get('items',[]) if i['slot']==slot),None)
 try:
+ if legacy_probe:
+  store=json.loads(look_store_before) if look_store_before else {}
+  store['Codexdruid']=legacy_look;look_store.parent.mkdir(parents=True,exist_ok=True)
+  look_store.write_text(json.dumps(store),encoding='utf-8')
  for port in [10351,19737]:
   try:
    with socket.create_connection(('127.0.0.1',port),timeout=.2):raise RuntimeError('Private QA port already occupied')
@@ -80,6 +86,10 @@ try:
  assert not snapshot.get('entities');result['checks']['old_world_cleared']=True
  if appearance_probe:
   selected=next(c for c in lobby['characters'] if c['name']=='Codexdruid');prefix=selected['prefix'];assert prefix in ['cel_m','cel_f','elf_m','elf_f','fir_m','fir_f','lur_m','lur_f','syl_m','syl_f']
+  if legacy_probe:
+   assert selected['look']['sliders']==[8,0,4,8] and 'old_format' not in selected['look']
+   assert json.loads(look_store.read_text())['Codexdruid']==legacy_look
+   result['checks']['legacy_editable_without_store_rewrite']=True
   meta=json.loads((INSTALL/'new-client/godot/content/characters/races'/prefix/'figure.json').read_text())
   expected={'size':2,'face':min(1,max(0,len(meta.get('faces',[]))-1)),'eyes':min(1,max(0,len(meta.get('eyes',[]))-1)),'skin':min(3,max(0,len(meta.get('skin_tones',[]))-1)),'hair':0,'hair_color':0,'tattoo':0,'sliders':[8 if i%2==0 else 0 for i in range(len(meta.get('sliders',[])))]}
   send('character_customize',name='Codexdruid',look=expected,lobby_revision=lobby['revision'])
