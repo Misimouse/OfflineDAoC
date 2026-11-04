@@ -13,6 +13,7 @@ parser.add_argument('--server-source',type=Path)
 parser.add_argument('--bainshee-effect',choices=['ward','barrier'])
 parser.add_argument('--bainshee-training',action='store_true')
 parser.add_argument('--expansion-training',action='store_true')
+parser.add_argument('--expansion-self-buff',action='store_true')
 parser.add_argument('--bainshee-combat',action='store_true')
 args=parser.parse_args();class_id=args.class_id
 training_mode=args.bainshee_training or args.expansion_training
@@ -32,9 +33,10 @@ assert args.server_source is None or args.bainshee_promotion
 assert not args.bainshee_effect or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_form_cycle)
 assert args.bainshee_race==9 or args.bainshee_form_cycle or args.bainshee_promotion
 assert not args.bainshee_training or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle)
+assert not args.expansion_self_buff or args.expansion_training,'Self buff requires the original training fixture'
 assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -78,9 +80,9 @@ def pump():
   if v.get('type')=='hello':session=v['session']
   if v.get('type')=='snapshot':
    snapshot=v
-   if args.bainshee_effect:
+   if args.bainshee_effect or args.expansion_self_buff:
     for event in v.get('spell_visuals',[]):
-     if event.get('effect_id') in [13515,13516,3332,3334] and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
+     if (args.expansion_self_buff or event.get('effect_id') in [13515,13516,3332,3334]) and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
 def wait(test,label,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
@@ -227,6 +229,20 @@ try:
   assert trainer()['spec_points']==points_before-len(training_lines[class_id])*sum(range(2,training_level+1))
   result['training']={'normal_player_privileges':True,'lines':trained,'points_before':points_before,'points_after':trainer()['spec_points'],'learned_spells':sorted(learned)}
   result['checks']['original_training_points_and_spells']=True
+ if args.expansion_self_buff:
+  name={58:'Minor Force',62:'Minor Discipline of Laresh'}[class_id]
+  original=next(e for e in candidate['spells'] if e['Name']==name)
+  assert original['Target']=='Self' and original['Power']>0 and original['Duration']>0
+  player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+  send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);send('target_self');settle(1)
+  entry=next(e for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell' and e.get('name')==name)
+  mana_before=snapshot['player_status']['vitals']['mana'];seq_before=max([e.get('seq',0) for e in effect_trace],default=0)
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  wait(lambda:any(e.get('seq',0)>seq_before and e.get('kind')=='release' and e.get('effect_id')==original['ClientEffect'] and not e.get('resisted') for e in effect_trace),'Original trained self buff releases effect',20)
+  wait(lambda:snapshot['player_status']['vitals']['mana']<mana_before,'Trained self buff consumes power')
+  assert not next(e for e in snapshot['entities'] if e['id']=='player:local').get('morphed')
+  result['self_buff']={'spell':name,'original_type':original['Type'],'effect_id':original['ClientEffect'],'mana_before':mana_before,'mana_after':snapshot['player_status']['vitals']['mana'],'events':[e for e in effect_trace if e.get('seq',0)>seq_before],'rendered_visual_acceptance':False}
+  result['checks']['trained_self_buff_power_and_effect']=True
  if args.bainshee_combat:
   import importlib.util
   spec=importlib.util.spec_from_file_location('bainshee_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
