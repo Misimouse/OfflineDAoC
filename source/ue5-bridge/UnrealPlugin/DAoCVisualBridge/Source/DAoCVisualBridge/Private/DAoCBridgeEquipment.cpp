@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeAppearance.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/CommandLine.h"
@@ -103,11 +104,22 @@ void UDAoCBridgeSubsystem::UpdateLocalEquipment(){
     if(!EquipmentCatalog.IsValid()||!Actor||!bLocalAvailable||!GearFlag(InventoryState,TEXT("ready"))){if(!LocalEquipment.IsEmpty()||EquipmentActor.IsValid())ClearLocalEquipment();return;}
     if(EquipmentActor.Get()!=Actor){ClearLocalEquipment();EquipmentActor=Actor;}
     const bool Combat=GearFlag(PlayerState,TEXT("attack_on"));const FString Set=GearStr(InventoryState,TEXT("weapon_set"));
-    const FString Fingerprint=FString::Printf(TEXT("%lld:%d:%s"),int64(GearNum(InventoryState,TEXT("state_revision"),-1)),int32(Combat),*Set);
+    auto* LocalRow=EntityRows.Find(TEXT("player:local"));auto Look=LocalRow?GearObj(*LocalRow,TEXT("look")):nullptr;FString LookKey;if(Look)FJsonSerializer::Serialize(Look.ToSharedRef(),TJsonWriterFactory<>::Create(&LookKey));
+    const FString Fingerprint=FString::Printf(TEXT("%lld:%d:%s"),int64(GearNum(InventoryState,TEXT("state_revision"),-1)),int32(Combat),*Set)+LookKey;
     bool Intact=true;for(const auto& Pair:LocalEquipment)if(!Pair.Value.Component.IsValid())Intact=false;
     if(EquipmentFingerprint==Fingerprint&&Intact)return;
     for(auto& Pair:LocalEquipment)if(Pair.Value.Component.IsValid())Pair.Value.Component->DestroyComponent();LocalEquipment.Empty();EquipmentMissingModels=0;EquipmentMissingBones=0;EquipmentFingerprint=Fingerprint;
     ApplyBodyArmour(Actor,InventoryState);
+    const FString AppearancePath=DAoCAppearancePath();
+    if(Look&&!AppearancePath.IsEmpty()){
+        auto Worn=MakeShared<FJsonObject>();const TMap<int32,FString> Names={{21,TEXT("helmet")},{22,TEXT("gloves")},{23,TEXT("boots")},{25,TEXT("torso")},{26,TEXT("cloak")},{27,TEXT("legs")},{28,TEXT("arms")}};
+        for(const auto& Slot:Names)if(auto Item=InventoryItem(Slot.Key))Worn->SetNumberField(Slot.Value,int32(GearNum(Item,TEXT("model"))));
+        const int32 Model=EntityModels.FindRef(TEXT("player:local"));
+        if(ApplyCharacterAppearance(Actor,Model,Look,ArmourCatalog,AppearancePath,Worn)){
+            auto* Definition=ModelCatalog.Find(FString::FromInt(Model));const double Base=Definition?GearNum(*Definition,TEXT("scale"),1):1;const double ServerSize=LocalRow?GearNum(*LocalRow,TEXT("size"),50):50;const int32 Size=FMath::Clamp(int32(GearNum(Look,TEXT("size"),1)),0,2);
+            Actor->SetActorScale3D(FVector(FMath::Clamp(Base*ServerSize/50.,.01,20.)*(Size==0?.95:Size==2?1.05:1.)));
+        }
+    }
     TArray<int32> Slots=Set==TEXT("twohand")?TArray<int32>{12}:Set==TEXT("ranged")?TArray<int32>{13}:TArray<int32>{10,11};
     auto* Parent=Actor->GetSkeletalMeshComponent();auto Right=InventoryItem(10);auto RightInfo=GearObj(GearObj(EquipmentCatalog,FString::FromInt(int32(GearNum(Right,TEXT("model"))))),TEXT("info"));
     for(int32 Slot:Slots){

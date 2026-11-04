@@ -172,3 +172,14 @@ The optional runtime files are `Content/ClassicUI/Pregame/lobby_motion.json` and
 The local contract suite passed 44 checks. Native pointer tests exercised the actual Slate paths for feature arrows, sliders, colour swatches and DEFAULT, verified no duplicate heads or scene restart, and compared CPU-skinned vertex positions before/after a feature edit. The installed shared project passed 36 checks at 3787x2107, including selected-character/creation appearance commands and all 325 scene controllers, without a live account or server. This does not establish visual acceptance or close CHARACTERS-01.
 
 Extend the rendered regression command above with `--screen customize`; `--motion`, `--appearance`, `--prefix` and `--orbit` optionally select private candidate resources and a second camera angle. The output includes the menu, its actual scene target and, when motion is active, mid-animation and orbit views. Keep automated evidence separate from owner review.
+
+
+## Chosen appearance in the world and inventory portrait
+
+The local-player gateway includes the selected original `look` in its world row. The same appearance renderer now serves selection/customization and the local playable figure: face, eyes, skin, hair, facial morphs and visual size. Original equipment rules remain authoritative. Ordinary helmets use original hairstyle deformation, circlets retain the hairstyle, full head replacements conceal it and raised hoods hide hair. Imported helmet preset hair is hidden where the chosen original hairstyle replaces it. Other players and NPCs keep their existing pipeline.
+
+Inventory portraits copy the equipped figure's visible head/hair, materials and morph weights and refresh when its appearance changes, even without an inventory revision. The portrait remains stationary except for the existing rotation controls. This does not certify owner visual acceptance or repair unrelated class/spell data.
+
+The opt-in `-DaocBridgeAppearanceTest` extends disposable native armour acceptance with world/portrait comparisons and ordinary helmet, circlet, full helmet, hidden helmet and hood cases for the ten supported figures. A run passed 2,662 checks; a rendered portrait run passed 2,489 checks. Native character-menu regression passed 36 checks. These automated counts are separate from manual acceptance.
+
+Stage `ProtocolQA/verify_character_return_real.py` alongside the prepared private QA helpers and set `DAOC_BRIDGE_QA_APPEARANCE=1` to test original look-store writes, same-connection world entry and fresh-process reload. It backs up and restores the isolated look file as well as the marked disposable database. Appearance remains in the original local Godot look store; this does not implement server-wide cross-client appearance persistence.

@@ -5,6 +5,7 @@ var adapter:Node
 var interaction:RefCounted
 var inventory:RefCounted
 var character_lobby:RefCounted
+var local_look:Dictionary={}
 var local_model_id:=0
 var vault:RefCounted
 var exchange:RefCounted
@@ -160,7 +161,7 @@ func enter_character(chosen:Dictionary)->void:
             for task in tasks:
                 if String(task.get("info",{}).get("race",""))==String(chosen.get("prefix","")):local_model_id=int(task.id);break
     adapter.player_level=int(chosen.get("level",1));adapter.player_realm=3
-    entered=true;character_name=chosen.name
+    entered=true;character_name=chosen.name;local_look=chosen.get("look",{}).duplicate(true)
     var legacy:String=server.quickbars_path(character_name)
     if not FileAccess.file_exists(legacy) and character_name.is_valid_filename():
         legacy=ProjectSettings.globalize_path("res://../save/Godot/app_userdata/MMOEngine/server_quickbars/"+character_name.to_lower()+".json").simplify_path()
@@ -429,7 +430,7 @@ func _process(_delta:float)->void:
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             var angle:=-float(heading)*TAU/4096.0
             var health:=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
-            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":local_model_id,
+            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":local_model_id,"look":local_look.duplicate(true),
                 "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"state":"dead" if player_state.ready and health<=0 else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)

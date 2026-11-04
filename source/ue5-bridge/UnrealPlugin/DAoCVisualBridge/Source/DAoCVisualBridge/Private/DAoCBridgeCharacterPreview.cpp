@@ -41,7 +41,7 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
     auto Structure=MakeShared<FJsonObject>(*Row);Structure->RemoveField(TEXT("look"));
     FString Signature;FJsonSerializer::Serialize(Structure,TJsonWriterFactory<>::Create(&Signature));
     Signature+=CharacterLobbyScreen;
-    if(Signature==CharacterLobbyPreviewSignature&&CharacterLobbyTarget){if(PreviewNumber(PreviewObject(PreviewObject(Row,TEXT("overview")),TEXT("models")),TEXT("helmet"))<=0)UpdateCharacterLobbyAppearance(PreviewObject(Row,TEXT("look")));return;}
+    if(Signature==CharacterLobbyPreviewSignature&&CharacterLobbyTarget){UpdateCharacterLobbyAppearance(PreviewObject(Row,TEXT("look")));return;}
     ClearCharacterLobbyPreview();CharacterLobbyPreviewSignature=Signature;
     FActorSpawnParameters Parameters;Parameters.ObjectFlags|=RF_Transient;Parameters.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     const FVector Origin(0,0,-200000);
@@ -68,7 +68,7 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
         for(const auto& Slot:Slots){int32 Id=int32(PreviewNumber(Worn,*Slot.Key))&0x1fff;if(Id<=0)continue;auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("slot"),Slot.Value);Item->SetNumberField(TEXT("model"),Id);const int32 Color=int32(PreviewNumber(Colors,*Slot.Key));Item->SetNumberField(TEXT("color"),Color<=255?Color:0);Item->SetNumberField(TEXT("emblem"),Color>255?Color:0);Items.Add(MakeShared<FJsonValueObject>(Item));}
         Gear->SetArrayField(TEXT("items"),Items);ApplyBodyArmour(Actor,Gear);
         // Candidate-only until appearance bytes and headwear have been verified.
-        if(PreviewNumber(Worn,TEXT("helmet"))<=0)UpdateCharacterLobbyAppearance(PreviewObject(Row,TEXT("look")));
+        UpdateCharacterLobbyAppearance(PreviewObject(Row,TEXT("look")));
         const TMap<int32,FString> WeaponKeys={{10,TEXT("right_hand")},{11,TEXT("left_hand")},{12,TEXT("two_hand")},{13,TEXT("distance")}};
         const TArray<int32> Active=(PreviewNumber(Worn,TEXT("right_hand"))>0||PreviewNumber(Worn,TEXT("left_hand"))>0)?TArray<int32>{10,11}:PreviewNumber(Worn,TEXT("two_hand"))>0?TArray<int32>{12}:TArray<int32>{13};
         TMap<int32,FEquipmentBinding> Bindings;int32 MissingModels=0,MissingBones=0;
@@ -99,7 +99,7 @@ bool UDAoCBridgeSubsystem::UpdateCharacterLobbyAppearance(TSharedPtr<FJsonObject
     if(!Actor||Path.IsEmpty())return false;
     if(!Look)Look=MakeShared<FJsonObject>();FString Signature;FJsonSerializer::Serialize(Look.ToSharedRef(),TJsonWriterFactory<>::Create(&Signature));
     if(Signature==CharacterLobbyLookSignature)return true;
-    if(!ApplyLobbyAppearance(Actor,CharacterLobbyPreviewModel,Look,ArmourCatalog,Path,CharacterLobbyPreviewWorn))return false;
+    if(!ApplyCharacterAppearance(Actor,CharacterLobbyPreviewModel,Look,ArmourCatalog,Path,CharacterLobbyPreviewWorn))return false;
     CharacterLobbyLookSignature=Signature;const int32 Size=FMath::Clamp(int32(PreviewNumber(Look,TEXT("size"),1)),0,2);Actor->SetActorScale3D(FVector(CharacterLobbyPreviewScale*(Size==0?.95f:Size==2?1.05f:1.f)));
     TArray<UMeshComponent*> Meshes;Actor->GetComponents(Meshes);for(auto* Mesh:Meshes){Mesh->SetVisibleInSceneCaptureOnly(true);Mesh->SetLightingChannels(false,true,false);Mesh->SetTextureForceResidentFlag(true);Mesh->PrestreamTextures(30,true);}
     if(CharacterLobbyCapture){CharacterLobbyCapture->ClearShowOnlyComponents();if(CharacterLobbyBackdropActor)CharacterLobbyCapture->ShowOnlyActorComponents(CharacterLobbyBackdropActor,true);CharacterLobbyCapture->ShowOnlyActorComponents(Actor,true);UpdateLobbyCamera();}

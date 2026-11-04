@@ -30,7 +30,7 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
     if(!Local)return;
     auto* Original=Local->GetSkeletalMeshComponent();if(!Original||!Original->GetSkeletalMeshAsset())return;
     double Revision=0;if(InventoryState)InventoryState->TryGetNumberField(TEXT("state_revision"),Revision);
-    const FString Signature=Original->GetSkeletalMeshAsset()->GetPathName()+FString::Printf(TEXT(":%lld:%d"),int64(Revision),Local->GetUniqueID());
+    const FString Signature=Original->GetSkeletalMeshAsset()->GetPathName()+FString::Printf(TEXT(":%lld:%d:%u"),int64(Revision),Local->GetUniqueID(),GetTypeHash(EquipmentFingerprint));
     if(!IsValid(ClassicDollActor)||ClassicDollSignature!=Signature){
         if(IsValid(ClassicDollActor))ClassicDollActor->Destroy();
         FActorSpawnParameters P;P.ObjectFlags|=RF_Transient;P.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -46,13 +46,14 @@ void UDAoCBridgeSubsystem::UpdateClassicDoll(){
             if(Source==Original||!Source->IsVisible())continue;UMeshComponent* Copy=nullptr;
             if(auto* Skel=Cast<USkeletalMeshComponent>(Source)){
                 auto* C=NewObject<USkeletalMeshComponent>(Doll);C->SetSkeletalMesh(Skel->GetSkeletalMeshAsset());C->SetAnimationMode(EAnimationMode::AnimationSingleNode);Doll->AddInstanceComponent(C);C->RegisterComponent();
-                if(Skel->LeaderPoseComponent.Get()==Original)C->SetLeaderPoseComponent(Body);
+                if(Skel->LeaderPoseComponent.Get()==Original)C->SetLeaderPoseComponent(Body,false,true);
                 else for(const auto& Pair:LocalEquipment)if(Pair.Value.Component.Get()==Source){
                     const TSharedPtr<FJsonObject>* Clips=nullptr;
                     if(Pair.Value.Descriptor&&Pair.Value.Descriptor->TryGetObjectField(TEXT("animations"),Clips)){
                         const FString ClipPath=DollString(*Clips,TEXT("idle"));if(!ClipPath.IsEmpty())if(auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*ClipPath))C->PlayAnimation(Clip,false);
                     }
                 }
+                for(const auto& Morph:Skel->GetMorphTargetCurves())C->SetMorphTarget(Morph.Key,Morph.Value);
                 C->TickAnimation(0,false);C->RefreshBoneTransforms();C->bPauseAnims=true;C->SetComponentTickEnabled(false);Copy=C;
             }else if(auto* Rigid=Cast<UStaticMeshComponent>(Source)){
                 auto* C=NewObject<UStaticMeshComponent>(Doll);C->SetStaticMesh(Rigid->GetStaticMesh());Doll->AddInstanceComponent(C);C->RegisterComponent();Copy=C;

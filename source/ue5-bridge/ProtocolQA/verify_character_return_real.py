@@ -8,6 +8,10 @@ result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
 backup=ROOT/'Backups'/('CharacterReturnQA_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
 config=RUN/'bridge_config.json';config_bytes=config.read_bytes()
+appearance_probe=os.environ.get('DAOC_BRIDGE_QA_APPEARANCE')=='1'
+look_store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
+assert look_store.resolve().is_relative_to(RUN.resolve())
+look_store_before=look_store.read_bytes() if appearance_probe and look_store.exists() else None
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
@@ -74,10 +78,36 @@ try:
  lobby=snapshot['character_lobby'];assert lobby['enabled'] and lobby['characters']
  result['checks']['quit_stays_connected']=True;result['roster_classes']=[dict(name=c['name'],class_name=c['class_name'],level=c['level']) for c in lobby['characters']]
  assert not snapshot.get('entities');result['checks']['old_world_cleared']=True
+ if appearance_probe:
+  selected=next(c for c in lobby['characters'] if c['name']=='Codexdruid');prefix=selected['prefix'];assert prefix in ['cel_m','cel_f','elf_m','elf_f','fir_m','fir_f','lur_m','lur_f','syl_m','syl_f']
+  meta=json.loads((INSTALL/'new-client/godot/content/characters/races'/prefix/'figure.json').read_text())
+  expected={'size':2,'face':min(1,max(0,len(meta.get('faces',[]))-1)),'eyes':min(1,max(0,len(meta.get('eyes',[]))-1)),'skin':min(3,max(0,len(meta.get('skin_tones',[]))-1)),'hair':0,'hair_color':0,'tattoo':0,'sliders':[8 if i%2==0 else 0 for i in range(len(meta.get('sliders',[])))]}
+  send('character_customize',name='Codexdruid',look=expected,lobby_revision=lobby['revision'])
+  wait(lambda:any(c['name']=='Codexdruid' and c.get('look')==expected for c in snapshot.get('character_lobby',{}).get('characters',[])),'Original customization save updates selected roster',20)
+  assert look_store.exists() and json.loads(look_store.read_text())['Codexdruid']==expected
+  result['checks']['original_appearance_store_written']=True;lobby=snapshot['character_lobby']
  send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
  wait(lambda:snapshot.get('in_game') and snapshot.get('player_status',{}).get('ready') and snapshot.get('classic_ui',{}).get('skills_ready'),'Re-enter from same character screen',30)
  result['checks']['same_connection_reentry']=True
+ if appearance_probe:
+  wait(lambda:any(e.get('id')=='player:local' and e.get('look')==expected for e in snapshot.get('entities',[])),'Chosen appearance reaches local world snapshot',20)
+  result['checks']['chosen_appearance_reaches_world']=True
  (D/'returned_snapshot.json').write_text(json.dumps(snapshot),encoding='utf-8');result['passed']=True
+ if appearance_probe:
+  send('chat',text='/quit');wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Second saved return before client restart',45)
+  send('logout');client.wait(timeout=45);assert client.returncode==0
+  sock.close();sock=None;buffer=b'';snapshot={};session='';serial=0
+  (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
+  log=(D/'character_reopen_client.log').open('w',encoding='utf-8');logs.append(log)
+  client=subprocess.Popen([str(game/'tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character-menu'],cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+  end=time.monotonic()+50
+  while time.monotonic()<end:
+   try:sock=socket.create_connection(('127.0.0.1',19737),timeout=.3);sock.settimeout(.1);break
+   except OSError:time.sleep(.2)
+  else:raise RuntimeError('Reopened private character bridge unavailable')
+  wait(lambda:snapshot.get('character_lobby',{}).get('ready'),'Fresh client reloads original roster',45)
+  assert any(c['name']=='Codexdruid' and c.get('look')==expected for c in snapshot['character_lobby']['characters'])
+  result['checks']['appearance_reloaded_by_fresh_client']=True
 
 except Exception:
  result['errors'].append(traceback.format_exc());(D/'character_return_failed.json').write_text(json.dumps(snapshot),encoding='utf-8')
@@ -95,6 +125,11 @@ finally:
   try:server.wait(timeout=45)
   except subprocess.TimeoutExpired:server.kill();server.wait();result['errors'].append('Private server forced stop')
  for log in logs:log.close()
+ if appearance_probe:
+  assert look_store.resolve().is_relative_to(RUN.resolve())
+  if look_store_before is None:look_store.unlink(missing_ok=True)
+  else:look_store.write_bytes(look_store_before)
+  result['appearance_profile_restored']=True
  if backed:
   assert DB.is_relative_to(RUN) and RUN.is_relative_to(ROOT/'ProtocolQA')
   with checked() as dst:
