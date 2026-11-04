@@ -1,0 +1,63 @@
+#include "DAoCBridgeAppearance.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonSerializer.h"
+#include "Misc/FileHelper.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "Animation/SkeletalMeshActor.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Engine/Texture2D.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Rendering/SkeletalMeshRenderData.h"
+#include "Rendering/SkeletalMeshLODRenderData.h"
+
+namespace {
+TSharedPtr<FJsonObject> Obj(TSharedPtr<FJsonObject> O,const FString& K){const TSharedPtr<FJsonObject>* V=nullptr;return O&&O->TryGetObjectField(K,V)?*V:nullptr;}
+FString Str(TSharedPtr<FJsonObject> O,const FString& K){FString V;if(O)O->TryGetStringField(K,V);return V;}
+TArray<TSharedPtr<FJsonValue>> Arr(TSharedPtr<FJsonObject> O,const TCHAR* K){const TArray<TSharedPtr<FJsonValue>>* V=nullptr;return O&&O->TryGetArrayField(K,V)?*V:TArray<TSharedPtr<FJsonValue>>{};}
+int32 Num(TSharedPtr<FJsonObject> O,const TCHAR* K,int32 D=0){double V=D;if(O)O->TryGetNumberField(K,V);return int32(V);}
+TSharedPtr<FJsonObject> Choice(TSharedPtr<FJsonObject> Meta,const TCHAR* Key,int32 I){auto A=Arr(Meta,Key);return A.IsEmpty()?nullptr:A[FMath::Clamp(I,0,A.Num()-1)]->AsObject();}
+float Linear(float V){return V<=.04045f?V/12.92f:FMath::Pow((V+.055f)/1.055f,2.4f);}
+FLinearColor Tint(const TArray<TSharedPtr<FJsonValue>>& V,bool Skin){if(V.Num()<3)return FLinearColor::White;auto C=[Skin](double X){return Linear(Skin?(1+X)*.5:X);};return FLinearColor(C(V[0]->AsNumber()),C(V[1]->AsNumber()),C(V[2]->AsNumber()),1);}
+}
+FString DAoCAppearancePath(){FString Path;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyAppearance="),Path))return Path;Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/Pregame/appearance_catalog.json");return FPaths::FileExists(Path)?Path:FString();}
+bool ApplyLobbyAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<FJsonObject> Look,TSharedPtr<FJsonObject> Armour,const FString& CatalogPath,TSharedPtr<FJsonObject> Worn){
+    if(!Actor)return false;
+    FString Text;TSharedPtr<FJsonObject> Catalog;if(!FFileHelper::LoadFileToString(Text,*CatalogPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Catalog))return false;
+    auto Figure=Obj(Obj(Catalog,TEXT("figures")),FString::FromInt(Model)),Meta=Obj(Figure,TEXT("meta")),Parts=Obj(Figure,TEXT("parts"));
+    auto* Parent=Actor->GetSkeletalMeshComponent();auto* Body=Parent->GetSkeletalMeshAsset();auto Definition=Obj(Obj(Armour,TEXT("figures")),Body?Body->GetPathName():TEXT(""));
+    if(!Meta||!Parts||!Definition||!Body)return false;
+    auto* HeadMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Obj(Parts,TEXT("head")),TEXT("asset")));auto* Master=LoadObject<UMaterialInterface>(nullptr,*Str(Obj(Catalog,TEXT("materials")),TEXT("skin")));
+    if(!HeadMesh||!Master)return false;
+    auto Texture=[Catalog](const FString& Name)->UTexture2D*{const FString Path=Str(Obj(Catalog,TEXT("textures")),Name.ToLower());auto* T=Path.IsEmpty()?nullptr:LoadObject<UTexture2D>(nullptr,*Path);if(T)T->SetForceMipLevelsToBeResident(60);return T;};
+    auto Face=Choice(Meta,TEXT("faces"),Num(Look,TEXT("face")));auto* FaceTexture=Texture(Str(Face,TEXT("tex")));if(!FaceTexture)return false;
+    auto* Render=Body->GetResourceForRendering();if(!Render)return false;
+    TArray<USkeletalMeshComponent*> Previous;Actor->GetComponents(Previous);
+    for(auto* Part:Previous)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead"))||Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHair")))Part->DestroyComponent();
+    auto Attach=[Actor,Parent](USkeletalMesh* Mesh){auto* C=NewObject<USkeletalMeshComponent>(Actor,NAME_None,RF_Transient);Actor->AddInstanceComponent(C);C->SetSkeletalMesh(Mesh);C->SetupAttachment(Parent);C->SetRelativeTransform(FTransform::Identity);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCanEverAffectNavigation(false);C->SetCastShadow(false);C->RegisterComponent();C->SetLeaderPoseComponent(Parent,false,true);C->SetForcedLOD(1);C->SetTextureForceResidentFlag(true);return C;};
+    auto* Head=Attach(HeadMesh);Head->ComponentTags.Add(TEXT("DAoCBridgeAppearanceHead"));auto* Material=UMaterialInstanceDynamic::Create(Master,Head);Material->SetTextureParameterValue(TEXT("FigureTexture"),FaceTexture);
+    auto Tones=Arr(Meta,TEXT("skin_tones"));FLinearColor Skin=FLinearColor::White;if(!Tones.IsEmpty())Skin=Tint(Tones[FMath::Clamp(Num(Look,TEXT("skin")),0,Tones.Num()-1)]->AsArray(),true);
+    Material->SetVectorParameterValue(TEXT("FigureTint"),Skin);
+    // Original alpha-masked starter clothes expose skin on hands/arms on some
+    // races. Real equipped armour keeps its separate dye/material behaviour.
+    const TMap<FString,FString> Slots={{TEXT("body"),TEXT("torso")},{TEXT("arms"),TEXT("arms")},{TEXT("gloves"),TEXT("gloves")},{TEXT("boots"),TEXT("boots")},{TEXT("legs"),TEXT("legs")}};
+    auto Tinted=Obj(Meta,TEXT("skin_tint_parts")),Clothes=Obj(Meta,TEXT("clothes"));
+    for(auto V:Arr(Definition,TEXT("sections"))){auto S=V->AsObject();const FString Slot=Str(S,TEXT("slot"));bool IsTinted=false;if(Tinted)Tinted->TryGetBoolField(Slot,IsTinted);auto Clothing=Obj(Clothes,Slot);if(!IsTinted||Str(Clothing,TEXT("chan"))!=TEXT("a")||!Slots.Contains(Slot)||Num(Worn,*Slots.FindRef(Slot))>0)continue;
+        if(auto* T=Texture(Str(Clothing,TEXT("tex")))){auto* M=UMaterialInstanceDynamic::Create(Master,Parent);M->SetTextureParameterValue(TEXT("FigureTexture"),T);M->SetVectorParameterValue(TEXT("FigureTint"),Skin);M->SetScalarParameterValue(TEXT("UseSkinMask"),1);Parent->SetMaterial(Num(S,TEXT("index")),M);}
+    }
+    auto Eyes=Arr(Meta,TEXT("eyes"));if(!Eyes.IsEmpty())if(auto* T=Texture(Eyes[FMath::Clamp(Num(Look,TEXT("eyes")),0,Eyes.Num()-1)]->AsString())){Material->SetTextureParameterValue(TEXT("EyeTexture"),T);Material->SetScalarParameterValue(TEXT("HasEye"),1);}
+    if(Num(Look,TEXT("tattoo"))>0)if(auto* T=Texture(Str(Choice(Meta,TEXT("tattoos"),Num(Look,TEXT("tattoo"))),TEXT("tex")))){Material->SetTextureParameterValue(TEXT("TattooTexture"),T);Material->SetScalarParameterValue(TEXT("HasTattoo"),1);}
+    for(int32 I=0;I<Head->GetNumMaterials();++I)Head->SetMaterial(I,Material);
+    auto Sliders=Arr(Meta,TEXT("sliders")),Values=Arr(Look,TEXT("sliders"));for(int32 I=0;I<Sliders.Num();++I){const float V=I<Values.Num()?FMath::Clamp(float(Values[I]->AsNumber()),0.f,8.f):4;Head->SetMorphTarget(FName(*Str(Sliders[I]->AsObject(),TEXT("low"))),FMath::Max((4-V)/4,0.f));Head->SetMorphTarget(FName(*Str(Sliders[I]->AsObject(),TEXT("high"))),FMath::Max((V-4)/4,0.f));}
+    Head->TickAnimation(0,false);Head->RefreshBoneTransforms();Head->MarkRenderDynamicDataDirty();
+    auto Style=Choice(Meta,TEXT("hair_styles"),Num(Look,TEXT("hair")));auto Hair=Obj(Parts,Str(Style,TEXT("node")));auto Colors=Arr(Style,TEXT("colours"));
+    if(Hair&&!Colors.IsEmpty()){
+        auto Color=Colors[FMath::Clamp(Num(Look,TEXT("hair_color")),0,Colors.Num()-1)]->AsObject();auto* HairMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Hair,TEXT("asset")));auto* HairMaster=LoadObject<UMaterialInterface>(nullptr,*Str(Obj(Catalog,TEXT("materials")),TEXT("hair")));auto* T=Texture(Str(Color,TEXT("tex")));
+        if(HairMesh&&HairMaster&&T){auto* C=Attach(HairMesh);C->ComponentTags.Add(TEXT("DAoCBridgeAppearanceHair"));auto* M=UMaterialInstanceDynamic::Create(HairMaster,C);M->SetTextureParameterValue(TEXT("FigureTexture"),T);M->SetVectorParameterValue(TEXT("FigureTint"),Tint(Arr(Color,TEXT("tint")),false));for(int32 I=0;I<C->GetNumMaterials();++I)C->SetMaterial(I,M);}
+    }
+    // Replace only original head/hair sections. Armour and weapons retain their own pipeline.
+    for(auto V:Arr(Definition,TEXT("sections"))){auto S=V->AsObject();bool HairSection=false;S->TryGetBoolField(TEXT("hood_hair"),HairSection);if(Str(S,TEXT("slot"))!=TEXT("head")&&!HairSection)continue;const int32 MaterialIndex=Num(S,TEXT("index"),-1);for(int32 L=0;L<Render->LODRenderData.Num();++L){const auto& D=Render->LODRenderData[L];for(int32 I=0;I<D.RenderSections.Num();++I)if(D.RenderSections[I].MaterialIndex==MaterialIndex)Parent->ShowMaterialSection(MaterialIndex,I,false,L);}}
+    return true;
+}

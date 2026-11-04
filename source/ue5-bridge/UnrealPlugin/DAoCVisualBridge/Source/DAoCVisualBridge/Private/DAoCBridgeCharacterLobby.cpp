@@ -1,4 +1,6 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeLobbyMotion.h"
+#include "DAoCBridgeAppearance.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
@@ -37,7 +39,9 @@
 #include "Engine/StaticMeshActor.h"
 #include "Engine/StaticMesh.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "StaticMeshResources.h"
+#include "SkeletalRenderPublic.h"
 
 namespace {
 FString LobbyText(TSharedPtr<FJsonObject> O,const TCHAR* K){FString V;if(O)O->TryGetStringField(K,V);return V;}
@@ -72,6 +76,7 @@ void UDAoCBridgeSubsystem::ApplyCharacterLobby(TSharedPtr<FJsonObject> State,boo
     }
     if(!CharacterLobbyOverlay){ClearEntities();}
     if(CharacterLobbyState&&LobbyFlag(CharacterLobbyState,TEXT("pending"))&&!LobbyFlag(State,TEXT("pending"))&&LobbyText(State,TEXT("feedback")).StartsWith(TEXT("Character created"))){CharacterLobbyScreen=TEXT("select");for(auto V:LobbyArray(State,TEXT("characters")))if(LobbyText(V->AsObject(),TEXT("name")).Equals(CharacterLobbyName,ESearchCase::IgnoreCase))CharacterLobbySlot=LobbyNumber(V->AsObject(),TEXT("slot"));}
+    if(LobbyText(State,TEXT("feedback"))==TEXT("Character appearance saved."))CharacterLobbyScreen=TEXT("select");
     CharacterLobbyState=State;const int64 Revision=LobbyNumber(State,TEXT("revision"));
     FVector2D Size;GetWorld()->GetGameViewport()->GetViewportSize(Size);const bool Resized=!CharacterLobbyViewportSize.Equals(Size,.1);CharacterLobbyViewportSize=Size;
     if(CharacterLobbyOverlay&&CharacterLobbyRevision==Revision&&!Resized){if(CharacterLobbyCapture){IStreamingManager::Get().AddViewInformation(CharacterLobbyCapture->GetComponentLocation(),Size.X,Size.X/FMath::Tan(FMath::DegreesToRadians(CharacterLobbyCapture->FOVAngle*.5f)),1,false,.5f,CharacterLobbyPreviewActor.Get(),GetWorld());CharacterLobbyCapture->CaptureScene();}return;}
@@ -83,7 +88,8 @@ void UDAoCBridgeSubsystem::SendCharacterAction(const FString& Action){
     if(!CharacterLobbyState||!CharacterLobbyOverlay)return;
     auto Values=MakeShared<FJsonObject>();Values->SetNumberField(TEXT("lobby_revision"),LobbyNumber(CharacterLobbyState,TEXT("revision")));
     if(Action==TEXT("character_enter"))Values->SetStringField(TEXT("name"),CharacterLobbySelected);
-    if(Action==TEXT("character_create")){Values->SetStringField(TEXT("name"),CharacterLobbyName);Values->SetStringField(TEXT("choice_id"),CharacterLobbyChoice);}
+    if(Action==TEXT("character_create")){Values->SetStringField(TEXT("name"),CharacterLobbyName);Values->SetStringField(TEXT("choice_id"),CharacterLobbyChoice);Values->SetObjectField(TEXT("look"),CharacterLobbyLook?CharacterLobbyLook:MakeShared<FJsonObject>());}
+    if(Action==TEXT("character_customize")){Values->SetStringField(TEXT("name"),CharacterLobbySelected);Values->SetObjectField(TEXT("look"),CharacterLobbyLook?CharacterLobbyLook:MakeShared<FJsonObject>());}
     Send(Action,Values);
 }
 
@@ -91,7 +97,7 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobby(){
     if(!GetWorld()||!GetWorld()->GetGameViewport()||!CharacterLobbyState)return;auto* Viewport=GetWorld()->GetGameViewport();
     if(CharacterLobbyOverlay)Viewport->RemoveViewportWidgetContent(CharacterLobbyOverlay.ToSharedRef());
     FVector2D Pixels;Viewport->GetViewportSize(Pixels);const double Width=FMath::Max(1024.,768.*Pixels.X/FMath::Max(1.,Pixels.Y)),Shift=Width-1024;
-    CharacterLobbyButtonStyles.Empty();auto Canvas=SNew(SCanvas);const FLinearColor Gold(1,.84,.45),Cream(.93,.89,.78),Dim(.55,.56,.51);
+    CharacterLobbyButtonStyles.Empty();auto Canvas=SNew(SCanvas).Visibility(EVisibility::SelfHitTestInvisible);const FLinearColor Gold(1,.84,.45),Cream(.93,.89,.78),Dim(.55,.56,.51);
     auto Font=[](int32 Size){return FSlateFontInfo(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/InterfaceFonts/minionpro-bold.ttf"),FMath::Max(7,FMath::RoundToInt(Size*.75)));};
     auto At=[Canvas](double X,double Y,double W,double H,TSharedRef<SWidget> Widget){Canvas->AddSlot().Position(FVector2D(X,Y)).Size(FVector2D(W,H))[Widget];};
     auto Label=[&](const FString& Text,double X,double Y,double W,double H,int32 Size,FLinearColor Color,bool Center=false){At(X,Y,W,H,SNew(STextBlock).Text(FText::FromString(Text.ToUpper())).Font(Font(Size)).ColorAndOpacity(Color).Justification(Center?ETextJustify::Center:ETextJustify::Left).AutoWrapText(true).ShadowOffset(FVector2D(1,1)));};
@@ -118,17 +124,27 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobby(){
         CharacterLobbySelected=Selected?LobbyText(Selected,TEXT("name")):TEXT("");
         TArray<TSharedPtr<FJsonObject>> Choices;for(auto V:LobbyArray(CharacterLobbyState,TEXT("choices"))){auto C=V->AsObject();if(LobbyText(C,TEXT("race"))==CharacterLobbyRace&&LobbyFlag(C,TEXT("female"))==bCharacterLobbyFemale)Choices.Add(C);}
         TSharedPtr<FJsonObject> Choice;for(auto C:Choices)if(LobbyText(C,TEXT("id"))==CharacterLobbyChoice)Choice=C;if(!Choice&&!Choices.IsEmpty()){Choice=Choices[0];CharacterLobbyChoice=LobbyText(Choice,TEXT("id"));}
-        auto Preview=Selected?Selected:MakeShared<FJsonObject>();if(CharacterLobbyScreen==TEXT("create")){Preview=MakeShared<FJsonObject>();const TMap<FString,FString> Prefixes={{TEXT("Celt"),TEXT("cel")},{TEXT("Firbolg"),TEXT("fir")},{TEXT("Elf"),TEXT("elf")},{TEXT("Lurikeen"),TEXT("lur")},{TEXT("Sylvan"),TEXT("syl")}};Preview->SetStringField(TEXT("prefix"),Prefixes.FindRef(CharacterLobbyRace)+(bCharacterLobbyFemale?TEXT("_f"):TEXT("_m")));}
-        RefreshCharacterLobbyPreview(Preview);if(CharacterLobbyPreviewBrush)At(0,0,Width,768,SNew(SImage).Image(CharacterLobbyPreviewBrush.Get()).Visibility(EVisibility::HitTestInvisible));
-        const bool Creating=CharacterLobbyScreen==TEXT("create");const FString Frame=Creating?TEXT("character_creation"):TEXT("character_selection");const double Left=Creating?240:12,Right=Creating?238:268;
+        auto Preview=Selected?Selected:MakeShared<FJsonObject>();const bool Customizing=CharacterLobbyScreen==TEXT("customize");
+        if(CharacterLobbyScreen==TEXT("create")||(Customizing&&!bCharacterLobbyEditing)){Preview=MakeShared<FJsonObject>();const TMap<FString,FString> Prefixes={{TEXT("Celt"),TEXT("cel")},{TEXT("Firbolg"),TEXT("fir")},{TEXT("Elf"),TEXT("elf")},{TEXT("Lurikeen"),TEXT("lur")},{TEXT("Sylvan"),TEXT("syl")}};Preview->SetStringField(TEXT("prefix"),Prefixes.FindRef(CharacterLobbyRace)+(bCharacterLobbyFemale?TEXT("_f"):TEXT("_m")));}
+        if(CharacterLobbyScreen==TEXT("create")&&CharacterLobbyLook)Preview->SetObjectField(TEXT("look"),CharacterLobbyLook);
+        if(Customizing){FString Copy;FJsonSerializer::Serialize(Preview.ToSharedRef(),TJsonWriterFactory<>::Create(&Copy));FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Copy),Preview);Preview->SetObjectField(TEXT("look"),CharacterLobbyLook?CharacterLobbyLook:MakeShared<FJsonObject>());const TSharedPtr<FJsonObject>* Overview=nullptr;if(Preview->TryGetObjectField(TEXT("overview"),Overview)){const TSharedPtr<FJsonObject>* Models=nullptr;if((*Overview)->TryGetObjectField(TEXT("models"),Models))(*Models)->SetNumberField(TEXT("helmet"),0);}}
+        FString AppearancePath=DAoCAppearancePath(),AppearanceText;TSharedPtr<FJsonObject> Appearance;const bool AppearanceAvailable=!AppearancePath.IsEmpty()&&FFileHelper::LoadFileToString(AppearanceText,*AppearancePath)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(AppearanceText),Appearance)&&Appearance.IsValid()&&AppearanceText.Contains(TEXT("swatches"));
+        RefreshCharacterLobbyPreview(Preview);if(CharacterLobbyPreviewBrush)At(0,0,Width,768,SAssignNew(CharacterLobbySceneInput,SBorder).Visibility(EVisibility::Visible).Padding(0).BorderImage(FCoreStyle::Get().GetBrush(TEXT("NoBrush")))[SNew(SImage).Image(CharacterLobbyPreviewBrush.Get()).Visibility(EVisibility::HitTestInvisible)]);
+        const bool Creating=CharacterLobbyScreen==TEXT("create");const FString Frame=Customizing?TEXT("character_customize"):Creating?TEXT("character_creation"):TEXT("character_selection");const double Left=Creating?240:12,Right=Creating?238:268;
         Art(Frame,0,0,Left,768,FVector2D::ZeroVector,FVector2D(Left/1024,1));Art(Frame,Left,0,Width-Left-Right,768,FVector2D(Left/1024,0),FVector2D((1024-Right)/1024,1));Art(Frame,Width-Right,0,Right,768,FVector2D((1024-Right)/1024,0),FVector2D(1,1));
-        if(!Creating){
+        if(Customizing){
+            At(0,0,Width,768,BuildCharacterCustomization(Width));Label(TEXT("CUSTOMIZE YOUR CHARACTER"),160+Shift/2,660,704,36,26,Gold,true);
+            Medallion(TEXT("CANCEL"),2,3,Width*.095,726,[this](){CharacterLobbyScreen=bCharacterLobbyEditing?TEXT("select"):TEXT("create");RefreshCharacterLobby();},!Pending);
+            Medallion(TEXT("REALM"),0,0,Width*.2975,726,[this](){CharacterLobbyScreen=TEXT("realm");RefreshCharacterLobby();},!Pending);
+            if(!bCharacterLobbyEditing)Medallion(TEXT("RACE / CLASS"),2,2,Width*.7025,726,[this](){CharacterLobbyScreen=TEXT("create");RefreshCharacterLobby();},!Pending);
+            Medallion(bCharacterLobbyEditing?TEXT("SAVE"):TEXT("CONTINUE"),0,2,Width*.905,726,[this](){SendCharacterAction(bCharacterLobbyEditing?TEXT("character_customize"):TEXT("character_create"));},Ready&&!Pending);
+        }else if(!Creating){
             Label(TEXT("SELECT CHARACTER"),760+Shift,64,248,32,22,Gold,true);
             for(int32 I=0;I<10;++I){TSharedPtr<FJsonObject> C;for(auto V:Characters)if(LobbyNumber(V->AsObject(),TEXT("slot"))==I)C=V->AsObject();const double Y=109+I*45;Button(TEXT(""),764+Shift,Y+1,240,43,[this,I](){CharacterLobbySlot=I;RefreshCharacterLobby();},!Pending);const double Cell=I==CharacterLobbySlot?185:215;Art(TEXT("misc_pieces_new"),770+Shift,Y+11,20,20,FVector2D(Cell/256.,7./256),FVector2D((Cell+24)/256.,31./256));
                 if(C){Label(LobbyText(C,TEXT("name"))+(LobbyText(C,TEXT("class_name")).IsEmpty()?TEXT(""):TEXT(" THE ")+LobbyText(C,TEXT("class_name"))),796+Shift,Y+3,206,22,14,I==CharacterLobbySlot?Gold:Cream);Label(FString::Printf(TEXT("LEVEL %d"),LobbyNumber(C,TEXT("level")))+TEXT(" IN ")+LobbyText(C,TEXT("location")),796+Shift,Y+23,208,20,11,Dim);}else Label(TEXT("EMPTY"),796+Shift,Y+11,208,22,16,Dim);
             }
-            Medallion(Selected?TEXT("PLAY"):TEXT("CREATE"),0,2,884+Shift,600,[this,Selected](){if(Selected)SendCharacterAction(TEXT("character_enter"));else{CharacterLobbyScreen=TEXT("create");RefreshCharacterLobby();}},Ready&&!Pending,66,24);
-            Label(TEXT("SELECT YOUR CHARACTER"),160+Shift/2,660,704,36,26,Gold,true);Medallion(TEXT("QUIT"),2,3,Width*.095,726,Quit);Medallion(TEXT("REALM"),0,0,Width*.2975,726,[this](){CharacterLobbyScreen=TEXT("realm");RefreshCharacterLobby();},!Pending);Medallion(TEXT("OPTIONS"),2,0,Width*.5,726,[](){},false);Medallion(TEXT("CUSTOMIZE"),2,2,Width*.7025,726,[](){},false);Medallion(TEXT("DELETE"),0,1,Width*.905,726,[](){},false);
+            Medallion(Selected?TEXT("PLAY"):TEXT("CREATE"),0,2,884+Shift,600,[this,Selected](){if(Selected)SendCharacterAction(TEXT("character_enter"));else{CharacterLobbyLook=MakeShared<FJsonObject>();CharacterLobbyScreen=TEXT("create");RefreshCharacterLobby();}},Ready&&!Pending,66,24);
+            Label(TEXT("SELECT YOUR CHARACTER"),160+Shift/2,660,704,36,26,Gold,true);Medallion(TEXT("QUIT"),2,3,Width*.095,726,Quit);Medallion(TEXT("REALM"),0,0,Width*.2975,726,[this](){CharacterLobbyScreen=TEXT("realm");RefreshCharacterLobby();},!Pending);Medallion(TEXT("OPTIONS"),2,0,Width*.5,726,[](){},false);Medallion(TEXT("CUSTOMIZE"),2,2,Width*.7025,726,[this,Selected](){CharacterLobbyLook=MakeShared<FJsonObject>();const TSharedPtr<FJsonObject>* Look=nullptr;if(Selected&&Selected->TryGetObjectField(TEXT("look"),Look)){FString Copy;FJsonSerializer::Serialize((*Look).ToSharedRef(),TJsonWriterFactory<>::Create(&Copy));FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Copy),CharacterLobbyLook);}bCharacterLobbyEditing=true;CharacterLobbyScreen=TEXT("customize");RefreshCharacterLobby();},AppearanceAvailable&&Selected.IsValid()&&!Pending);Medallion(TEXT("DELETE"),0,1,Width*.905,726,[](){},false);
         }else{
             Label(TEXT("DESCRIPTIONS"),16,62,220,30,22,Gold,true);Label(CharacterLobbyRace,24,96,210,26,20,Gold);Label(Choice?LobbyText(Choice,TEXT("class_name")):TEXT(""),24,124,210,26,16,Gold);
             auto Lore=LobbyLore();
@@ -138,10 +154,10 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobby(){
             if(Choice&&LobbyNumber(Choice,TEXT("class_id"))==47)Description+=TEXT("\n\nThis server starts the Druid path as a Naturalist. Advance at a Druid trainer at level 5.");
             At(24,160,210,455,SNew(SScrollBox)+SScrollBox::Slot()[SNew(STextBlock).Text(FText::FromString(Description.ToUpper())).Font(Font(14)).ColorAndOpacity(Cream).AutoWrapText(true)]);
             Label(TEXT("NAME"),790+Shift,80,216,30,22,Gold,true);At(797+Shift,116,199,22,SNew(SEditableTextBox).Font(Font(16)).Text(FText::FromString(CharacterLobbyName)).HintText(FText::FromString(TEXT("NAME"))).OnTextChanged_Lambda([this](const FText& Text){CharacterLobbyName=Text.ToString().Left(23);}));
-            const double RaceY=149+(122-3*30)*.5+2;Label(TEXT("RACE"),794+Shift,RaceY,102,27,20,Gold,true);const TArray<FString> Races={TEXT("Celt"),TEXT("Firbolg"),TEXT("Elf"),TEXT("Lurikeen"),TEXT("Sylvan")};for(int32 I=0;I<Races.Num();++I){const FString Race=Races[I];const int32 Cell=I+1;Button(Race,794+Shift+(Cell%2)*106,RaceY+(Cell/2)*30,102,27,[this,Race](){CharacterLobbyRace=Race;CharacterLobbyChoice.Empty();RefreshCharacterLobby();},!Pending,CharacterLobbyRace==Race,true);}
-            Label(TEXT("GENDER"),790+Shift,275,216,24,20,Gold,true);for(int32 G=0;G<2;++G)Button(G?TEXT("FEMALE"):TEXT("MALE"),794+Shift+G*106,304,102,27,[this,G](){bCharacterLobbyFemale=G!=0;CharacterLobbyChoice.Empty();RefreshCharacterLobby();},!Pending,bCharacterLobbyFemale==(G!=0),true);
+            const double RaceY=149+(122-3*30)*.5+2;Label(TEXT("RACE"),794+Shift,RaceY,102,27,20,Gold,true);const TArray<FString> Races={TEXT("Celt"),TEXT("Firbolg"),TEXT("Elf"),TEXT("Lurikeen"),TEXT("Sylvan")};for(int32 I=0;I<Races.Num();++I){const FString Race=Races[I];const int32 Cell=I+1;Button(Race,794+Shift+(Cell%2)*106,RaceY+(Cell/2)*30,102,27,[this,Race](){CharacterLobbyRace=Race;CharacterLobbyLook=MakeShared<FJsonObject>();CharacterLobbyChoice.Empty();RefreshCharacterLobby();},!Pending,CharacterLobbyRace==Race,true);}
+            Label(TEXT("GENDER"),790+Shift,275,216,24,20,Gold,true);for(int32 G=0;G<2;++G)Button(G?TEXT("FEMALE"):TEXT("MALE"),794+Shift+G*106,304,102,27,[this,G](){bCharacterLobbyFemale=G!=0;CharacterLobbyLook=MakeShared<FJsonObject>();CharacterLobbyChoice.Empty();RefreshCharacterLobby();},!Pending,bCharacterLobbyFemale==(G!=0),true);
             const TMap<int32,FString> StartingClasses={{40,TEXT("MAGICIAN")},{41,TEXT("MAGICIAN")},{42,TEXT("MAGICIAN")},{43,TEXT("GUARDIAN")},{44,TEXT("GUARDIAN")},{45,TEXT("GUARDIAN")},{46,TEXT("NATURALIST")},{47,TEXT("NATURALIST")},{48,TEXT("NATURALIST")},{49,TEXT("STALKER")},{50,TEXT("STALKER")},{55,TEXT("FORESTER")},{56,TEXT("FORESTER")}};if(Choice&&StartingClasses.Contains(LobbyNumber(Choice,TEXT("class_id"))))Label(TEXT("STARTS AS ")+StartingClasses.FindRef(LobbyNumber(Choice,TEXT("class_id")))+TEXT("\nADVANCED TRAINING AT LEVEL 5"),794+Shift,570,208,44,12,Gold,true);Label(TEXT("CLASS"),790+Shift,346,216,24,20,Gold,true);for(int32 I=0;I<Choices.Num();++I){const FString Id=LobbyText(Choices[I],TEXT("id"));Button(LobbyText(Choices[I],TEXT("class_name")),794+Shift+(I%2)*106,376+(I/2)*30,102,27,[this,Id](){CharacterLobbyChoice=Id;RefreshCharacterLobby();},!Pending,CharacterLobbyChoice==Id,true);}
-            Label(TEXT("SELECT YOUR RACE"),160+Shift/2,660,704,36,26,Gold,true);Medallion(TEXT("CANCEL"),2,3,Width*.095,726,[this](){CharacterLobbyScreen=TEXT("select");RefreshCharacterLobby();},!Pending);Medallion(TEXT("REALM"),0,0,Width*.2975,726,[this](){CharacterLobbyScreen=TEXT("realm");RefreshCharacterLobby();},!Pending);Medallion(TEXT("CREATE"),2,2,Width*.905,726,[this](){SendCharacterAction(TEXT("character_create"));},Ready&&!Pending&&Choice.IsValid()&&Characters.Num()<10);
+            Label(TEXT("SELECT YOUR RACE"),160+Shift/2,660,704,36,26,Gold,true);Medallion(TEXT("CANCEL"),2,3,Width*.095,726,[this](){CharacterLobbyScreen=TEXT("select");RefreshCharacterLobby();},!Pending);Medallion(TEXT("REALM"),0,0,Width*.2975,726,[this](){CharacterLobbyScreen=TEXT("realm");RefreshCharacterLobby();},!Pending);Medallion(AppearanceAvailable?TEXT("CONTINUE"):TEXT("CREATE"),2,2,Width*.905,726,[this,AppearanceAvailable](){if(AppearanceAvailable){if(!CharacterLobbyLook)CharacterLobbyLook=MakeShared<FJsonObject>();bCharacterLobbyEditing=false;CharacterLobbyScreen=TEXT("customize");RefreshCharacterLobby();}else SendCharacterAction(TEXT("character_create"));},Ready&&!Pending&&Choice.IsValid()&&Characters.Num()<10);
         }
         Label(LobbyText(CharacterLobbyState,TEXT("feedback")),160+Shift/2,630,704,28,14,Gold,true);
     }
@@ -160,7 +176,7 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
         return false;
     }
     FString Path;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCharacterLobbyTest="),Path))return false;
-    static int32 Phase=0,Checks=0;static double Started=0;static TArray<TSharedPtr<FJsonValue>> Failures;
+    static int32 Phase=0,Checks=0;static double Started=0;static TArray<TSharedPtr<FJsonValue>> Failures;static bool MotionShot=false;
     if(Phase==99)return true;
     auto Check=[&](bool Ok,const FString& Label){++Checks;if(!Ok)Failures.Add(MakeShared<FJsonValueString>(Label));};
     FString Capture;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCharacterLobbyCapture="),Capture);
@@ -185,7 +201,9 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
             Check(!CharacterLobbySelected.IsEmpty()&&!CharacterLobbyChoice.IsEmpty(),TEXT("only supplied characters and class choices are selected"));
             Socket=ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(NAME_Stream,TEXT("Offline character menu acceptance"),false);Session=TEXT("character-menu-acceptance");
             auto ReadCommand=[&](const FString& Action){Outgoing.Add(0);const FString Data=UTF8_TO_TCHAR(reinterpret_cast<const char*>(Outgoing.GetData()));Outgoing.Empty();TSharedPtr<FJsonObject> Value;Check(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Data),Value)&&Value&&LobbyText(Value,TEXT("action"))==Action,TEXT("menu sends ")+Action);return Value;};
-            SendCharacterAction(TEXT("character_create"));auto Create=ReadCommand(TEXT("character_create"));if(Create)Check(LobbyText(Create,TEXT("name"))==TEXT("Previewhero")&&LobbyText(Create,TEXT("choice_id"))==CharacterLobbyChoice&&LobbyNumber(Create,TEXT("lobby_revision"))==LobbyNumber(State,TEXT("revision")),TEXT("creation carries exact name choice and server revision"));
+            auto SavedLook=CharacterLobbyLook;CharacterLobbyLook=MakeShared<FJsonObject>();CharacterLobbyLook->SetNumberField(TEXT("face"),1);CharacterLobbyLook->SetNumberField(TEXT("skin"),2);
+            SendCharacterAction(TEXT("character_create"));auto Create=ReadCommand(TEXT("character_create"));if(Create){Check(LobbyText(Create,TEXT("name"))==TEXT("Previewhero")&&LobbyText(Create,TEXT("choice_id"))==CharacterLobbyChoice&&LobbyNumber(Create,TEXT("lobby_revision"))==LobbyNumber(State,TEXT("revision")),TEXT("creation carries exact name choice and server revision"));const TSharedPtr<FJsonObject>* Look=nullptr;Check(Create->TryGetObjectField(TEXT("look"),Look)&&LobbyNumber(*Look,TEXT("face"))==1&&LobbyNumber(*Look,TEXT("skin"))==2,TEXT("creation carries chosen appearance to the original creation API"));}
+            SendCharacterAction(TEXT("character_customize"));auto Customize=ReadCommand(TEXT("character_customize"));if(Customize){const TSharedPtr<FJsonObject>* Look=nullptr;Check(LobbyText(Customize,TEXT("name"))==CharacterLobbySelected&&Customize->TryGetObjectField(TEXT("look"),Look)&&LobbyNumber(*Look,TEXT("face"))==1,TEXT("customization carries exact selected character and appearance"));}CharacterLobbyLook=SavedLook;
             CharacterLobbyScreen=TEXT("select");RefreshCharacterLobby();
             SendCharacterAction(TEXT("character_enter"));auto Enter=ReadCommand(TEXT("character_enter"));if(Enter)Check(LobbyText(Enter,TEXT("name"))==CharacterLobbySelected,TEXT("enter request uses selected server character"));
             ApplyCharacterLobby(State,true);Check(!CharacterLobbyOverlay.IsValid(),TEXT("menu closes when server confirms world entry"));Check(!GetWorld()->GetGameViewport()->bDisableWorldRendering,TEXT("entering the realm restores normal world rendering"));
@@ -193,10 +211,53 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
             if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}Session.Empty();
         }
     }
-    if(Phase==1){FString Screen;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCharacterLobbyScreen="),Screen)&&Screen!=CharacterLobbyScreen&&(Screen==TEXT("create")||Screen==TEXT("realm"))){CharacterLobbyScreen=Screen;RefreshCharacterLobby();}}
+    if(Phase==1){FString Screen;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCharacterLobbyScreen="),Screen)&&Screen!=CharacterLobbyScreen&&(Screen==TEXT("create")||Screen==TEXT("realm")||Screen==TEXT("customize"))){CharacterLobbyScreen=Screen;RefreshCharacterLobby();}}
     if(!Capture.IsEmpty()){
+        // Exercise the actual Slate hit paths, rather than invoking callbacks.
+        // These events stay inside this disposable native test; no OS cursor move.
+        if(Phase==1&&CharacterLobbyScreen==TEXT("customize")){
+            static int32 Step=0;static double LastStep=0;static TWeakObjectPtr<AActor> Scene;static TSharedPtr<FDAoCLobbyMotion> Animation;static TArray<FVector3f> Neutral;
+            if(FPlatformTime::Seconds()-Started<3||FPlatformTime::Seconds()-LastStep<.3)return true;
+            auto Click=[this](FVector2D Point){auto& Slate=FSlateApplication::Get();const FVector2D Absolute=CharacterLobbyPanel->GetCachedGeometry().LocalToAbsolute(Point);TSet<FKey> Pressed;Pressed.Add(EKeys::LeftMouseButton);Slate.ProcessMouseMoveEvent(FPointerEvent(0,Absolute,Absolute,{},FKey(),0,FModifierKeysState()));Slate.ProcessMouseButtonDownEvent(nullptr,FPointerEvent(0,Absolute,Absolute,Pressed,EKeys::LeftMouseButton,0,FModifierKeysState()));Slate.ProcessMouseButtonUpEvent(FPointerEvent(0,Absolute,Absolute,{},EKeys::LeftMouseButton,0,FModifierKeysState()));};
+            auto HeadVertices=[this](){TArray<FVector3f> Positions;TArray<USkeletalMeshComponent*> Parts;CharacterLobbyPreviewActor->GetComponents(Parts);for(auto* Part:Parts)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead"))){TArray<FFinalSkinVertex> Vertices;Part->GetCPUSkinnedVertices(Vertices,0);for(const auto& V:Vertices)Positions.Add(V.Position);}return Positions;};
+            const double Width=CharacterLobbyPanel->GetCachedGeometry().GetLocalSize().X,Shift=Width-1024;
+            if(Step==0){Scene=CharacterLobbyBackdropActor;Animation=CharacterLobbyMotion;Click(FVector2D(500,300));}
+            if(Step==1){Check(LobbySceneHit(CharacterLobbyPanel->GetCachedGeometry().LocalToAbsolute(FVector2D(500,300))),TEXT("customization leaves the 3D scene available to mouse orbit"));Click(FVector2D(978+Shift,112));}
+            if(Step==2){Check(LobbyNumber(CharacterLobbyLook,TEXT("face"))==1,TEXT("clicking original face arrow updates appearance"));Check(Scene==CharacterLobbyBackdropActor&&Animation==CharacterLobbyMotion,TEXT("changing a feature preserves the live backdrop and animation timeline"));Neutral=HeadVertices();Click(FVector2D(978+Shift,139));}
+            if(Step==3){const auto A=LobbyArray(CharacterLobbyLook,TEXT("sliders"));Check(A.Num()==4&&A[0]->AsNumber()>4,TEXT("drag control receives pointer input and applies a face morph"));const auto Changed=HeadVertices();double Distance=0;if(Changed.Num()==Neutral.Num())for(int32 I=0;I<Changed.Num();++I)Distance=FMath::Max(Distance,double((Changed[I]-Neutral[I]).Size()));Check(!Neutral.IsEmpty()&&Changed.Num()==Neutral.Num()&&Distance>.001,TEXT("face slider changes skinned vertex positions, not only stored values"));Click(FVector2D(811+Shift,271));}
+            if(Step==4){Check(LobbyNumber(CharacterLobbyLook,TEXT("eyes"))==1,TEXT("clicking original colour swatch changes eye colour"));Click(FVector2D(946+Shift,620));}
+            if(Step==5){Check(CharacterLobbyLook&&CharacterLobbyLook->Values.IsEmpty(),TEXT("original DEFAULT button restores neutral appearance"));TArray<USkeletalMeshComponent*> Parts;CharacterLobbyPreviewActor->GetComponents(Parts);int32 Heads=0;for(auto* Part:Parts)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead")))++Heads;Check(Heads==1,TEXT("repeated appearance edits replace components without duplicates"));}
+            if(Step<6){++Step;LastStep=FPlatformTime::Seconds();return true;}
+        }
+        static bool CameraChecked=false;
+        if(Phase==1&&!CameraChecked&&CharacterLobbyCapture&&CharacterLobbyPreviewActor){
+            CameraChecked=true;const FVector BodyPosition=CharacterLobbyPreviewActor->GetActorLocation(),Eye=CharacterLobbyCapture->GetComponentLocation();
+            FString AppearancePath;
+            if(CharacterLobbyScreen==TEXT("create")&&!DAoCAppearancePath().IsEmpty()){
+                TArray<USkeletalMeshComponent*> Parts;CharacterLobbyPreviewActor->GetComponents(Parts);int32 Heads=0;
+                for(auto* Part:Parts)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead"))){++Heads;Check(Part->GetSkeletalMeshAsset()!=nullptr&&Part->GetMaterial(0)!=nullptr,TEXT("original appearance head has its mesh and texture material"));}
+                Check(Heads==1,TEXT("original appearance replaces the head exactly once"));
+            }
+            const float SavedFigure=LobbyFigureYaw,SavedYaw=LobbyOrbitYaw,SavedPitch=LobbyOrbitPitch,SavedZoom=LobbyZoom;
+            bLobbyRightHeld=true;LobbyLastPointer=FVector2D(100,100);HandleLobbyPointer(FKey(),false,FVector2D(250,120),true);bLobbyRightHeld=false;
+            Check(!CharacterLobbyCapture->GetComponentLocation().Equals(Eye,.1),TEXT("lobby camera orbits in the 3D scene"));Check(CharacterLobbyPreviewActor->GetActorLocation().Equals(BodyPosition,.01),TEXT("orbiting does not move the figure"));
+            const FRotator Before=CharacterLobbyPreviewActor->GetActorRotation();bLobbyLeftHeld=true;LobbyLastPointer=FVector2D(100,100);HandleLobbyPointer(FKey(),false,FVector2D(150,100),true);bLobbyLeftHeld=false;
+            Check(!CharacterLobbyPreviewActor->GetActorRotation().Equals(Before,.1),TEXT("figure rotation is independent from the camera"));
+            LobbyOrbitYaw=SavedYaw;LobbyOrbitPitch=SavedPitch;LobbyZoom=.6f;UpdateLobbyCamera();Check(!CharacterLobbyCapture->GetComponentLocation().Equals(Eye,.1),TEXT("lobby zoom changes the camera position"));
+            LobbyFigureYaw=SavedFigure;LobbyOrbitYaw=SavedYaw;LobbyOrbitPitch=SavedPitch;LobbyZoom=SavedZoom;CharacterLobbyPreviewActor->SetActorRotation(Before);UpdateLobbyCamera();
+            Check(CharacterLobbyCapture->GetComponentLocation().Equals(Eye,.01),TEXT("lobby camera returns to its original position"));
+        }
+        if(Phase==1&&CharacterLobbyMotion){
+            if(GShaderCompilingManager&&GShaderCompilingManager->IsCompiling())return true;
+            static double MotionReadyAt=0;const double Now=FPlatformTime::Seconds();if(MotionReadyAt==0)MotionReadyAt=Now;
+            ApplyCharacterLobby(CharacterLobbyState,false);
+            if(!MotionShot&&Now-MotionReadyAt>2){FScreenshotRequest::RequestScreenshot(Capture+TEXT(".motion-mid.png"),true,false);MotionShot=true;}
+            if(Now-MotionReadyAt<6)return true;
+        }
         if(Phase==1){ApplyCharacterLobby(CharacterLobbyState,false);if(GShaderCompilingManager&&GShaderCompilingManager->IsCompiling())return true;if(FPlatformTime::Seconds()-Started<8)return true;FScreenshotRequest::RequestScreenshot(Capture,true,false);Phase=2;Started=FPlatformTime::Seconds();return true;}
         if(FPlatformTime::Seconds()-Started<1)return true;
+        if(Phase==2&&CharacterLobbyMotion){int32 Orbit=90;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestOrbit="),Orbit);LobbyOrbitYaw=Orbit;UpdateLobbyCamera();FScreenshotRequest::RequestScreenshot(Capture+TEXT(".orbit.png"),true,false);Phase=3;Started=FPlatformTime::Seconds();return true;}
+        if(Phase==3){LobbyOrbitYaw=0;UpdateLobbyCamera();Phase=4;Started=FPlatformTime::Seconds();return true;}
         // Preserve the actual scene target separately from the desktop-scaled UI
         // screenshot. A small Slate window cannot establish full-resolution fidelity.
         if(CharacterLobbyCapture)CharacterLobbyCapture->CaptureScene();
@@ -205,6 +266,7 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
     }
     auto Report=MakeShared<FJsonObject>();Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetArrayField(TEXT("failures"),Failures);Report->SetBoolField(TEXT("live_account"),false);
     if(CharacterLobbyTarget){Report->SetNumberField(TEXT("preview_width"),CharacterLobbyTarget->SizeX);Report->SetNumberField(TEXT("preview_height"),CharacterLobbyTarget->SizeY);}
+    Report->SetNumberField(TEXT("moving_surfaces"),CharacterLobbyMotion?CharacterLobbyMotion->MovingSurfaces():0);
     if(auto* Backdrop=Cast<AStaticMeshActor>(CharacterLobbyBackdropActor.Get()))if(UStaticMesh* Mesh=Backdrop->GetStaticMeshComponent()->GetStaticMesh())if(auto* Data=Mesh->GetRenderData()){
         TArray<TSharedPtr<FJsonValue>> Lods;for(const auto& Lod:Data->LODResources){auto Entry=MakeShared<FJsonObject>();Entry->SetNumberField(TEXT("triangles"),Lod.GetNumTriangles());Entry->SetNumberField(TEXT("uv_channels"),Lod.VertexBuffers.StaticMeshVertexBuffer.GetNumTexCoords());Lods.Add(MakeShared<FJsonValueObject>(Entry));}Report->SetArrayField(TEXT("backdrop_lods"),Lods);
     }

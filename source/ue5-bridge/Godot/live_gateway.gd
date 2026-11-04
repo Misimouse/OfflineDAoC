@@ -247,7 +247,7 @@ func world_event(kind:String,data:Dictionary)->void:
 func command(value:Dictionary)->void:
     var action:=String(value.get("action",""))
     if action=="logout":request_logout();return
-    if action in ["character_enter","character_create","character_refresh"]:
+    if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
     if action in exchange.ACTIONS:

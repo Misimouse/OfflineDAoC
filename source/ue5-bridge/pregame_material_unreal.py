@@ -4,7 +4,7 @@ from pathlib import Path
 import unreal
 
 
-def build(root, name, definition, folder):
+def build(root, name, definition, folder, source_uniforms=False):
     assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     lib = unreal.MaterialEditingLibrary
@@ -73,17 +73,31 @@ def build(root, name, definition, folder):
             clamp.set_editor_property('max_default', 1)
             connect(uv, '', clamp, 'Input')
             uv = clamp
+        scroll = spec.get('uv_scroll', {}).get(slot)
+        if scroll:
+            timer = node(unreal.MaterialExpressionTime)
+            duration = constant(max(float(scroll[2]), .0001))
+            phase = operation(unreal.MaterialExpressionDivide, timer, duration)
+            fraction = node(unreal.MaterialExpressionFrac)
+            connect(phase, '', fraction, '')
+            speed = node(unreal.MaterialExpressionConstant2Vector)
+            speed.set_editor_property('r', float(scroll[0])); speed.set_editor_property('g', float(scroll[1]))
+            delta = multiply(speed, fraction)
+            uv = operation(unreal.MaterialExpressionAdd, uv, delta)
         connect(uv, '', sample, 'UVs')
         samples[slot] = sample
 
     one = constant(1)
     vertex = node(unreal.MaterialExpressionVertexColor)
     base = samples.get('base', one)
-    colour = multiply(base, constant(spec.get('tint', [1, 1, 1])), 'RGB' if 'base' in samples else '')
+    def source_colour(value):
+        return [(v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4) for v in value] if source_uniforms else value
+    tint = source_colour(spec.get('tint', [1, 1, 1]))
+    colour = multiply(base, constant(tint), 'RGB' if 'base' in samples else '')
     alpha = multiply(base, constant(spec.get('opacity', 1)), 'A' if 'base' in samples else '')
     if spec.get('blend2') and 'tex1' in samples and 'tex2' in samples:
         colour = lerp(samples['tex2'], samples['tex1'], vertex, 'RGB', 'RGB', 'A')
-        colour = multiply(colour, constant(spec.get('tint', [1, 1, 1])))
+        colour = multiply(colour, constant(tint))
         alpha = constant(spec.get('opacity', 1))
     for slot in ['dark', 'detail']:
         if slot not in samples: continue
@@ -103,7 +117,10 @@ def build(root, name, definition, folder):
     scale = min(1 if spec.get('vertex_colors') else spec.get('mat_light', 1), 1 - max(emissive))
     # The source realm uses a warm ambient fill; baked vertex/light maps retain
     # the original local shading instead of uniform base-texture emission.
-    light = [min(1, emissive[i] + max(0, scale) * [1, .94, .8][i]) for i in range(3)]
+    emitted = source_colour(emissive)
+    ambient = source_colour([1, .94, .8])
+    if source_uniforms and spec.get('alpha') == 'add': ambient = [1, 1, 1]
+    light = [min(1, emitted[i] + max(0, scale) * ambient[i]) for i in range(3)]
     result = multiply(colour, constant(light))
     if 'glow' in samples:
         glow = multiply(samples['glow'], samples['glow'], 'RGB', 'A')

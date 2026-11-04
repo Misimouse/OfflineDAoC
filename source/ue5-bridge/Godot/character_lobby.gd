@@ -11,6 +11,11 @@ var choices:Array=[]
 var pending_until:=0
 var pending_creation:Dictionary={}
 var realm:="hib"
+var appearance:RefCounted
+
+func validated_look(value:Variant,prefix:String)->Dictionary:
+    if appearance==null:appearance=load(get_script().resource_path.get_base_dir().path_join("character_appearance.gd")).new()
+    return appearance.normalise(value,prefix)
 
 func refresh(server:Node)->void:
     if not enabled or server.playing:return
@@ -21,7 +26,7 @@ func refresh(server:Node)->void:
         # still authoritative; do not render an incomplete "NAME THE" heading.
         if caption.is_empty():
             caption=String({51:"Magician",52:"Guardian",53:"Naturalist",54:"Stalker",57:"Forester"}.get(int(c.get("class_id",0)),""))
-        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"overview":c.get("server",{}).duplicate(true)})
+        roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"look":c.get("look",{}).duplicate(true),"overview":c.get("server",{}).duplicate(true)})
     for race_name in ["Celt","Firbolg","Elf","Lurikeen","Sylvan"]:
         var race_id:int=int(server.RACE_BY_NAME[race_name])
         for female in [false,true]:
@@ -69,6 +74,14 @@ func execute(value:Dictionary,server:Node,now:int)->bool:
         for c in server.characters_in(realm):
             if String(c.name)==name:pending=true;feedback="Entering the realm...";revision+=1;enter_requested.emit(c);return true
         return fail("That character is no longer in the server's list.")
+    if action=="character_customize":
+        for c in server.characters_in(realm):
+            if String(c.name)!=String(value.get("name","")):continue
+            var checked:Dictionary=validated_look(value.get("look",{}),String(c.get("prefix","")))
+            if not checked.ok:return fail(String(checked.error))
+            server.save_look(String(c.name),checked.look);refresh(server)
+            feedback="Character appearance saved.";return true
+        return fail("That character is no longer in the server's list.")
     if action!="character_create":return false
     if roster.size()>=10:return fail("This realm has no free character slot.")
     var selected:Dictionary={}
@@ -79,8 +92,10 @@ func execute(value:Dictionary,server:Node,now:int)->bool:
     if error!="":return fail(error)
     for c in roster:
         if String(c.name).nocasecmp_to(name)==0:return fail("You already have a character with that name.")
-    # Appearance defaults follow the original client; no arbitrary packet fields are accepted.
-    var look:Dictionary={"size":1,"face":0,"hair":0,"hair_color":0,"eyes":0,"skin":0,"tattoo":0}
+    var prefixes:Dictionary={"Celt":"cel","Firbolg":"fir","Elf":"elf","Lurikeen":"lur","Sylvan":"syl"}
+    var checked:Dictionary=validated_look(value.get("look",{}),String(prefixes[selected.race])+("_f" if selected.female else "_m"))
+    if not checked.ok:return fail(String(checked.error))
+    var look:Dictionary=checked.look
     pending_creation={"race":String(selected.race),"female":bool(selected.female),"class_id":int(selected.class_id),"name":name,"look":look}
     pending=true;pending_until=now+30000;feedback="Checking character name...";revision+=1
     server.check_name(name)

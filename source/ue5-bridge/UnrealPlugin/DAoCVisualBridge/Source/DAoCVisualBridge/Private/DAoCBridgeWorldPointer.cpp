@@ -24,7 +24,7 @@ bool HandleMouseMoveEvent(FSlateApplication&,const FPointerEvent& E)override{Not
 void UDAoCBridgeSubsystem::InstallWorldPointerInput(){
  if(WorldPointerInput.IsValid()||!FSlateApplication::IsInitialized())return;
  GetMutableDefault<UInputSettings>()->bF11TogglesFullscreen=false;
- auto Input=MakeShared<FWorldPointer>();Input->ToggleView=[this](){ToggleFirstPerson();};Input->Wheel=[this](float Steps,FVector2D Point){if(!bLocalAvailable||WorldPointerBlocked(Point)||bChatOpen||bExiting)return false;AdjustCameraZoom(Steps);return true;};Input->Notify=[this](FKey K,bool Down,FVector2D P,bool Motion){HandleWorldPointer(K,Down,P,Motion);};WorldPointerInput=Input;FSlateApplication::Get().RegisterInputPreProcessor(Input);
+ auto Input=MakeShared<FWorldPointer>();Input->ToggleView=[this](){ToggleFirstPerson();};Input->Wheel=[this](float Steps,FVector2D Point){if(CharacterLobbyOverlay)return HandleLobbyWheel(Steps,Point);if(!bLocalAvailable||WorldPointerBlocked(Point)||bChatOpen||bExiting)return false;AdjustCameraZoom(Steps);return true;};Input->Notify=[this](FKey K,bool Down,FVector2D P,bool Motion){if(!HandleLobbyPointer(K,Down,P,Motion))HandleWorldPointer(K,Down,P,Motion);};WorldPointerInput=Input;FSlateApplication::Get().RegisterInputPreProcessor(Input);
 }
 void UDAoCBridgeSubsystem::RemoveWorldPointerInput(){if(WorldPointerInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(WorldPointerInput);WorldPointerInput.Reset();bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
 bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{

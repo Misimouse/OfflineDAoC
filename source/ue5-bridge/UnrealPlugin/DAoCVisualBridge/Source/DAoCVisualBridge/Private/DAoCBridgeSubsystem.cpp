@@ -531,6 +531,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    TickCharacterLobbyMotion();
     if(!bCollisionConfigured&&FPlatformTime::Seconds()>=GeometryUpdateAfter)ConfigureCollisions();
     SetupNameplates();
     InstallWorldPointerInput();

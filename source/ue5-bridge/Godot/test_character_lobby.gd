@@ -12,6 +12,10 @@ class FakeServer extends Node:
     func check_name(name:String)->void:calls.append(["check_name",name])
     func create_character(realm:String,race:String,female:bool,cls:int,name:String,look:Dictionary)->String:calls.append([realm,race,female,cls,name,look]);return ""
     func request_characters(realm:String)->void:calls.append(["refresh",realm])
+    func save_look(char_name:String,look:Dictionary)->void:
+        calls.append(["save_look",char_name,look.duplicate(true)])
+        for c in characters:
+            if String(c.name)==char_name:c["look"]=look.duplicate(true)
     func creations()->Array:return calls.filter(func(c):return c.size()==6)
 var checks:=0
 var failures:Array=[]
@@ -29,10 +33,25 @@ func run()->void:
     check(not lobby.ready,"creation waits for all initial realm replies")
     server.list_pending=false;lobby.refresh(server)
     check(lobby.ready and lobby.roster.size()==1,"server list supplies existing characters")
+    server.characters[0]["look"]={"face":2,"hair":1,"sliders":[2,6,4,3]};lobby.refresh(server)
+    var preview:Dictionary=lobby.snapshot();preview.characters[0].look.sliders[0]=8
+    check(lobby.roster[0].look.face==2 and lobby.roster[0].look.hair==1 and lobby.roster[0].look.sliders[0]==2,"server appearance reaches preview without sharing mutable character state")
     server.characters[0]["class_name"]="";server.characters[0]["class_id"]=51;lobby.refresh(server)
     check(lobby.roster[0].class_name=="Magician","missing base-class overview caption uses the server class id")
     server.characters[0]["class_name"]="Naturalist";lobby.refresh(server)
     check(lobby.choices.size()==2,"creation choices obey original race and class rules")
+    for prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f"]:
+        check(lobby.validated_look({},prefix).ok,"original default appearance exists for "+prefix)
+    check(not lobby.validated_look({"sliders":[NAN]},"cel_m").ok,"nonfinite facial features cannot enter a packet")
+    check(not lobby.validated_look({"face":999},"cel_m").ok,"face must exist in the selected race")
+    check(not lobby.validated_look({"model":1984},"cel_m").ok,"look cannot inject a model or unrelated packet field")
+    check(not lobby.execute({"action":"character_customize","lobby_revision":lobby.revision,"name":"Otherhero","look":{}},server,0) and server.calls.is_empty(),"customization requires an exact character from the current server roster")
+    var chosen:Dictionary={"face":1,"hair":0,"eyes":2,"sliders":[1,2,3,4]}
+    check(lobby.execute({"action":"character_customize","lobby_revision":lobby.revision,"name":"Existinghero","look":chosen},server,0),"existing character uses the original appearance persistence API")
+    check(server.calls.size()==1 and server.calls[0][0]=="save_look" and lobby.roster[0].look.face==1 and lobby.roster[0].look.sliders==[1,2,3,4],"saved look returns through roster instead of an NPC preset")
+    chosen.sliders[0]=8
+    check(lobby.roster[0].look.sliders[0]==1,"saved appearance does not share the incoming command arrays")
+    server.calls.clear()
     check(not lobby.execute({"action":"character_create","lobby_revision":-1},server,0) and server.calls.is_empty(),"stale selection sends no creation packet")
     check(not lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Celt:m:999","name":"Newhero"},server,0) and server.calls.is_empty(),"unsupported class cannot be requested")
     check(not create(lobby,server,"bad name") and server.calls.is_empty(),"invalid name rejected before packet")
