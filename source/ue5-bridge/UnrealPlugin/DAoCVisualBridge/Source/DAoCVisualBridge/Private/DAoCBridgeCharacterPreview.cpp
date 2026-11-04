@@ -6,6 +6,8 @@
 #include "Engine/World.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/MaterialInterface.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Animation/SkeletalMeshActor.h"
 #include "Animation/AnimSequenceBase.h"
@@ -33,6 +35,7 @@ void UDAoCBridgeSubsystem::ClearCharacterLobbyPreview(){
     CharacterLobbyLookSignature.Empty();
     CharacterLobbyPreviewWorn.Reset();
     CharacterLobbySceneInput.Reset();bLobbyLeftHeld=bLobbyRightHeld=false;
+    LobbyFigureYaw=LobbyOrbitYaw=LobbyOrbitPitch=0;LobbyZoom=1;
     for(auto* Actor:{CharacterLobbyPreviewActor.Get(),CharacterLobbyBackdropActor.Get(),CharacterLobbyCaptureActor.Get()})if(IsValid(Actor))Actor->Destroy();
     CharacterLobbyPreviewActor=nullptr;CharacterLobbyBackdropActor=nullptr;CharacterLobbyCaptureActor=nullptr;CharacterLobbyCapture=nullptr;CharacterLobbyTarget=nullptr;CharacterLobbyPreviewBrush.Reset();CharacterLobbyPreviewSignature.Empty();
 }
@@ -51,6 +54,11 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
     FString BackdropPath=TEXT("/DAoCVisualBridge/Pregame_v03/hibernia_lobby/StaticMeshes/hibernia_lobby.hibernia_lobby");
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyBackdrop="),BackdropPath);
     if(Backdrop){auto* Mesh=Backdrop->GetStaticMeshComponent();Mesh->SetMobility(EComponentMobility::Movable);Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,*BackdropPath));Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);Mesh->SetCastShadow(false);Mesh->SetVisibleInSceneCaptureOnly(true);}
+    // The original panorama has a finite upper edge. Retain it, with an
+    // enclosing original-cloud layer visible only where the panorama ends.
+    if(Backdrop)if(auto* SkyMaterial=LoadObject<UMaterialInterface>(nullptr,TEXT("/DAoCVisualBridge/PregameSky_v01/M_OriginalClouds.M_OriginalClouds"))){
+        auto* Sky=NewObject<UStaticMeshComponent>(Backdrop);Backdrop->AddInstanceComponent(Sky);Sky->SetupAttachment(Backdrop->GetRootComponent());Sky->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));Sky->SetMaterial(0,SkyMaterial);Sky->SetRelativeScale3D(FVector(1000));Sky->SetCollisionEnabled(ECollisionEnabled::NoCollision);Sky->SetCastShadow(false);Sky->SetVisibleInSceneCaptureOnly(true);Sky->ComponentTags.Add(TEXT("DAoCLobbySky"));Sky->RegisterComponent();
+    }
     FString MotionFile=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/Pregame/lobby_motion.json");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyMotion="),MotionFile);if(FPaths::FileExists(MotionFile))CharacterLobbyMotion=FDAoCLobbyMotion::Load(Backdrop,MotionFile);
     const TMap<FString,int32> Models={{TEXT("cel_m"),1984},{TEXT("cel_f"),310},{TEXT("elf_m"),382},{TEXT("elf_f"),388},{TEXT("fir_m"),352},{TEXT("fir_f"),1983},{TEXT("lur_m"),318},{TEXT("lur_f"),378},{TEXT("syl_m"),700},{TEXT("syl_f"),708}};
     FString Prefix=PreviewString(Row,TEXT("prefix"));FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestPrefix="),Prefix);
@@ -74,8 +82,8 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
         TMap<int32,FEquipmentBinding> Bindings;int32 MissingModels=0,MissingBones=0;
         for(int32 Slot:Active){const FString Key=WeaponKeys.FindRef(Slot);const int32 Id=int32(PreviewNumber(Worn,*Key))&0x1fff;if(Id<=0)continue;auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("model"),Id);Item->SetNumberField(TEXT("color"),PreviewNumber(Colors,*Key));AttachEquipment(Actor,Slot,Item,false,Bindings,MissingModels,MissingBones);}
         TArray<UMeshComponent*> Meshes;Actor->GetComponents(Meshes);for(auto* Mesh:Meshes){Mesh->SetVisibleInSceneCaptureOnly(true);Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);Mesh->SetCastShadow(false);Mesh->SetLightingChannels(false,true,false);Mesh->SetTextureForceResidentFlag(true);Mesh->PrestreamTextures(30,true);if(auto* Skeletal=Cast<USkeletalMeshComponent>(Mesh))Skeletal->SetForcedLOD(1);}
-        int32 LightPercent=50;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyLightPercent="),LightPercent);const float LightScale=FMath::Clamp(LightPercent,0,200)*.01f;
-        for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Actor);Actor->AddInstanceComponent(Light);Light->SetupAttachment(Actor->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(170,180,220):FVector(-120,-120,120));Light->SetIntensityUnits(ELightUnits::Lumens);Light->SetIntensity((I==0?800:200)*LightScale);Light->SetAttenuationRadius(600);Light->SetLightingChannels(false,true,false);Light->SetCastShadows(false);Light->RegisterComponent();}
+        int32 LightPercent=40;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyLightPercent="),LightPercent);const float LightScale=FMath::Clamp(LightPercent,0,200)*.01f;
+        for(int32 I=0;I<2;++I){auto* Light=NewObject<UPointLightComponent>(Actor);Actor->AddInstanceComponent(Light);Light->SetupAttachment(Actor->GetRootComponent());Light->SetRelativeLocation(I==0?FVector(170,180,220):FVector(-120,-120,120));Light->SetIntensityUnits(ELightUnits::Lumens);Light->SetIntensity((I==0?500:300)*LightScale);Light->SetAttenuationRadius(600);Light->SetLightingChannels(false,true,false);Light->SetCastShadows(false);Light->RegisterComponent();}
     }
     CharacterLobbyCaptureActor=GetWorld()->SpawnActor<AActor>(Origin,FRotator::ZeroRotator,Parameters);CharacterLobbyCapture=NewObject<USceneCaptureComponent2D>(CharacterLobbyCaptureActor);CharacterLobbyCaptureActor->SetRootComponent(CharacterLobbyCapture);CharacterLobbyCapture->RegisterComponent();
     // Slate expects a linear image and applies display gamma itself. Supplying
@@ -114,6 +122,7 @@ bool UDAoCBridgeSubsystem::LobbySceneHit(FVector2D Point)const{
 }
 bool UDAoCBridgeSubsystem::HandleLobbyPointer(FKey Key,bool Down,FVector2D Point,bool Motion){
     if(!CharacterLobbyOverlay)return false;
+    if(CharacterLobbyScreen!=TEXT("customize")){bLobbyLeftHeld=bLobbyRightHeld=false;return true;}
     if(!Motion&&!Down){if(Key==EKeys::LeftMouseButton)bLobbyLeftHeld=false;if(Key==EKeys::RightMouseButton)bLobbyRightHeld=false;return true;}
     if(Motion){
         const FVector2D Delta=Point-LobbyLastPointer;LobbyLastPointer=Point;
@@ -125,7 +134,7 @@ bool UDAoCBridgeSubsystem::HandleLobbyPointer(FKey Key,bool Down,FVector2D Point
     return true;
 }
 bool UDAoCBridgeSubsystem::HandleLobbyWheel(float Steps,FVector2D Point){
-    if(!CharacterLobbyOverlay||!LobbySceneHit(Point)||!FMath::IsFinite(Steps)||FMath::Abs(Steps)>10)return false;
+    if(!CharacterLobbyOverlay||CharacterLobbyScreen!=TEXT("customize")||!LobbySceneHit(Point)||!FMath::IsFinite(Steps)||FMath::Abs(Steps)>10)return false;
     LobbyZoom=FMath::Clamp(LobbyZoom*FMath::Pow(.9f,Steps),.25f,2.5f);UpdateLobbyCamera();return true;
 }
 void UDAoCBridgeSubsystem::UpdateLobbyCamera(){

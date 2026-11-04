@@ -26,6 +26,8 @@ def main():
     parser.add_argument('--appearance', type=Path, help='Private original appearance catalogue with UI swatches')
     parser.add_argument('--prefix', choices=('cel_m','cel_f','elf_m','elf_f','fir_m','fir_f','lur_m','lur_f','syl_m','syl_f'))
     parser.add_argument('--orbit', type=int, default=90, help='Diagnostic second camera angle')
+    parser.add_argument('--pitch', type=int, default=0, choices=range(-65,66), help='Diagnostic orbit elevation for checking the sky coverage')
+    parser.add_argument('--skin-tone', type=int, choices=range(8), help='Diagnostic Celt skin swatch after the control checks')
     parser.add_argument('--ambient', action='store_true', help='Require the original ambient particle sidecar and motion checks')
     args = parser.parse_args()
     assert 640 <= args.width <= 7680 and 480 <= args.height <= 2160
@@ -49,12 +51,14 @@ def main():
                '-windowed', '-ForceRes', '-ResX=' + str(args.width), '-ResY=' + str(args.height)]
     if args.motion:
         assert args.motion.is_file()
-        command += ['-DaocBridgeLobbyMotion=' + str(args.motion), '-DaocBridgeLobbyTestOrbit=' + str(args.orbit)]
+        command += ['-DaocBridgeLobbyMotion=' + str(args.motion), '-DaocBridgeLobbyTestOrbit=' + str(args.orbit), '-DaocBridgeLobbyTestPitch=' + str(args.pitch)]
     if args.appearance:
         assert args.appearance.is_file()
         command.append('-DaocBridgeLobbyAppearance=' + str(args.appearance))
     if args.prefix:
         command.append('-DaocBridgeLobbyTestPrefix=' + args.prefix)
+    if args.skin_tone is not None:
+        command.append('-DaocBridgeLobbyTestSkin=' + str(args.skin_tone))
     if args.ambient:
         command.append('-DaocBridgeLobbyAmbientTest')
     started = time.time()

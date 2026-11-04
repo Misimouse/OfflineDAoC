@@ -173,6 +173,10 @@ The local contract suite passed 44 checks. Native pointer tests exercised the ac
 
 Extend the rendered regression command above with `--screen customize`; `--motion`, `--appearance`, `--prefix` and `--orbit` optionally select private candidate resources and a second camera angle. The output includes the menu, its actual scene target and, when motion is active, mid-animation and orbit views. Keep automated evidence separate from owner review.
 
+Owner-feedback corrections: mouse orbit, figure rotation and wheel zoom are accepted only on the appearance-customization screen. Selection and race/class creation keep the fixed camera, and changing screens resets the orbit. The race/class grid retains stable numeric class positions across races, disables unsupported combinations using the original disabled bar and grey text, and highlights the selected valid choice. The server's offered choices remain authoritative; this does not enable disabled expansions. A saved-appearance message is consumed only at a new revision while editing an existing character, so repeated snapshots cannot close a later creation/customization draft.
+
+The preview character's own lighting now uses a lower key and stronger fill (200/120 lumens at the default setting, previously 400/100); original texture and skin-palette values are retained. `prepare_pregame_sky_unreal.py` prepares a separate two-sided unlit cloud material from the original Hibernian cloud texture. A transient capture-only sphere behind the finite source panorama closes its exposed upper boundary during low-angle customization. The original scene geometry, maps and world lighting are unchanged. Render probes support `--pitch -65` and optional `--skin-tone 7` for the extreme camera angle and Celt palette endpoint. Owner review of skin lighting and colour remains necessary.
+
 
 ## Chosen appearance in the world and inventory portrait
 
