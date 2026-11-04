@@ -14,7 +14,7 @@ try:
             task=unreal.AssetImportTask();task.filename=str(file);task.destination_path=root+'/Textures';task.destination_name=asset_name;task.automated=True;task.save=True;task.replace_existing=False;T.import_asset_tasks([task]);texture=unreal.load_asset(path)
         assert texture and texture.get_editor_property('srgb'),name
         report['textures'][name]={'asset':texture.get_path_name(),'sha256':sha,'source':str(file)}
-    default=unreal.load_asset(C['textures']['cel_m_head01']);material=build_appearance_material(root+'/Materials','M_OriginalColourDetailSkin',default,False)
+    default=unreal.load_asset(C['textures'][os.environ.get('DAOC_APPEARANCE_DEFAULT_TEXTURE','cel_m_head01')]);material=build_appearance_material(root+'/Materials','M_OriginalColourDetailSkin',default,False)
     C['materials']['skin']=material.get_path_name();C['original_color_textures']={name:row['asset'] for name,row in report['textures'].items()}
     unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(['/Engine/EditorMaterials/AssetViewer'],True)
     cube=unreal.load_asset(root+'/T_CharacterAmbient')

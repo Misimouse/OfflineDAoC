@@ -18,7 +18,7 @@ try:
   assert texture.get_editor_property('srgb'),(key,'source colour texture must be sRGB')
   report['textures'][key.lower()]={'asset':texture.get_path_name(),'sha256':sha,'width':row['width'],'height':row['height']}
   if len(report['textures'])%25==0:unreal.SystemLibrary.collect_garbage()
- default=unreal.load_asset(report['textures']['cel_m_head01']['asset']);masters={}
+ default=unreal.load_asset(report['textures'][os.environ.get('DAOC_APPEARANCE_DEFAULT_TEXTURE','cel_m_head01')]['asset']);masters={}
  for name,cutout in [('M_OriginalAppearanceSkin',False),('M_OriginalAppearanceHair',True)]:
   material=build_appearance_material(root+'/Materials',name,default,cutout);masters['hair' if cutout else 'skin']=material.get_path_name()
   assert bool(material.get_editor_property('two_sided')) and material.get_editor_property('blend_mode')==(unreal.BlendMode.BLEND_MASKED if cutout else unreal.BlendMode.BLEND_OPAQUE)
