@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import re
 from pathlib import Path
 import sqlite3
 
@@ -18,6 +19,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',required=True,type=Path)
     parser.add_argument('--output',required=True,type=Path)
+    parser.add_argument('--server-source',required=True,type=Path,help='This fork GameServer source, used to audit concrete spell handlers')
     args=parser.parse_args();root=args.workspace.resolve()
     assert args.output.resolve().is_relative_to(root/'Reports'),'Keep proposals in private reports, outside databases and game content'
     prepared=json.loads((root/'Reports/protocol_qa/prepared.json').read_text())
@@ -31,7 +33,14 @@ def main():
     links=[x for x in source['LineXSpell.json'] if x['LineName'] in LINES]
     ids=sorted({int(x['SpellID']) for x in links});assert len(ids)==123 and len(links)==130
     report={'source':'https://github.com/Dawn-of-Light/db-public','source_commit':COMMIT,'source_hashes':HASHES,
-            'database_modified':False,'proposal_only':True,'spells':[],'line_spells':[],'remapped_ids':{},'preserved_rows':{},'missing_effect_definitions':[]}
+            'database_modified':False,'proposal_only':True,'spells':[],'line_spells':[],'remapped_ids':{},'preserved_rows':{},'missing_effect_definitions':[], 'type_adaptations':[]}
+    handlers={}
+    pattern=re.compile(r'\[SpellHandler\(eSpellType\.(\w+)\)\]\s*(?:public|internal)\s+(?:(abstract|sealed)\s+)?class\s+(\w+)',re.S)
+    for path in (args.server_source/'spells').rglob('*.cs'):
+        for kind,modifier,name in pattern.findall(path.read_text(encoding='utf-8-sig')):
+            handlers.setdefault(kind,[]).append({'class':name,'abstract':modifier=='abstract','source':str(path.relative_to(args.server_source))})
+    assert any(x['abstract'] for x in handlers.get('ArmorFactorBuff',[]))
+    assert any(not x['abstract'] for x in handlers.get('BaseArmorFactorBuff',[]))
     with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True) as db:
         db.row_factory=sqlite3.Row
         assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==run.name
@@ -42,6 +51,13 @@ def main():
         for spell_id in ids:
             original=spells[spell_id];current=existing.get(spell_id)
             row={key:value for key,value in original.items() if key in columns}
+            if row['Type']=='ArmorFactorBuff':
+                # DOL's old AF type is abstract in this fork. Adapt only this original baseline.
+                original_lines={x['LineName'] for x in links if int(x['SpellID'])==spell_id}
+                assert original_lines=={'Spectral Force'}
+                assert db.execute('SELECT IsBaseLine FROM SpellLine WHERE KeyName=?',('Spectral Force',)).fetchone()[0]==1
+                row['Type']='BaseArmorFactorBuff'
+                report['type_adaptations'].append({'source_spell_id':spell_id,'from':'ArmorFactorBuff','to':row['Type'],'reason':'Spectral Force is a baseline; original type is abstract in this fork'})
             if current:
                 report['preserved_rows'][str(spell_id)]={'sha256':digest(current),'name':current['Name']}
                 differences={key:{'installed':current[key],'source':value} for key,value in row.items() if key not in ignored and current[key]!=value}
@@ -66,9 +82,11 @@ def main():
         needed.update(int(definition[key]) for key in ['projectile','target','buildup','pulse','resist'] if int(definition.get(key,0))>0)
     report['missing_effect_definitions'].sort();report['referenced_fx_resources']=len(needed)
     report['missing_fx_resources']=sorted(x for x in needed if str(x) not in catalog['fx'])
+    report['concrete_handler_source_coverage']={kind:[x for x in handlers.get(kind,[]) if not x['abstract']] for kind in sorted({x['Type'] for x in report['spells']})}
+    assert all(report['concrete_handler_source_coverage'].values()),'A candidate type lacks a concrete handler in this fork'
     report['not_certified']=['creation eligibility','runtime handler coverage','Bainshee form changes','combat semantics','visual acceptance','all levels and training']
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(report,indent=2),encoding='utf-8')
-    print(json.dumps({'proposal_only':True,'spells':len(report['spells']),'line_spells':len(report['line_spells']),'remapped_ids':report['remapped_ids'],'missing_effect_definitions':report['missing_effect_definitions'],'missing_fx_resources':report['missing_fx_resources']}))
+    print(json.dumps({'proposal_only':True,'spells':len(report['spells']),'line_spells':len(report['line_spells']),'type_adaptations':len(report['type_adaptations']),'handler_types':len(report['concrete_handler_source_coverage']),'remapped_ids':report['remapped_ids'],'missing_effect_definitions':report['missing_effect_definitions'],'missing_fx_resources':report['missing_fx_resources']}))
 
 
 if __name__=='__main__':main()

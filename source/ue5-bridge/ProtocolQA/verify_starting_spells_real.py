@@ -5,16 +5,22 @@ import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
 parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47,39],required=True)
 parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,50])
+parser.add_argument('--bainshee-form-cycle',action='store_true')
+parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 args=parser.parse_args();class_id=args.class_id
 assert (class_id==39)==bool(args.bainshee_proposal),'Bainshee requires an explicit isolated data proposal'
 assert args.level is None or class_id==39,'Advanced-level data probes are limited to Bainshee'
 level=args.level or (3 if class_id==52 else 1)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else ''));D.mkdir(parents=True,exist_ok=True)
+assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
+assert args.bainshee_race==9 or args.bainshee_form_cycle,'Alternate race is limited to the isolated form cycle'
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else '')+('_form_cycle'+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '') if args.bainshee_form_cycle else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
 backup=ROOT/'Backups'/('StartingSkillsQA_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
 config=RUN/'bridge_config.json';config_bytes=config.read_bytes()
+native_catalog=RUN/'models.json'
+native_catalog_before=native_catalog.read_bytes() if args.bainshee_form_cycle and native_catalog.exists() else None
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
@@ -23,6 +29,7 @@ def install_probe_data(db):
  proposal=json.loads(args.bainshee_proposal.read_text())
  assert proposal['proposal_only'] and proposal['source_commit']=='b5b29c2ada7695414b94f5fa110eb505a477d007'
  assert len(proposal['spells'])==123 and len(proposal['line_spells'])==130
+ assert len(proposal.get('type_adaptations',[]))==10 and len(proposal.get('concrete_handler_source_coverage',{}))==15,'Regenerate proposal with this fork concrete-handler audit'
  for spell_id,expected in proposal['preserved_rows'].items():
   current=dict(db.execute('SELECT * FROM Spell WHERE SpellID=?',(int(spell_id),)).fetchone())
   assert hashlib.sha256(json.dumps(current,sort_keys=True,separators=(',',':')).encode()).hexdigest()==expected['sha256']
@@ -34,7 +41,7 @@ def install_probe_data(db):
    assert set(row)<=columns
    if table=='Spell':assert not db.execute('SELECT 1 FROM Spell WHERE SpellID=? OR Spell_ID=?',(row['SpellID'],row['Spell_ID'])).fetchone()
    keys=list(row);db.execute('INSERT INTO "'+table+'" ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[row[k] for k in keys])
- result['isolated_bainshee_data']={'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'not_creation_enablement':True}
+ result['isolated_bainshee_data']={'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'type_adaptations':proposal['type_adaptations'],'not_creation_enablement':True}
 def send(action,**values):
  global serial
  serial+=1;sock.sendall((json.dumps(dict(type='command',session=session,id='cloak:'+str(serial),action=action,**values))+'\n').encode())
@@ -71,9 +78,16 @@ try:
   if class_id==39:install_probe_data(db)
   update(db,'Account','Name',char['AccountName'],{'PrivLevel':3,'Realm':3})
   values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
-  if class_id==39:values.update(Gender=1,Race=9,CreationModel=310,CurrentModel=310)
+  if class_id==39:
+   creation_model={9:310,11:342,12:326}[args.bainshee_race]
+   values.update(Gender=1,Race=args.bainshee_race,CreationModel=creation_model,CurrentModel=creation_model)
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
+ if args.bainshee_form_cycle:
+  assert native_catalog.resolve().is_relative_to(RUN.resolve())
+  models=json.loads((ROOT/'models.json').read_text())
+  assert all(models.get(str(model),{}).get('type')=='skeletal' for model in (1883,1884,1885))
+  native_catalog.write_text(json.dumps(models),encoding='utf-8')
  for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
  p=RUN/'Godot/live_gateway.gd';p.write_text(p.read_text().replace('var states:Array=[]','transport.snapshot_metadata[\"qa_skill_audit\"]={\"skills\":server.skills,\"spell_lines\":server.spell_lines}\n        var states:Array=[]'))
  p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737').replace('["character",','["qa_skill_audit","character",'),encoding='utf-8')
@@ -97,6 +111,12 @@ try:
   except OSError:time.sleep(.2)
  else:raise RuntimeError('Private spell bridge unavailable')
  wait(lambda:snapshot.get('classic_ui',{}).get('skills_ready'),'Starting spell lists');settle(5)
+ if class_id==39:
+  candidate=json.loads(args.bainshee_proposal.read_text())
+  startup=(D/'starting_spells_server.log').read_text(encoding='utf-8-sig',errors='replace')
+  registered={kind:any('Found spell handler DOL.GS.Spells.'+row['class'] in startup for row in rows) for kind,rows in candidate['concrete_handler_source_coverage'].items()}
+  assert all(registered.values()),registered
+  result['runtime_registered_handler_types']=registered
  (D/'druid_level1_snapshot.json').write_text(json.dumps(snapshot),encoding='utf-8')
  result['checks']['starting_list']=True
  result['entries']=[{'name':e.get('name'),'group':e.get('group'),'id':e.get('id')} for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell']
@@ -106,6 +126,36 @@ try:
  result['class_id']=class_id;result['level']=level;result['expected_spells']=sorted(expected);result['visible_spells']=sorted(actual);result['complete']=expected==actual
  if class_id==39:assert expected,'Candidate Bainshee must receive actual spells, not merely an empty matching list'
  assert result['complete'],(expected,actual)
+ if args.bainshee_form_cycle:
+  def local_player():return next((e for e in snapshot.get('entities',[]) if e.get('id')=='player:local'),{})
+  wait(lambda:snapshot.get('player_status',{}).get('ready') and bool(local_player()),'Bainshee world and vitals ready')
+  original=dict(local_player());assert not original.get('morphed')
+  worn=[(x['slot'],x.get('model')) for x in inv().get('items',[])]
+  send('move',position_m=original['position_m'],forward_xz=original['forward_xz'],speed_mps=0);settle(2)
+  if snapshot['player_status']['vitals'].get('sitting'):
+   send('player_sit',on=False,player_generation=snapshot['player_status']['generation']);wait(lambda:not snapshot['player_status']['vitals'].get('sitting'),'Stand before casting')
+  def use(name):
+   entry=next(e for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell' and e.get('name')==name)
+   send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  def server_said(text):return any(text in e.get('text','') for e in snapshot.get('chat',{}).get('entries',[]))
+  use('Lesser Powerward')
+  wait(lambda:server_said('You cast a Lesser Powerward spell!'),'Original positive self buff completes',20)
+  assert not local_player().get('morphed');result['checks']['positive_buff_retains_original_form']=True
+  # Original cone spells require no selected enemy; no synthetic LOS reply or damage result.
+  settle(1);use("Bawler's Bruise")
+  form_model={9:1883,11:1885,12:1884}[args.bainshee_race]
+  wait(lambda:local_player().get('morphed') and local_player().get('model_id')==form_model,'Original offensive CastFinished transforms Bainshee',20)
+  changed_at=time.monotonic()
+  assert local_player().get('look',{})==original.get('look',{})
+  result['checks']['original_offensive_cast_transforms']=True
+  result['form_spell']="Bawler's Bruise";result['form_model']=form_model;result['race']=args.bainshee_race
+  wait(lambda:not local_player().get('morphed') and local_player().get('model_id')==original['model_id'],'Original thirty-second Bainshee timer restores chosen figure',40)
+  elapsed=time.monotonic()-changed_at;assert 25<=elapsed<=40,elapsed
+  result['form_timer_seconds']=round(elapsed,2)
+  assert local_player().get('look',{})==original.get('look',{})
+  assert [(x['slot'],x.get('model')) for x in inv().get('items',[])]==worn
+  result['checks']['original_timer_restores_appearance_and_inventory']=True
+  result['combat_damage_tested']=False
  send('chat',text='/quit')
  wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',45)
  lobby=snapshot['character_lobby'];assert all(int(c['class_id'])!=63 for c in lobby['choices'])
@@ -130,6 +180,11 @@ finally:
   try:server.wait(timeout=45)
   except subprocess.TimeoutExpired:server.kill();server.wait();result['errors'].append('Private server forced stop')
  for log in logs:log.close()
+ if args.bainshee_form_cycle:
+  assert native_catalog.resolve().is_relative_to(RUN.resolve())
+  if native_catalog_before is None:native_catalog.unlink(missing_ok=True)
+  else:native_catalog.write_bytes(native_catalog_before)
+  result['qa_native_catalogue_restored']=True
  if backed:
   assert DB.is_relative_to(RUN) and RUN.is_relative_to(ROOT/'ProtocolQA')
   with checked() as dst:
