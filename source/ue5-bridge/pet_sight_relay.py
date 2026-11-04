@@ -3,12 +3,25 @@ from bridge_paths import ROOT, INSTALL, ENGINE, ART_PROJECT
 import json,socket,select,subprocess,time
 from pathlib import Path
 class NativeSightRelay:
- def __init__(self,backend,root,session,snapshot):
-  self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=root/'Reports/training_staff_fx_pets/live_native_current.json';self.report.unlink(missing_ok=True)
+ def __init__(self,backend,root,session,snapshot,output=None,duration=120,entity_ids=None,render=True):
+  folder=Path(output) if output is not None else root/'Reports/training_staff_fx_pets'
+  assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=180
+  folder.mkdir(parents=True,exist_ok=True)
+  self.entity_ids=set(entity_ids) if entity_ids is not None else None
+  self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=folder/'live_native_current.json';self.report.unlink(missing_ok=True)
   self.listener=socket.socket();self.listener.bind(('127.0.0.1',0));self.listener.listen(1);self.listener.settimeout(100);port=self.listener.getsockname()[1]
-  self.log=(root/'Reports/training_staff_fx_pets/live_native.log').open('w',encoding='utf-8');I=Path(str(INSTALL / 'new-client/godot'))
-  cmd=[str(ENGINE / 'Binaries/Win64/UnrealEditor-Cmd.exe'),str(root/'GMCombatTest/NativeHost/BridgeGmHost.uproject'),'/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba','-game','-DaocBridge','-DaocBridgeReadOnly','-DaocBridgeSpellVisualTest','-DaocBridgePort='+str(port),'-DaocBridgeCatalog='+str(root/'models.json'),'-DaocBridgeEquipmentCatalog='+str(root/'equipment_catalog_v01.json'),'-DaocBridgeCollisionCatalog='+str(root/'collision_catalog.json'),'-DaocBridgeHeights='+str(I/'content/zones/zone207/heights.f32'),'-DaocBridgeReport='+str(self.report),'-DaocBridgeCapture='+str(root/'Reports/training_staff_fx_pets/Live_Spell.png'),'-DaocBridgeQuality=accessible','-DaocBridgeProfile','-DaocBridgeProfileFixed','-DaocBridgeProfileSeconds=120','-windowed','-ResX=1280','-ResY=720','-d3d11','-nosplash','-nosound','-unattended']
-  self.process=subprocess.Popen(cmd,cwd=root,stdout=self.log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW);self.ue,_=self.listener.accept();self.ue.settimeout(10);self.ue.sendall((json.dumps(dict(type='hello',protocol='daoc-visual-bridge',version=1,session=session))+'\n'+json.dumps(snapshot)+'\n').encode());self.ue.setblocking(False);self.ue.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,65536);self.pending=b'';self.latest=b''
+  self.log=(folder/'live_native.log').open('w',encoding='utf-8');I=Path(str(INSTALL / 'new-client/godot'))
+  cmd=[str(ENGINE / 'Binaries/Win64/UnrealEditor-Cmd.exe'),str(root/'GMCombatTest/NativeHost/BridgeGmHost.uproject'),'/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba','-game','-DaocBridge','-DaocBridgeReadOnly','-DaocBridgeSpellVisualTest','-DaocBridgePort='+str(port),'-DaocBridgeCatalog='+str(root/'models.json'),'-DaocBridgeEquipmentCatalog='+str(root/'equipment_catalog_v01.json'),'-DaocBridgeCollisionCatalog='+str(root/'collision_catalog.json'),'-DaocBridgeHeights='+str(I/'content/zones/zone207/heights.f32'),'-DaocBridgeReport='+str(self.report),'-DaocBridgeCapture='+str(folder/'Live_Spell.png'),'-DaocBridgeQuality=accessible','-DaocBridgeProfile','-DaocBridgeProfileFixed','-DaocBridgeProfileSeconds='+str(duration),'-windowed','-ResX=1280','-ResY=720','-d3d11','-nosplash','-nosound','-unattended']
+  if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
+  elif output is not None:cmd.append('-RenderOffscreen')
+  self.process=subprocess.Popen(cmd,cwd=root,stdout=self.log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW);self.ue,_=self.listener.accept();self.ue.settimeout(10);self.ue.sendall((json.dumps(dict(type='hello',protocol='daoc-visual-bridge',version=1,session=session))+'\n'+json.dumps(self.native_snapshot(snapshot))+'\n').encode());self.ue.setblocking(False);self.ue.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,65536);self.pending=b'';self.latest=b''
+ def native_snapshot(self,value):
+  if self.entity_ids is None:return value
+  native=dict(value);native['entities']=[e for e in value.get('entities',[]) if e['id'] in self.entity_ids]
+  # Limit the observer to the tested actors; the real backend/player still
+  # receives the entire world. This never manufactures a visibility reply.
+  native.pop('qa_skill_audit',None);native.pop('classic_ui',None)
+  return native
  def sendall(self,data):self.backend.sendall(data)
  def settimeout(self,value):self.backend.settimeout(value)
  def recv(self,size):
@@ -35,7 +48,7 @@ class NativeSightRelay:
    if v.get('type')=='snapshot':
     for q in v.get('los_queries',[]):self.questions[q['id']]=q
     if self.probe:v.setdefault('los_queries',[]).append(self.probe)
-    self.latest=(json.dumps(v)+'\n').encode()
+    self.latest=(json.dumps(self.native_snapshot(v))+'\n').encode()
    else:
     # The QA client sends the original commands; the native observer needs only current snapshots.
     pass
