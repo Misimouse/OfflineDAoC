@@ -7,6 +7,7 @@ var inventory:RefCounted
 var character_lobby:RefCounted
 var local_look:Dictionary={}
 var local_model_id:=0
+var player_models:RefCounted
 var vault:RefCounted
 var exchange:RefCounted
 var player_state:RefCounted
@@ -97,7 +98,10 @@ func _ready()->void:
     classic_ui.macro_request=func(line:String)->bool:return dispatch_chat(line)
     classic_ui.pet_request=func(value:Dictionary)->bool:return pet.request(value,server.client,interaction,adapter.entities,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
-    combat_visual.configure(JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json"))),JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
+    var native_models:Variant=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json")))
+    player_models=load(folder.path_join("player_model_state.gd")).new()
+    player_models.configure(JSON.parse_string(FileAccess.get_file_as_string("res://content/monsters/monsters.json")),native_models)
+    combat_visual.configure(native_models,JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
     # Optional local installation rule; keep the original CLI behavior otherwise.
     # It only filters creation choices, never changes a server class or grants it.
@@ -160,6 +164,7 @@ func enter_character(chosen:Dictionary)->void:
         if tasks is Array:
             for task in tasks:
                 if String(task.get("info",{}).get("race",""))==String(chosen.get("prefix","")):local_model_id=int(task.id);break
+    player_models.bind_base(local_model_id)
     adapter.player_level=int(chosen.get("level",1));adapter.player_realm=3
     entered=true;character_name=chosen.name;local_look=character_lobby.stored_look(chosen)
     var legacy:String=server.quickbars_path(character_name)
@@ -179,6 +184,7 @@ func apply_entry(entry:Dictionary)->void:
         status="Connected to Connacht"
 
 func world_event(kind:String,data:Dictionary)->void:
+    player_models.consume(kind,data)
     exchange.observe(kind,data)
     if kind in ["you","region_changed","quit"]:line_of_sight.reset()
     if kind=="los":
@@ -430,7 +436,8 @@ func _process(_delta:float)->void:
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             var angle:=-float(heading)*TAU/4096.0
             var health:=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
-            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":local_model_id,"look":local_look.duplicate(true),
+            var form:Dictionary=player_models.snapshot()
+            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":form.model_id,"morphed":form.morphed,"source_model":form.source_model,"missing_morph_model":form.missing_model,"size":form.size,"look":local_look.duplicate(true),
                 "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"state":"dead" if player_state.ready and health<=0 else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)

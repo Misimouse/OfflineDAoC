@@ -150,6 +150,29 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
                 bool HasHood=false;for(auto V:A(Definition,TEXT("cloaks")))HasHood|=int32(V->AsNumber())==2;
                 if(Cape&&HasHood){Equip(0,Cape,true,false);auto* HoodFace=Part(Actor,TEXT("DAoCBridgeAppearanceHead"));Check(HoodFace&&HoodFace->IsVisible()&&Part(Actor,TEXT("DAoCBridgeAppearanceHair"))==nullptr,TEXT("raised hood keeps chosen face and hides hair ")+BaseId);Equip(0,Cape,false,false);Check(Part(Actor,TEXT("DAoCBridgeAppearanceHair"))!=nullptr,TEXT("lowering hood restores chosen hairstyle ")+BaseId);}
                 Equip(0,0,false,false);UpdateClassicDoll();Report->SetBoolField(TEXT("appearance_world_and_doll_tested"),true);
+                if(BaseId==TEXT("1984")&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeMorphTest"))){
+                    auto Staff=MakeShared<FJsonObject>();Staff->SetNumberField(TEXT("slot"),12);Staff->SetNumberField(TEXT("model"),19);InventoryState->SetStringField(TEXT("weapon_set"),TEXT("twohand"));InventoryState->SetArrayField(TEXT("items"),{MakeShared<FJsonValueObject>(Staff)});InventoryState->SetNumberField(TEXT("state_revision"),++Revision);UpdateLocalEquipment();
+                    Check(LocalEquipment.Contains(12),TEXT("equipped original staff exists before transformation"));
+                    for(int32 Form:{1883,1884,1885}){
+                        auto MorphRow=MakeShared<FJsonObject>();MorphRow->Values=Row->Values;MorphRow->SetNumberField(TEXT("model_id"),Form);MorphRow->SetBoolField(TEXT("morphed"),true);MorphRow->SetNumberField(TEXT("size"),50);
+                        auto* Morph=Cast<ASkeletalMeshActor>(CreateEntity(TEXT("player:local"),MorphRow,Actor->GetActorLocation()));Check(Morph!=nullptr,TEXT("original transformation skeletal mesh loads"));if(!Morph)continue;
+                        EntityRows.Add(TEXT("player:local"),MorphRow);UpdateLocalEquipment();UpdateClassicDoll();
+                        Check(LocalEquipment.IsEmpty()&&!EquipmentActor.IsValid(),TEXT("transformation hides worn weapon bindings without changing inventory"));
+                        Check(InventoryItem(12)&&int32(InventoryItem(12)->GetNumberField(TEXT("model")))==19,TEXT("authoritative staff stays in the inventory during transformation"));
+                        Check(Part(Morph,TEXT("DAoCBridgeAppearanceHead"))==nullptr&&Part(Morph,TEXT("DAoCBridgeAppearanceHair"))==nullptr,TEXT("original form never receives a duplicate human face or hair"));
+                        auto DefinitionForm=ModelCatalog.FindRef(FString::FromInt(Form));Check(DefinitionForm.IsValid(),TEXT("original form has its native catalogue entry"));
+                        if(DefinitionForm){Check(Morph->GetActorScale3D().Equals(FVector(DefinitionForm->GetNumberField(TEXT("scale"))),.001),TEXT("Celt Lurikeen and Elf forms retain original proportions"));for(const TCHAR* MorphClipKey:{TEXT("idle"),TEXT("walk"),TEXT("run"),TEXT("death"),TEXT("cast_start"),TEXT("cast_mid"),TEXT("cast_end")}){FString PathClip;DefinitionForm->TryGetStringField(MorphClipKey,PathClip);Check(!PathClip.IsEmpty()&&LoadObject<UAnimSequenceBase>(nullptr,*PathClip),TEXT("original form has playable movement and casting clips"));}}
+                        auto* Portrait=IsValid(ClassicDollActor)?Cast<ASkeletalMeshActor>(ClassicDollActor.Get()):nullptr;Check(Portrait&&Portrait->GetSkeletalMeshComponent()->GetSkeletalMeshAsset()==Morph->GetSkeletalMeshComponent()->GetSkeletalMeshAsset(),TEXT("miniature follows the original transformed mesh"));
+                        Morph->Destroy();Entities.Add(TEXT("player:local"),Actor);EntityModels.Add(TEXT("player:local"),FCString::Atoi(*BaseId));EntityRows.Add(TEXT("player:local"),Row);UpdateLocalEquipment();UpdateClassicDoll();
+                        Check(LocalEquipment.Contains(12)&&Part(Actor,TEXT("DAoCBridgeAppearanceHead")),TEXT("reversion restores equipped staff and chosen face"));
+                    }
+                    Report->SetBoolField(TEXT("player_transformations_tested"),true);
+                    int32 CaptureMorph=0;
+                    if(!Capture.IsEmpty()&&FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeArmourCaptureMorph="),CaptureMorph)&&CaptureMorph>=1883&&CaptureMorph<=1885){
+                        auto MorphRow=MakeShared<FJsonObject>();MorphRow->Values=Row->Values;MorphRow->SetNumberField(TEXT("model_id"),CaptureMorph);MorphRow->SetBoolField(TEXT("morphed"),true);
+                        Check(CreateEntity(TEXT("player:local"),MorphRow,Actor->GetActorLocation())!=nullptr,TEXT("render capture loads the requested original form"));EntityRows.Add(TEXT("player:local"),MorphRow);UpdateLocalEquipment();UpdateClassicDoll();Report->SetNumberField(TEXT("captured_form"),CaptureMorph);
+                    }
+                }
             }
         }
         else Check(false,TEXT("modular figures present"));

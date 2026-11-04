@@ -13,6 +13,10 @@ look_store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
 assert look_store.resolve().is_relative_to(RUN.resolve())
 look_store_before=look_store.read_bytes() if appearance_probe and look_store.exists() else None
 legacy_probe=appearance_probe and os.environ.get('DAOC_BRIDGE_QA_LEGACY_LOOK')=='1'
+morph_catalog=os.environ.get('DAOC_BRIDGE_QA_MORPH_CATALOG','')
+morph_probe=bool(morph_catalog)
+native_catalog=RUN/'models.json'
+native_catalog_before=native_catalog.read_bytes() if morph_probe and native_catalog.exists() else None
 legacy_look={'face':15,'hair':15,'hair_color':15,'skin':15,'eyes':15,'sliders':[15,-1,4,8,12],'old_format':True}
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
@@ -56,8 +60,18 @@ try:
   char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
   update(db,'Account','Name',char['AccountName'],{'PrivLevel':3,'Realm':3})
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],{'Class':53,'Level':1,'Experience':0,'SerializedSpecs':'','Health':10})
+ if morph_probe:
+  candidate=Path(morph_catalog).resolve();assert candidate.is_relative_to(ROOT.resolve())
+  models=json.loads(candidate.read_text(encoding='utf-8-sig'))
+  assert all(models.get(str(mid),{}).get('type')=='skeletal' for mid in (1883,1884,1885))
+  assert native_catalog.resolve().is_relative_to(RUN.resolve())
+  native_catalog.write_text(json.dumps(models),encoding='utf-8')
  cfg=json.loads(config_bytes);cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
  for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
+ if morph_probe:
+  trace=RUN/'Godot/live_gateway.gd';text=trace.read_text(encoding='utf-8-sig')
+  text=text.replace('func world_event(kind:String,data:Dictionary)->void:\n','func world_event(kind:String,data:Dictionary)->void:\n    if kind in ["you","region_changed","quit","model_change"]:print("QA_MODEL_PACKET "+kind+" "+JSON.stringify(data))\n')
+  trace.write_text(text,encoding='utf-8')
  p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
  log=(D/'character_return_server.log').open('w',encoding='utf-8');logs.append(log)
  server=subprocess.Popen([str(dotnet),str(SERVER/'CoreServer.dll'),'--start'],cwd=SERVER,env=env,stdin=subprocess.PIPE,stdout=log,stderr=subprocess.STDOUT,text=True,creationflags=subprocess.CREATE_NO_WINDOW)
@@ -102,6 +116,30 @@ try:
  if appearance_probe:
   wait(lambda:any(e.get('id')=='player:local' and e.get('look')==expected for e in snapshot.get('entities',[])),'Chosen appearance reaches local world snapshot',20)
   result['checks']['chosen_appearance_reaches_world']=True
+ if morph_probe:
+  def local_player():return next((e for e in snapshot.get('entities',[]) if e.get('id')=='player:local'),{})
+  original=dict(local_player());assert original and not original.get('morphed')
+  base_model=original['model_id'];original_look=original.get('look',{})
+  restore_model=int(char['CreationModel']) & 0x7fff
+  assert restore_model>0
+  morph_results=[]
+  # The headless probe has no native pawn to send its initial position update.
+  send('move',position_m=original['position_m'],forward_xz=original['forward_xz'],speed_mps=0)
+  settle(2)
+  send('target_self');settle(.3)
+  for model in (1883,1884,1885):
+   send('chat',text='/player model change '+str(model))
+   wait(lambda:local_player().get('morphed') and local_player().get('model_id')==model,'Original server ModelChange reaches native form '+str(model),20)
+   assert local_player().get('look',{})==original_look
+   assert not local_player().get('missing_morph_model')
+   morph_results.append(dict(model=model,source_model=local_player().get('source_model'),size=local_player().get('size')))
+   send('chat',text='/player model reset')
+   wait(lambda:not local_player().get('morphed') and local_player().get('model_id')==base_model,'Original server ModelChange restores equipped figure',20)
+   assert local_player().get('look',{})==original_look
+  result['morphs']=morph_results
+  result['model_change_command']='original /player model change and reset; disposable DB restored'
+  result['checks']['server_model_changes_and_equipped_return']=True
+  result['checks']['appearance_preserved_across_morphs']=True
  (D/'returned_snapshot.json').write_text(json.dumps(snapshot),encoding='utf-8');result['passed']=True
  if appearance_probe:
   send('chat',text='/quit');wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Second saved return before client restart',45)
@@ -140,6 +178,11 @@ finally:
   if look_store_before is None:look_store.unlink(missing_ok=True)
   else:look_store.write_bytes(look_store_before)
   result['appearance_profile_restored']=True
+ if morph_probe:
+  assert native_catalog.resolve().is_relative_to(RUN.resolve())
+  if native_catalog_before is None:native_catalog.unlink(missing_ok=True)
+  else:native_catalog.write_bytes(native_catalog_before)
+  result['qa_native_catalogue_restored']=True
  if backed:
   assert DB.is_relative_to(RUN) and RUN.is_relative_to(ROOT/'ProtocolQA')
   with checked() as dst:

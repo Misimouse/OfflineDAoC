@@ -102,9 +102,11 @@ bool UDAoCBridgeSubsystem::AttachEquipment(AActor* Actor,int32 Slot,TSharedPtr<F
 void UDAoCBridgeSubsystem::UpdateLocalEquipment(){
     auto* Found=Entities.Find(TEXT("player:local"));auto* Actor=Found&&IsValid(*Found)?Cast<ASkeletalMeshActor>(*Found):nullptr;
     if(!EquipmentCatalog.IsValid()||!Actor||!bLocalAvailable||!GearFlag(InventoryState,TEXT("ready"))){if(!LocalEquipment.IsEmpty()||EquipmentActor.IsValid())ClearLocalEquipment();return;}
+    auto* LocalRow=EntityRows.Find(TEXT("player:local"));
+    if(LocalRow&&GearFlag(*LocalRow,TEXT("morphed"))){if(!LocalEquipment.IsEmpty()||EquipmentActor.IsValid())ClearLocalEquipment();return;}
     if(EquipmentActor.Get()!=Actor){ClearLocalEquipment();EquipmentActor=Actor;}
     const bool Combat=GearFlag(PlayerState,TEXT("attack_on"));const FString Set=GearStr(InventoryState,TEXT("weapon_set"));
-    auto* LocalRow=EntityRows.Find(TEXT("player:local"));auto Look=LocalRow?GearObj(*LocalRow,TEXT("look")):nullptr;FString LookKey;if(Look)FJsonSerializer::Serialize(Look.ToSharedRef(),TJsonWriterFactory<>::Create(&LookKey));
+    auto Look=LocalRow?GearObj(*LocalRow,TEXT("look")):nullptr;FString LookKey;if(Look)FJsonSerializer::Serialize(Look.ToSharedRef(),TJsonWriterFactory<>::Create(&LookKey));
     const FString Fingerprint=FString::Printf(TEXT("%lld:%d:%s"),int64(GearNum(InventoryState,TEXT("state_revision"),-1)),int32(Combat),*Set)+LookKey;
     bool Intact=true;for(const auto& Pair:LocalEquipment)if(!Pair.Value.Component.IsValid())Intact=false;
     if(EquipmentFingerprint==Fingerprint&&Intact)return;
