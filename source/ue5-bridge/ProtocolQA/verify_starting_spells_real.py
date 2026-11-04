@@ -8,6 +8,7 @@ parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--leve
 parser.add_argument('--expansion-proposal',type=Path)
 parser.add_argument('--career-proposal',type=Path)
 parser.add_argument('--expansion-power',action='store_true')
+parser.add_argument('--vampiir-bolt',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
@@ -19,9 +20,11 @@ parser.add_argument('--expansion-self-buff',action='store_true')
 parser.add_argument('--bainshee-combat',action='store_true')
 args=parser.parse_args();class_id=args.class_id
 training_mode=args.bainshee_training or args.expansion_training
+native_combat_mode=args.bainshee_combat or args.vampiir_bolt
 training_lines={39:['Spectral Guard','Phantasmal Wail','Ethereal Shriek'],58:['Dementia','Shadow Mastery','Vampiiric Embrace'],62:['Aura Manipulation','Magnetism','Power Strikes']}
 trainer_types={39:'BainsheeTrainer',58:'VampiirTrainer',62:'HiberniaMaulerTrainer'}
 training_level=5 if class_id==62 else 4
+assert not args.vampiir_bolt or (class_id==58 and args.level==50 and args.career_proposal and not args.expansion_power and not training_mode),'Bolt requires a separate level-fifty Vampiir career fixture'
 assert not args.expansion_power or (args.career_proposal and not training_mode and not args.expansion_self_buff),'Power fixture requires career data and a separate run'
 assert not args.career_proposal or class_id in [58,62]
 assert not(args.bainshee_proposal and args.expansion_proposal)
@@ -40,7 +43,7 @@ assert not args.bainshee_training or (class_id==39 and level==50 and not args.ba
 assert not args.expansion_self_buff or args.expansion_training,'Self buff requires the original training fixture'
 assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else '')+('_bolt' if args.vampiir_bolt else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -54,6 +57,7 @@ relay=None
 combat_motion_speed=0
 combat_move_at=0
 combat_finished=False
+combat_visibility_override=None
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
@@ -71,10 +75,10 @@ def pump():
  global session,snapshot,buffer,combat_move_at
  # The headless observer suppresses native movement commands. Supply the
  # stationary/input heartbeat normally sent by the pawn, using its real probe.
- if args.bainshee_combat and not combat_finished and relay is not None and relay.probe_result is True and time.monotonic()-combat_move_at>.1:
+ if native_combat_mode and not combat_finished and relay is not None and relay.probe_result is True and time.monotonic()-combat_move_at>.1:
   player=next((e for e in snapshot.get('entities',[]) if e['id']=='player:local'),None)
   if player:
-   combat_move_at=time.monotonic();send('move',position_m=player['position_m'],forward_xz=[0,1],speed_mps=combat_motion_speed,target_in_view=True,target_entity_id=enemy_id)
+   combat_move_at=time.monotonic();send('move',position_m=player['position_m'],forward_xz=[0,1],speed_mps=combat_motion_speed,target_in_view=relay.probe_result if combat_visibility_override is None else combat_visibility_override,target_entity_id=enemy_id)
  try:data=sock.recv(1048576)
  except socket.timeout:return
  if not data:raise RuntimeError('Private spell bridge closed')
@@ -84,9 +88,9 @@ def pump():
   if v.get('type')=='hello':session=v['session']
   if v.get('type')=='snapshot':
    snapshot=v
-   if args.bainshee_effect or args.expansion_self_buff:
+   if args.bainshee_effect or args.expansion_self_buff or args.vampiir_bolt:
     for event in v.get('spell_visuals',[]):
-     if (args.expansion_self_buff or event.get('effect_id') in [13515,13516,3332,3334]) and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
+     if (args.expansion_self_buff or args.vampiir_bolt or event.get('effect_id') in [13515,13516,3332,3334]) and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
 def wait(test,label,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
@@ -112,7 +116,7 @@ try:
    import importlib.util
    spec=importlib.util.spec_from_file_location('expansion_career_data',Path(__file__).with_name('expansion_career_data.py'));career=importlib.util.module_from_spec(spec);spec.loader.exec_module(career)
    result['isolated_career_data']=career.install(db,args.career_proposal,RUN.name,class_id)
-  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat or args.expansion_power else 3,'Realm':3})
+  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat or args.expansion_power or args.vampiir_bolt else 3,'Realm':3})
   values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
   if class_id==39:
    creation_model={9:310,11:342,12:326}[args.bainshee_race]
@@ -142,6 +146,10 @@ try:
    values.update(Health=10000,Mana=0,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
    update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Power Target','ClassType':'DOL.GS.GameNPC','Guild':'','Model':118,'Level':45,'Realm':0,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos'],'Y':char['Ypos']+60,'Z':char['Zpos']})
+  if args.vampiir_bolt:
+   values.update(Health=10000,Mana=0,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+   npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Vampiir Target','ClassType':'DOL.GS.GameNPC','Guild':'','Model':118,'Level':45,'Realm':0,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos'],'Y':char['Ypos']+400,'Z':char['Zpos']})
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
  if args.bainshee_promotion:
@@ -218,6 +226,38 @@ try:
  if args.bainshee_promotion:
   assert len(expected)==7 and 'Gleam Ray' not in expected,'Promotion must replace the base-class list, not append stale entries'
   result['checks']['promotion_replaces_base_spell_list']=True
+ if args.vampiir_bolt:
+  import importlib.util
+  spec=importlib.util.spec_from_file_location('vampiir_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
+  wait(lambda:snapshot.get('player_status',{}).get('ready') and any(e.get('name')=='Codex Vampiir Target' for e in snapshot.get('entities',[])),'Vampiir ability target ready')
+  player=next(e for e in snapshot['entities'] if e['id']=='player:local');enemy=next(e for e in snapshot['entities'] if e.get('name')=='Codex Vampiir Target');enemy_id=enemy['id']
+  send('move',position_m=player['position_m'],forward_xz=[0,1],speed_mps=0)
+  relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=95,entity_ids=['player:local',enemy_id],render=False);sock=relay
+  wait(lambda:bool(relay.read_report().get('local_animation')),'Native observer loads Vampiir',80)
+  send('target',entity_id=enemy_id);relay.start_probe(enemy_id)
+  wait(lambda:relay.probe_result is not None,'Actual native geometry answers Vampiir target');assert relay.probe_result
+  settle(.5);entry=next(e for e in snapshot['classic_ui']['entries'] if e.get('kind')=='ability' and e.get('name')=='Vampiir Bolt')
+  with checked() as db:original=dict(db.execute('SELECT * FROM Spell WHERE SpellID=?',(13200+7,)).fetchone())
+  assert original['Type']=='VampiirBolt';mana_before=snapshot['player_status']['vitals']['mana'];health_before=enemy['health'];assert mana_before==0
+  # Instant original abilities consume TargetInView from UseSkill; they need
+  # not ask the asynchronous LOS responder. First verify the unseen flag is
+  # rejected, then restore the actual native geometry result for the cast.
+  combat_visibility_override=False;settle(.5)
+  unseen_seq={e.get('seq') for e in effect_trace}
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token']);settle(3)
+  assert snapshot['player_status']['vitals']['mana']==0,'Unseen target must not grant power'
+  assert not any(e.get('seq') not in unseen_seq and e.get('kind')=='release' and e.get('effect_id')==original['ClientEffect'] for e in effect_trace),'Unseen bolt must not release'
+  result['checks']['unseen_target_flag_blocks_instant_bolt']=True
+  combat_visibility_override=None;settle(.5)
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  wait(lambda:any(e.get('kind')=='release' and e.get('effect_id')==original['ClientEffect'] and not e.get('resisted') for e in effect_trace),'Original Vampiir ability releases matching bolt',25)
+  wait(lambda:snapshot['player_status']['vitals']['mana']>0,'Original bolt obtains actual power from NPC',20)
+  assert relay.probe_result is True and relay.probes,'Visible cast requires the actual native geometry probe'
+  assert all(row['visible'] for row in relay.answers)
+  assert next(e for e in snapshot['entities'] if e['id']==enemy_id)['health']==health_before,'Power bolt must not invent health damage'
+  result['vampiir_bolt']={'normal_player_privileges':True,'ability_level':7,'original_spell_id':original['SpellID'],'effect_id':original['ClientEffect'],'initial_mana':0,'mana_after':snapshot['player_status']['vitals']['mana'],'visibility_contract':'original instant ability uses TargetInView; unseen flag rejected, then native geometry result supplied','native_los_answers':relay.answers,'native_probes':relay.probes,'events':effect_trace,'rendered_visual_acceptance':False}
+  result['checks']['original_ability_power_bolt_and_native_los']=True
+  combat_finished=True;sock=relay.backend;sock.settimeout(.1)
  if args.expansion_power:
   wait(lambda:snapshot.get('player_status',{}).get('ready') and any(e.get('name')=='Codex Power Target' for e in snapshot.get('entities',[])),'Normal power fixture ready')
   target=next(e for e in snapshot['entities'] if e.get('name')=='Codex Power Target');power_target=target['id']
@@ -387,7 +427,7 @@ try:
   result['checks']['original_timer_restores_appearance_and_inventory']=True
   result['combat_damage_tested']=False
  send('chat',text='/quit')
- wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if args.bainshee_combat or training_mode or args.expansion_power else 45)
+ wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if native_combat_mode or training_mode or args.expansion_power else 45)
  lobby=snapshot['character_lobby'];assert all(int(c['class_id'])!=63 for c in lobby['choices'])
  result['custom_disabled_choice_hidden']=True
  row=next(c for c in lobby['characters'] if c['name']=='Codexdruid')
