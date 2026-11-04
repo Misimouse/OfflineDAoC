@@ -9,6 +9,7 @@ parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--server-source',type=Path)
+parser.add_argument('--bainshee-effect',choices=['ward','barrier'])
 args=parser.parse_args();class_id=args.class_id
 assert (class_id==39)==bool(args.bainshee_proposal),'Bainshee requires an explicit isolated data proposal'
 assert args.level is None or class_id==39,'Advanced-level data probes are limited to Bainshee'
@@ -16,8 +17,9 @@ level=args.level or (3 if class_id==52 else 1)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert args.server_source is None or args.bainshee_promotion
+assert not args.bainshee_effect or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_form_cycle)
 assert args.bainshee_race==9 or args.bainshee_form_cycle or args.bainshee_promotion
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -26,6 +28,7 @@ config=RUN/'bridge_config.json';config_bytes=config.read_bytes()
 native_catalog=RUN/'models.json'
 native_catalog_before=native_catalog.read_bytes() if args.bainshee_form_cycle and native_catalog.exists() else None
 candidate_files=[]
+effect_trace=[]
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
@@ -48,7 +51,11 @@ def pump():
  while b'\n' in buffer:
   line,buffer=buffer.split(b'\n',1);v=json.loads(line)
   if v.get('type')=='hello':session=v['session']
-  if v.get('type')=='snapshot':snapshot=v
+  if v.get('type')=='snapshot':
+   snapshot=v
+   if args.bainshee_effect:
+    for event in v.get('spell_visuals',[]):
+     if event.get('effect_id') in [13515,13516,3332,3334] and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
 def wait(test,label,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
@@ -158,6 +165,20 @@ try:
  if args.bainshee_promotion:
   assert len(expected)==7 and 'Gleam Ray' not in expected,'Promotion must replace the base-class list, not append stale entries'
   result['checks']['promotion_replaces_base_spell_list']=True
+ if args.bainshee_effect:
+  candidate=json.loads(args.bainshee_proposal.read_text())
+  assert len(candidate.get('client_effect_adaptations',[]))==2 and not candidate['missing_effect_definitions'] and not candidate['missing_fx_resources']
+  wait(lambda:snapshot.get('player_status',{}).get('ready'),'Effect probe vitals ready')
+  player=next(e for e in snapshot['entities'] if e.get('id')=='player:local')
+  send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);send('target_self');settle(2)
+  name,effect_id=('Ward of Power',13515) if args.bainshee_effect=='ward' else ('Barrier of Power',13516)
+  entry=next(e for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell' and e.get('name')==name)
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  wait(lambda:any(e.get('kind')=='release' and e.get('effect_id')==effect_id and not e.get('resisted') for e in effect_trace),'Real self buff releases the matching original client effect',20)
+  assert not any(e.get('effect_id') in [3332,3334] for e in effect_trace)
+  assert not next(e for e in snapshot['entities'] if e.get('id')=='player:local').get('morphed')
+  result['checks']['original_absorption_effect_released']=True
+  result['effect_probe']={'spell':name,'effect_id':effect_id,'events':effect_trace,'native_visual_acceptance':'separate probe'}
  if args.bainshee_form_cycle:
   def local_player():return next((e for e in snapshot.get('entities',[]) if e.get('id')=='player:local'),{})
   wait(lambda:snapshot.get('player_status',{}).get('ready') and bool(local_player()),'Bainshee world and vitals ready')

@@ -19,4 +19,4 @@ def install(db,proposal_path,run_id):
             if table=='Spell':assert not db.execute('SELECT 1 FROM Spell WHERE SpellID=? OR Spell_ID=?',(row['SpellID'],row['Spell_ID'])).fetchone()
             keys=list(row)
             db.execute('INSERT INTO "'+table+'" ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[row[k] for k in keys])
-    return {'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'type_adaptations':proposal['type_adaptations'],'not_creation_enablement':True}
+    return {'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'type_adaptations':proposal['type_adaptations'],'client_effect_adaptations':proposal.get('client_effect_adaptations',[]),'not_creation_enablement':True}

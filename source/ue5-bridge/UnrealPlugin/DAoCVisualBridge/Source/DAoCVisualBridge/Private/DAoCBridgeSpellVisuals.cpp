@@ -120,6 +120,17 @@ public:
         Event->SetNumberField(TEXT("seq"),3);Event->SetStringField(TEXT("kind"),TEXT("release"));Event->SetStringField(TEXT("target"),TEXT("npc:fx"));Apply(Snapshot);Check(Live.Num()==2,TEXT("original cast burst and target impact created"));Tick(0);Check(Number(Local,TEXT("health"))==1&&Number(Target,TEXT("health"))==1,TEXT("visual rendering never changes health"));
         for(auto& E:Live)E.Began-=10;Tick(0);Check(Live.IsEmpty(),TEXT("expired visual actors and components removed"));
         Event->SetNumberField(TEXT("seq"),4);Event->SetNumberField(TEXT("effect_id"),4301);Event->SetStringField(TEXT("target"),TEXT("player:local"));Apply(Snapshot);Tick(0);bool MeshFound=false;for(auto& E:Live)for(auto& Part:E.Parts)if(!Part.Particle&&Part.Created)MeshFound=true;Check(MeshFound,TEXT("original powerward shield mesh is rendered, not substituted"));
+        if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeBainsheeEffectsTest"))){
+            for(int32 Id:{13515,13516}){
+                Clear();Event->SetNumberField(TEXT("seq"),1);Event->SetStringField(TEXT("kind"),TEXT("cast"));Event->SetNumberField(TEXT("effect_id"),Id);Event->SetStringField(TEXT("target"),TEXT("player:local"));Apply(Snapshot);Tick(0);
+                Check(Live.Num()==2,TEXT("Bainshee absorption buff creates both original hand effects"));Check(Particles>0,TEXT("Bainshee original gather emitters create sprite vertices"));
+                Event->SetNumberField(TEXT("seq"),2);Event->SetStringField(TEXT("kind"),TEXT("release"));Apply(Snapshot);Tick(0);
+                Check(Live.Num()==2,TEXT("Bainshee absorption buff creates original burst and target shield"));bool Shield=false;
+                for(auto& E:Live)for(auto& Part:E.Parts){Check(Part.Material.IsValid(),TEXT("Bainshee effect original material loaded"));Check(Part.Mesh.IsValid()&&Part.Mesh->GetCollisionEnabled()==ECollisionEnabled::NoCollision,TEXT("Bainshee effect cannot block movement or LOS"));Check(Part.Created,TEXT("Bainshee effect render section created"));if(!Part.Particle&&Part.Created)Shield=true;}
+                Check(Shield,TEXT("Bainshee original shield mesh rendered"));Check(Number(Local,TEXT("health"))==1,TEXT("Bainshee visual never changes health"));
+            }
+            for(int32 Id:{3332,3334}){Clear();Event->SetNumberField(TEXT("seq"),1);Event->SetNumberField(TEXT("effect_id"),Id);Apply(Snapshot);Check(Live.IsEmpty(),TEXT("icon IDs are not silently treated as effect IDs"));}
+        }
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeWeaponVisualTest"))){
             Clear();auto* Body=Entity(TEXT("player:local"));auto Equip=[&](int32 Id,bool Drawn=true){for(auto& B:S->LocalEquipment)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();S->LocalEquipment.Empty();auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("model"),445);Item->SetNumberField(TEXT("effect"),Id);int32 MissingModel=0,MissingBone=0;return S->AttachEquipment(Body,10,Item,Drawn,S->LocalEquipment,MissingModel,MissingBone);};
             const auto WeaponDefs=Object(Catalog,TEXT("weapon_effects"));Check(WeaponDefs&&WeaponDefs->Values.Num()==94,TEXT("all original permanent weapon definitions loaded"));

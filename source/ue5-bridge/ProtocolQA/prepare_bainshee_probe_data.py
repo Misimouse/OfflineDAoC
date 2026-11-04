@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 import re
+import csv,io,importlib.util
 from pathlib import Path
 import sqlite3
 
@@ -20,6 +21,7 @@ def main():
     parser.add_argument('--workspace',required=True,type=Path)
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--server-source',required=True,type=Path,help='This fork GameServer source, used to audit concrete spell handlers')
+    parser.add_argument('--client',type=Path,help='Original client app folder, used to resolve the two known icon/effect ID mismatches')
     args=parser.parse_args();root=args.workspace.resolve()
     assert args.output.resolve().is_relative_to(root/'Reports'),'Keep proposals in private reports, outside databases and game content'
     prepared=json.loads((root/'Reports/protocol_qa/prepared.json').read_text())
@@ -33,7 +35,23 @@ def main():
     links=[x for x in source['LineXSpell.json'] if x['LineName'] in LINES]
     ids=sorted({int(x['SpellID']) for x in links});assert len(ids)==123 and len(links)==130
     report={'source':'https://github.com/Dawn-of-Light/db-public','source_commit':COMMIT,'source_hashes':HASHES,
-            'database_modified':False,'proposal_only':True,'spells':[],'line_spells':[],'remapped_ids':{},'preserved_rows':{},'missing_effect_definitions':[], 'type_adaptations':[]}
+            'database_modified':False,'proposal_only':True,'spells':[],'line_spells':[],'remapped_ids':{},'preserved_rows':{},'missing_effect_definitions':[], 'type_adaptations':[], 'client_effect_adaptations':[]}
+    effect_map={}
+    if args.client:
+        pipeline=args.server_source.resolve().parents[1]/'new-client/pipeline/daoc_mpk.py';assert pipeline.exists()
+        spec=importlib.util.spec_from_file_location('original_client_mpk',pipeline)
+        mpk=importlib.util.module_from_spec(spec);spec.loader.exec_module(mpk)
+        archive=args.client/'gamedata.mpk';tables=mpk.read_mpk(str(archive))
+        rows=list(csv.reader(io.StringIO(tables['spells.csv'].decode('latin1'))))
+        report['client_gamedata_sha256']=hashlib.sha256(archive.read_bytes()).hexdigest()
+        for spell_id,old_id,new_id in [(13518,3332,13515),(13519,3334,13516)]:
+            original=spells[spell_id]
+            assert original['Type']=='ArmorAbsorptionBuff' and original['ClientEffect']==old_id and original['Icon']==old_id
+            assert not any(row and row[0].strip()==str(old_id) for row in rows)
+            matches=[row for row in rows if len(row)>2 and row[0].strip().isdigit() and row[1]==original['Name'] and row[2].strip()==str(original['Icon'])]
+            assert len(matches)==1 and int(matches[0][0])==new_id,'Review the original client version before mapping an effect'
+            effect_map[old_id]=new_id
+            report['client_effect_adaptations'].append({'source_spell_id':spell_id,'from':old_id,'to':new_id,'name':original['Name'],'icon':original['Icon'],'reason':'Unique original client row matches both spell name and icon; old effect ID is absent'})
     handlers={}
     pattern=re.compile(r'\[SpellHandler\(eSpellType\.(\w+)\)\]\s*(?:public|internal)\s+(?:(abstract|sealed)\s+)?class\s+(\w+)',re.S)
     for path in (args.server_source/'spells').rglob('*.cs'):
@@ -51,6 +69,7 @@ def main():
         for spell_id in ids:
             original=spells[spell_id];current=existing.get(spell_id)
             row={key:value for key,value in original.items() if key in columns}
+            if int(row.get('ClientEffect',0)) in effect_map:row['ClientEffect']=effect_map[int(row['ClientEffect'])]
             if row['Type']=='ArmorFactorBuff':
                 # DOL's old AF type is abstract in this fork. Adapt only this original baseline.
                 original_lines={x['LineName'] for x in links if int(x['SpellID'])==spell_id}
@@ -74,7 +93,7 @@ def main():
         assert all(count==0 for count in report['expected_existing_line_counts'].values()),'Review changed baseline before preparing this proposal'
         assert {row[0] for row in db.execute('SELECT KeyName FROM SpellLine WHERE KeyName IN (?,?,?,?)',sorted(LINES))}==LINES
     catalog=json.loads((root/'Client/Plugins/DAoCVisualBridge/Content/SpellVisuals_v01/catalog.json').read_text())
-    effect_ids={str(int(spells[i]['ClientEffect'])) for i in ids if int(spells[i]['ClientEffect'])>0};needed=set()
+    effect_ids={str(effect_map.get(int(spells[i]['ClientEffect']),int(spells[i]['ClientEffect']))) for i in ids if int(spells[i]['ClientEffect'])>0};needed=set()
     for effect_id in effect_ids:
         definition=catalog['effects'].get(effect_id)
         if not definition:report['missing_effect_definitions'].append(effect_id);continue
@@ -86,7 +105,7 @@ def main():
     assert all(report['concrete_handler_source_coverage'].values()),'A candidate type lacks a concrete handler in this fork'
     report['not_certified']=['creation eligibility','runtime handler coverage','Bainshee form changes','combat semantics','visual acceptance','all levels and training']
     args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(report,indent=2),encoding='utf-8')
-    print(json.dumps({'proposal_only':True,'spells':len(report['spells']),'line_spells':len(report['line_spells']),'type_adaptations':len(report['type_adaptations']),'handler_types':len(report['concrete_handler_source_coverage']),'remapped_ids':report['remapped_ids'],'missing_effect_definitions':report['missing_effect_definitions'],'missing_fx_resources':report['missing_fx_resources']}))
+    print(json.dumps({'proposal_only':True,'spells':len(report['spells']),'line_spells':len(report['line_spells']),'type_adaptations':len(report['type_adaptations']),'client_effect_adaptations':len(report['client_effect_adaptations']),'handler_types':len(report['concrete_handler_source_coverage']),'remapped_ids':report['remapped_ids'],'missing_effect_definitions':report['missing_effect_definitions'],'missing_fx_resources':report['missing_fx_resources']}))
 
 
 if __name__=='__main__':main()
