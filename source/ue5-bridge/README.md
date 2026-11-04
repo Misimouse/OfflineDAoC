@@ -1,4 +1,4 @@
-# Godot ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ Unreal Engine visual bridge
+# Godot ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Unreal Engine visual bridge
 
 Source snapshot of the Connacht/Ardee integration, 3 November 2026. This is a development prototype within the OfflineDAoC fork, not a new official OfflineDAoC release. It inherits the repository's GPL-3.0 license; see ../../LICENSE and ../../THIRD_PARTY.md.
 
@@ -208,3 +208,8 @@ The disposable starting-spell probe also accepts Stalker (54) and Forester (57).
 Original overview packets can carry facial nibbles outside the current figure's supported options. A compatibility view now bounds only trusted existing server/local-store data to the original race metadata, including dependent hair colours and facial sliders. The view is shared by the roster and local-world appearance. Opening the menu never writes the original store or database; only an explicit valid customization save persists it. Unsupported race data keeps the existing fallback. Client creation/customization commands still reject unknown keys, invalid numbers and out-of-range choices; they cannot request compatibility normalization.
 
 The lobby contract passed 50 checks, including old face bytes, unchanged source state on opening, explicit-save behavior and malformed local look values. With `DAOC_BRIDGE_QA_APPEARANCE=1` and `DAOC_BRIDGE_QA_LEGACY_LOOK=1`, the marked disposable protocol probe seeds an old look, checks an editable roster without rewriting the store, then verifies save, world entry and fresh-client reload and restores the previous private profile/database. These checks do not modify played characters or grant abilities.
+
+
+The class-source parser also recognizes C# target-typed `new() { ... }` race lists. In particular, an explicitly empty Bainshee list must override its parent instead of accidentally inheriting Magician races. A regression fixture checks this against both source syntaxes. The corrected audit confirms Bainshee's eligible-race list is empty in this fork as well as being disabled by configuration. Installed creation data has not been regenerated or expanded by this parser correction.
+
+The read-only installation audit now inventories spell-line joins for Bainshee, Vampiir and Hibernian Mauler. The current installation contains their named lines but zero linked spells in the lines selected by those class specializations. Career implementations can additionally supply shared lines; these relational counts are not a runtime certification. Enabling a button or removing a configuration filter alone would leave unresolved class data, eligibility and visuals.

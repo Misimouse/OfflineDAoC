@@ -23,6 +23,11 @@ def main():
     db=args.install/'runtime/data/opendaoc.sqlite3.db'
     with sqlite3.connect(db.resolve().as_uri()+'?mode=ro',uri=True) as conn:
         props=dict(conn.execute("SELECT Key,Value FROM ServerProperty WHERE Key IN ('disabled_classes','disabled_races','start_as_base_class','enable_sluaghbinder')"))
+        spell_inventory={str(cid):[{'line':key,'spec':spec_key,'linked_spells':count}
+                                 for key,spec_key,count in conn.execute(
+            'SELECT l.KeyName,l.Spec,COUNT(x.SpellID) FROM SpellLine l LEFT JOIN LineXSpell x ON x.LineName=l.KeyName '
+            'WHERE l.Spec IN (SELECT SpecKeyName FROM ClassXSpecialization WHERE ClassID=?) GROUP BY l.KeyName ORDER BY l.KeyName',(cid,))]
+                         for cid in [39,58,62]}
     disabled=rules.id_set(props.get('disabled_classes',''))
     disabled_races=rules.id_set(props.get('disabled_races',''))
     game=args.install/'new-client/godot'
@@ -43,10 +48,11 @@ def main():
         races.append({'name':name,'id':race_id,'disabled_by_property':race_id in disabled_races,
                       'godot_figure_metadata':{sex:(game/'content/characters/races'/f'{prefix}_{sex}'/'figure.json').is_file() if prefix else None for sex in ['m','f']},
                       'native_appearance':{sex:f'{prefix}_{sex}' in figures if prefix else None for sex in ['m','f']}})
-    result={'read_only':True,'server_properties':props,'classes':rows,'races':races,
+    result={'read_only':True,'server_properties':props,'classes':rows,'races':races,'expansion_spell_inventory':spell_inventory,
             'limitations':['Source presence does not prove runtime completeness or spell/visual coverage.',
                            'The original look store is local, not cross-client server persistence.',
-                           'Minotaur asset mapping is unconfirmed; null means not yet audited.'],
+                           'Minotaur asset mapping is unconfirmed; null means not yet audited.',
+                           'Spell-line joins inventory existing data; career implementations may also add shared lines.'],
             'next':['Check source gender restrictions and all creation validators before expansion enablement.',
                     'Inspect the original class/spell database in disposable probes; never grant spells by UI labels.',
                     'Port and verify missing figure metadata, geometry, gear and appearance before exposing a race.']}

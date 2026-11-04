@@ -63,7 +63,7 @@ def parse_classes():
         stats = {k: (re.search(r'm_%sStat\s*=\s*eStat\.(\w+)' % k, t) or [None, None])[1]
                  for k in ('primary', 'secondary', 'tertiary')}
         races = None
-        rm = re.search(r'EligibleRaces\s*=>\s*new\s+List<PlayerRace>\(\)\s*\{(.*?)\}', t, re.S)
+        rm = re.search(r'EligibleRaces\s*=>\s*new\s*(?:List<PlayerRace>\s*)?\(\s*\)\s*\{(.*?)\}', t, re.S)
         if rm:
             races = [RACES[r] for r in re.findall(r'PlayerRace\.(\w+)', rm.group(1)) if r in RACES]
         classes[cm.group(1)] = {'enum': m.group(1), 'name': m.group(2), 'base': m.group(3),
