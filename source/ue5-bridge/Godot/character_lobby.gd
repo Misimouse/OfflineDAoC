@@ -40,6 +40,10 @@ func refresh(server:Node)->void:
         var race_id:int=int(server.RACE_BY_NAME[race_name])
         for female in [false,true]:
             for cls in server.classes_for(realm,race_id,female):
+                var definition:Dictionary=server.classes.get("classes",{}).get(str(int(cls[0])),{})
+                var constraint:String=String(definition.get("gender",""))
+                if constraint not in ["","female","male"]:continue
+                if constraint!="" and female!=(constraint=="female"):continue
                 choices.append({"id":race_name+":"+("f" if female else "m")+":"+str(int(cls[0])),"race":race_name,"female":female,"class_id":int(cls[0]),"class_name":String(cls[1])})
     ready=not server.character_list_pending();revision+=1
     if not pending:feedback="Choose a character or create a new one."

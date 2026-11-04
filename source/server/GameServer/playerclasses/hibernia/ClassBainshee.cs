@@ -40,6 +40,19 @@ namespace DOL.GS.PlayerClass
 		{
 			return true;
 		}
+
+        public static bool IsDisabledByConfiguration(string configuredClasses)
+        {
+            foreach (string entry in Util.SplitCSV(configuredClasses ?? string.Empty, true))
+            {
+                string disabled = entry.Trim();
+                if (disabled == ((int)eCharacterClass.Bainshee).ToString() ||
+                    string.Equals(disabled, nameof(eCharacterClass.Bainshee), StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
+        }
 		
 		#region Wraith Form
 		protected const int WRAITH_FORM_RESET_DELAY = 30000;
@@ -168,7 +181,7 @@ namespace DOL.GS.PlayerClass
 
 		public override List<PlayerRace> EligibleRaces => new()
 		{
-			// PlayerRace.Celt, PlayerRace.Elf, PlayerRace.Lurikeen,
+			PlayerRace.Celt, PlayerRace.Elf, PlayerRace.Lurikeen,
 		};
 	}
 	#endregion

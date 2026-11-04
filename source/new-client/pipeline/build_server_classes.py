@@ -105,9 +105,19 @@ def id_set(text):
     return ids
 
 
+def class_gender_constraints():
+    text = (GS / 'GlobalConstants.cs').read_text(encoding='utf-8', errors='replace')
+    text = re.sub(r'//[^\n]*', '', text)
+    body = text[text.index('CLASS_GENDER_CONSTRAINTS_DICT'):]
+    body = body[:body.index('};')]
+    return {name: gender.lower() for name, gender in
+            re.findall(r'eCharacterClass\.(\w+)\s*,\s*eGender\.(Male|Female)', body)}
+
+
 def main():
     ids = enum_values(GS / 'Enums/eCharacterClass.cs', 'eCharacterClass')
     classes = {c['enum']: c for c in parse_classes().values()}
+    genders = class_gender_constraints()
     db = sqlite3.connect(DB.as_uri() + '?mode=ro', uri=True)
     prop = dict(db.execute("SELECT Key, Value FROM ServerProperty WHERE Key IN ('disabled_classes','disabled_races')"))
     disabled = id_set(prop.get('disabled_classes'))
@@ -129,6 +139,8 @@ def main():
             out['classes'][str(ids[n])] = {'name': c['name'], 'female': c['female'], 'realm': realms[realm],
                                            'races': races, 'stats': [c['stats'][s] for s in
                                                                      ('primary', 'secondary', 'tertiary')]}
+            if n in genders:
+                out['classes'][str(ids[n])]['gender'] = genders[n]
         out['realms'][realms[realm]] = listed
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, indent=1), encoding='utf-8')

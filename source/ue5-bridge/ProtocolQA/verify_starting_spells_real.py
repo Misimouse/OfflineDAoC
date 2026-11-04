@@ -7,13 +7,17 @@ parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choic
 parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,50])
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
+parser.add_argument('--bainshee-promotion',action='store_true')
+parser.add_argument('--server-source',type=Path)
 args=parser.parse_args();class_id=args.class_id
 assert (class_id==39)==bool(args.bainshee_proposal),'Bainshee requires an explicit isolated data proposal'
 assert args.level is None or class_id==39,'Advanced-level data probes are limited to Bainshee'
 level=args.level or (3 if class_id==52 else 1)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
-assert args.bainshee_race==9 or args.bainshee_form_cycle,'Alternate race is limited to the isolated form cycle'
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else '')+('_form_cycle'+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '') if args.bainshee_form_cycle else ''));D.mkdir(parents=True,exist_ok=True)
+assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
+assert args.server_source is None or args.bainshee_promotion
+assert args.bainshee_race==9 or args.bainshee_form_cycle or args.bainshee_promotion
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id==39 else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -21,27 +25,17 @@ backup=ROOT/'Backups'/('StartingSkillsQA_'+time.strftime('%Y%m%d-%H%M%S'));backu
 config=RUN/'bridge_config.json';config_bytes=config.read_bytes()
 native_catalog=RUN/'models.json'
 native_catalog_before=native_catalog.read_bytes() if args.bainshee_form_cycle and native_catalog.exists() else None
+candidate_files=[]
 def checked():
  db=sqlite3.connect(DB);db.row_factory=sqlite3.Row;assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==RUN.name;return db
 def update(db,table,keyfield,key,values):db.execute('UPDATE '+table+' SET '+','.join('"'+k+'"=?' for k in values)+' WHERE "'+keyfield+'"=?',list(values.values())+[key])
 
 def install_probe_data(db):
- proposal=json.loads(args.bainshee_proposal.read_text())
- assert proposal['proposal_only'] and proposal['source_commit']=='b5b29c2ada7695414b94f5fa110eb505a477d007'
- assert len(proposal['spells'])==123 and len(proposal['line_spells'])==130
- assert len(proposal.get('type_adaptations',[]))==10 and len(proposal.get('concrete_handler_source_coverage',{}))==15,'Regenerate proposal with this fork concrete-handler audit'
- for spell_id,expected in proposal['preserved_rows'].items():
-  current=dict(db.execute('SELECT * FROM Spell WHERE SpellID=?',(int(spell_id),)).fetchone())
-  assert hashlib.sha256(json.dumps(current,sort_keys=True,separators=(',',':')).encode()).hexdigest()==expected['sha256']
- for name,count in proposal['expected_existing_line_counts'].items():
-  assert count==0 and db.execute('SELECT COUNT(*) FROM LineXSpell WHERE LineName=?',(name,)).fetchone()[0]==0
- for table,key in [('Spell','spells'),('LineXSpell','line_spells')]:
-  columns={r['name'] for r in db.execute('PRAGMA table_info("'+table+'")')}
-  for row in proposal[key]:
-   assert set(row)<=columns
-   if table=='Spell':assert not db.execute('SELECT 1 FROM Spell WHERE SpellID=? OR Spell_ID=?',(row['SpellID'],row['Spell_ID'])).fetchone()
-   keys=list(row);db.execute('INSERT INTO "'+table+'" ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[row[k] for k in keys])
- result['isolated_bainshee_data']={'source_commit':proposal['source_commit'],'new_spells':123,'line_spells':130,'preserved_existing_spell_ids':list(proposal['preserved_rows']),'remapped_ids':proposal['remapped_ids'],'type_adaptations':proposal['type_adaptations'],'not_creation_enablement':True}
+ import importlib.util
+ spec=importlib.util.spec_from_file_location('bainshee_probe_data',Path(__file__).with_name('bainshee_probe_data.py'))
+ helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
+ result['isolated_bainshee_data']=helper.install(db,args.bainshee_proposal,RUN.name)
+
 def send(action,**values):
  global serial
  serial+=1;sock.sendall((json.dumps(dict(type='command',session=session,id='cloak:'+str(serial),action=action,**values))+'\n').encode())
@@ -81,8 +75,32 @@ try:
   if class_id==39:
    creation_model={9:310,11:342,12:326}[args.bainshee_race]
    values.update(Gender=1,Race=args.bainshee_race,CreationModel=creation_model,CurrentModel=creation_model)
+  if args.bainshee_promotion:
+   values.update(Class=51,Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+   disabled=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone()[0]
+   # Only the disposable candidate enables this promotion; preserve every other class restriction.
+   import importlib.util
+   pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
+   spec=importlib.util.spec_from_file_location('candidate_class_rules',pipeline)
+   rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
+   disabled_ids=rules.id_set(disabled);disabled_ids.discard(39)
+   db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(map(str,sorted(disabled_ids))),))
+   npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Bainshee Trainer','ClassType':'DOL.GS.Trainer.BainsheeTrainer','Guild':'Bainshee Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
+   result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='bainshee_item'").fetchone())
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
+ if args.bainshee_promotion:
+  build=args.server_source.resolve()/'Release';assert (build/'GameServer.dll').exists()
+  for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
+   for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
+    dst=folder/name
+    if folder!=SERVER and not dst.exists():continue
+    assert dst.resolve().is_relative_to(RUN.resolve())
+    saved=backup/('candidate_'+str(len(candidate_files))+'_'+name) if dst.exists() else None
+    if saved:shutil.copy2(dst,saved)
+    candidate_files.append((dst,saved));shutil.copy2(build/name,dst)
+  result['candidate_server_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
  if args.bainshee_form_cycle:
   assert native_catalog.resolve().is_relative_to(RUN.resolve())
   models=json.loads((ROOT/'models.json').read_text())
@@ -111,6 +129,17 @@ try:
   except OSError:time.sleep(.2)
  else:raise RuntimeError('Private spell bridge unavailable')
  wait(lambda:snapshot.get('classic_ui',{}).get('skills_ready'),'Starting spell lists');settle(5)
+ if args.bainshee_promotion:
+  player=next(e for e in snapshot.get('entities',[]) if e.get('id')=='player:local')
+  send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);settle(2)
+  wait(lambda:any(e.get('name')=='Codex Bainshee Trainer' for e in snapshot.get('entities',[])),'Original candidate trainer visible',20)
+  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex Bainshee Trainer')
+  send('interact',entity_id=npc['id'])
+  wait(lambda:'Bainshee' in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[]),'Original trainer offers promotion keyword',20)
+  talk=snapshot['interaction']['talk'];send('keyword',reply_id=talk['id'],word='Bainshee')
+  wait(lambda:any(e.get('name')=="Bawler's Bruise" for e in snapshot.get('classic_ui',{}).get('entries',[])),'Original trainer promotion updates Bainshee spell list',20)
+  with checked() as db:assert db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==39
+  result['checks']['original_trainer_promotes_magician']=True;settle(1)
  if class_id==39:
   candidate=json.loads(args.bainshee_proposal.read_text())
   startup=(D/'starting_spells_server.log').read_text(encoding='utf-8-sig',errors='replace')
@@ -126,6 +155,9 @@ try:
  result['class_id']=class_id;result['level']=level;result['expected_spells']=sorted(expected);result['visible_spells']=sorted(actual);result['complete']=expected==actual
  if class_id==39:assert expected,'Candidate Bainshee must receive actual spells, not merely an empty matching list'
  assert result['complete'],(expected,actual)
+ if args.bainshee_promotion:
+  assert len(expected)==7 and 'Gleam Ray' not in expected,'Promotion must replace the base-class list, not append stale entries'
+  result['checks']['promotion_replaces_base_spell_list']=True
  if args.bainshee_form_cycle:
   def local_player():return next((e for e in snapshot.get('entities',[]) if e.get('id')=='player:local'),{})
   wait(lambda:snapshot.get('player_status',{}).get('ready') and bool(local_player()),'Bainshee world and vitals ready')
@@ -180,6 +212,11 @@ finally:
   try:server.wait(timeout=45)
   except subprocess.TimeoutExpired:server.kill();server.wait();result['errors'].append('Private server forced stop')
  for log in logs:log.close()
+ for dst,saved in reversed(candidate_files):
+  assert dst.resolve().is_relative_to(RUN.resolve())
+  if saved:shutil.copy2(saved,dst)
+  elif dst.exists():dst.unlink()
+ if candidate_files:result['candidate_server_restored']=True
  if args.bainshee_form_cycle:
   assert native_catalog.resolve().is_relative_to(RUN.resolve())
   if native_catalog_before is None:native_catalog.unlink(missing_ok=True)

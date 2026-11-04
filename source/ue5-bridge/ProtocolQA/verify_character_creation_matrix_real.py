@@ -1,8 +1,15 @@
 """Create and reenter ten original race/sex figures in a marked disposable database only."""
 from qa_runtime import *
 import hashlib,shutil,socket,sqlite3,subprocess,time,traceback
+import argparse,importlib.util
 
-D=ROOT/'Reports/character_creation_matrix';D.mkdir(exist_ok=True)
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--bainshee-candidate',action='store_true')
+parser.add_argument('--server-source',type=Path)
+args=parser.parse_args()
+assert args.bainshee_candidate==bool(args.server_source),'Bainshee creation requires the explicit candidate server source'
+
+D=ROOT/'Reports'/('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix');D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -10,6 +17,13 @@ server=client=sock=None;logs=[];session='';buffer=b'';snapshot={};serial=0;backe
 store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
 assert store.resolve().is_relative_to(RUN.resolve())
 store_before=store.read_bytes() if store.exists() else None
+restored_files=[]
+
+def replace_private(src,dst):
+    assert dst.resolve().is_relative_to(RUN.resolve())
+    saved=backup/('file_'+str(len(restored_files))+'_'+dst.name) if dst.exists() else None
+    if saved:shutil.copy2(dst,saved)
+    restored_files.append((dst,saved));dst.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(src,dst)
 
 def checked():
     db=sqlite3.connect(DB);db.row_factory=sqlite3.Row
@@ -56,6 +70,25 @@ try:
         # disposable and the entire database is restored in finally.
         db.execute('DELETE FROM DOLCharacters WHERE AccountName=?',(account_name,))
         db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(account_name,))
+        if args.bainshee_candidate:
+            prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone();assert prop
+            pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
+            spec=importlib.util.spec_from_file_location('candidate_class_rules',pipeline)
+            rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
+            disabled=rules.id_set(prop['Value']);report['qa_bainshee_previously_disabled']=39 in disabled;disabled.discard(39)
+            db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
+    if args.bainshee_candidate:
+        server_source=args.server_source.resolve();assert (server_source/'GameServer/playerclasses/hibernia/ClassBainshee.cs').exists()
+        build=server_source/'Release';assert (build/'GameServer.dll').exists()
+        for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
+            for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
+                if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
+        rules.GS=server_source/'GameServer';rules.DB=DB;rules.OUT=RUN/'bainshee_server_classes.json';rules.main()
+        candidate=json.loads(rules.OUT.read_text());assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
+        original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
+        text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
+        restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
+        report['candidate_only']=True;report['server_build_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
     for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
     p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
     # Observe the original parsed skill lists without changing their contents.
@@ -86,9 +119,15 @@ try:
     else:raise RuntimeError('Private bridge unavailable')
     wait(lambda:lobby().get('ready') and lobby().get('enabled'),'Initial empty character menu')
     assert not lobby()['characters']
+    if args.bainshee_candidate:
+        choices=[c for c in lobby()['choices'] if c['class_id']==39]
+        assert len(choices)==3 and all(c['female'] for c in choices)
+        assert {c['race'] for c in choices}=={'Celt','Elf','Lurikeen'}
+        report['female_only_choices']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
-    for race,prefix,advanced,base in [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)]:
-        for female in [False,True]:
+    cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)]
+    for race,prefix,advanced,base in cases:
+        for female in ([True] if args.bainshee_candidate else [False,True]):
             figure=prefix+('_f' if female else '_m');choice=next(c for c in lobby()['choices'] if c['race']==race and c['female']==female and c['class_id']==advanced)
             meta=json.loads((game/'godot/content/characters/races'/figure/'figure.json').read_text())
             look={'size':2,'face':0,'eyes':0,'skin':0,'hair':0,'hair_color':0,'tattoo':0,'sliders':[2 if i%2 else 6 for i in range(len(meta.get('sliders',[])))]}
@@ -113,7 +152,8 @@ try:
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
             report['cases'].append({'figure':figure,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True});save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    assert len(report['cases'])==10 and len(lobby()['characters'])==10
+    expected_count=3 if args.bainshee_candidate else 10
+    assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
 finally:
@@ -137,6 +177,11 @@ finally:
         with checked() as db:
             src=sqlite3.connect(backup/'before.sqlite3.db');src.backup(db);src.close()
         report['database_restored']=True
+    for dst,saved in reversed(restored_files):
+        assert dst.resolve().is_relative_to(RUN.resolve())
+        if saved:shutil.copy2(saved,dst)
+        elif dst.exists():dst.unlink()
+    report['candidate_files_restored']=True
     report['normal_shutdown']=bool(client and server and client.returncode==0 and server.returncode==0)
     report['passed']=report['passed'] and report['normal_shutdown'] and not report['errors'];save_report()
     print(json.dumps({'passed':report['passed'],'cases':len(report['cases']),'errors':report['errors'],'database_restored':report.get('database_restored'),'appearance_profile_restored':report['appearance_profile_restored']}));assert report['passed']

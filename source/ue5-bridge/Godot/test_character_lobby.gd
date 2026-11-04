@@ -5,9 +5,14 @@ class FakeServer extends Node:
     var list_pending:=false
     var characters:Array=[{"name":"Existinghero","slot":0,"race":"Celt","gender":"male","level":1,"class_name":"Naturalist","prefix":"cel_m"}]
     var calls:Array=[]
+    var classes:Dictionary={"classes":{"39":{"gender":"female"}}}
+    var offer_bainshee:=false
     func character_list_pending()->bool:return list_pending
     func characters_in(_realm:String)->Array:return characters
-    func classes_for(_realm:String,race:int,_female:bool)->Array:return [[53,"Naturalist"]] if race==9 else []
+    func classes_for(_realm:String,race:int,_female:bool)->Array:
+        var out:Array=[[53,"Naturalist"]] if race==9 else []
+        if offer_bainshee and race in [9,11,12]:out.append([39,"Bainshee"])
+        return out
     func name_error(name:String)->String:return "Invalid name." if not RegEx.create_from_string("^[A-Z][a-zA-Z]{2,22}$").search(name) else ""
     func check_name(name:String)->void:calls.append(["check_name",name])
     func create_character(realm:String,race:String,female:bool,cls:int,name:String,look:Dictionary)->String:calls.append([realm,race,female,cls,name,look]);return ""
@@ -28,6 +33,8 @@ func _initialize()->void:run.call_deferred()
 func run()->void:
     var server:=FakeServer.new();root.add_child(server)
     var folder:String=get_script().resource_path.get_base_dir()
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--bridge-module-folder="):folder=arg.trim_prefix("--bridge-module-folder=")
     var lobby=load(folder.path_join("character_lobby.gd")).new()
     lobby.enabled=true;server.list_pending=true;lobby.refresh(server)
     check(not lobby.ready,"creation waits for all initial realm replies")
@@ -40,6 +47,13 @@ func run()->void:
     check(lobby.roster[0].class_name=="Magician","missing base-class overview caption uses the server class id")
     server.characters[0]["class_name"]="Naturalist";lobby.refresh(server)
     check(lobby.choices.size()==2,"creation choices obey original race and class rules")
+    server.offer_bainshee=true;lobby.refresh(server)
+    var forms:Array=lobby.choices.filter(func(c):return int(c.class_id)==39)
+    check(forms.size()==3 and forms.all(func(c):return c.female),"server female-only restriction applies to all three Bainshee races")
+    check(not lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Celt:m:39","name":"Invalidmale"},server,0) and server.calls.is_empty(),"stale or crafted male Bainshee choice cannot request creation")
+    server.classes.classes["39"].gender="unknown";lobby.refresh(server)
+    check(not lobby.choices.any(func(c):return int(c.class_id)==39),"invalid gender metadata never enables an unsupported choice")
+    server.offer_bainshee=false;lobby.refresh(server)
     for prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f"]:
         check(lobby.validated_look({},prefix).ok,"original default appearance exists for "+prefix)
     check(not lobby.validated_look({"sliders":[NAN]},"cel_m").ok,"nonfinite facial features cannot enter a packet")

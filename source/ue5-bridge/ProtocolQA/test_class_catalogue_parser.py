@@ -10,6 +10,23 @@ rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
 
 
 class ClassCatalogueParser(unittest.TestCase):
+    def test_gender_constraints_come_from_server_and_ignore_comments(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            (root/'GlobalConstants.cs').write_text('''
+public static readonly Dictionary<eCharacterClass, eGender> CLASS_GENDER_CONSTRAINTS_DICT = new()
+{
+ // {eCharacterClass.Magician, eGender.Male},
+ {eCharacterClass.Bainshee, eGender.Female},
+ {eCharacterClass.Valkyrie, eGender.Female},
+};
+''')
+            previous=rules.GS
+            try:
+                rules.GS=root
+                self.assertEqual(rules.class_gender_constraints(),{'Bainshee':'female','Valkyrie':'female'})
+            finally:rules.GS=previous
+
     def test_target_typed_empty_list_overrides_inheritance(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder);classes=root/'playerclasses';classes.mkdir()

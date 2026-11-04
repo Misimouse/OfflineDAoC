@@ -40,6 +40,18 @@ namespace DOL.GS.Trainer
 		{
 		}
 
+        public override bool CanPromotePlayer(GamePlayer player)
+        {
+            if (player == null)
+                return false;
+
+            // Restoring race eligibility must not bypass the server's class switch through a trainer.
+            if (PlayerClass.ClassBainshee.IsDisabledByConfiguration(ServerProperties.Properties.DISABLED_CLASSES))
+                return false;
+
+            return base.CanPromotePlayer(player);
+        }
+
 		/// <summary>
 		/// Interact with trainer
 		/// </summary>
