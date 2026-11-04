@@ -9,7 +9,7 @@ func run()->void:
     assert(not base.is_empty())
     DirAccess.make_dir_recursive_absolute(base.path_join("Textures"))
     var factory=load("res://game/fig3_figure.gd")
-    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708"}
+    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087"}
     var report:Dictionary={"complete":false,"races":{},"textures":{},"missing_textures":[]}
     for race in races:
         assert(ids.has(race))
