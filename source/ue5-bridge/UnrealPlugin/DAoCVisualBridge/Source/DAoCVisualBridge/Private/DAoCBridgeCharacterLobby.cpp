@@ -264,9 +264,11 @@ bool UDAoCBridgeSubsystem::TickCharacterLobbyAcceptance(){
         FlushRenderingCommands();FBufferArchive PreviewBytes;
         Check(CharacterLobbyTarget&&FImageUtils::ExportRenderTarget2DAsPNG(CharacterLobbyTarget,PreviewBytes)&&FFileHelper::SaveArrayToFile(PreviewBytes,*(Capture+TEXT(".scene.png"))),TEXT("full scene target exported"));
     }
+    if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeLobbyAmbientTest")))Check(CharacterLobbyMotion&&CharacterLobbyMotion->CheckAmbientMotion(),TEXT("original ambient particles move, face orbit camera and preserve source diameter"));
     auto Report=MakeShared<FJsonObject>();Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetArrayField(TEXT("failures"),Failures);Report->SetBoolField(TEXT("live_account"),false);
     if(CharacterLobbyTarget){Report->SetNumberField(TEXT("preview_width"),CharacterLobbyTarget->SizeX);Report->SetNumberField(TEXT("preview_height"),CharacterLobbyTarget->SizeY);}
     Report->SetNumberField(TEXT("moving_surfaces"),CharacterLobbyMotion?CharacterLobbyMotion->MovingSurfaces():0);
+    Report->SetNumberField(TEXT("ambient_emitters"),CharacterLobbyMotion?CharacterLobbyMotion->AmbientEmitters():0);Report->SetNumberField(TEXT("ambient_particles"),CharacterLobbyMotion?CharacterLobbyMotion->AmbientParticles():0);
     if(auto* Backdrop=Cast<AStaticMeshActor>(CharacterLobbyBackdropActor.Get()))if(UStaticMesh* Mesh=Backdrop->GetStaticMeshComponent()->GetStaticMesh())if(auto* Data=Mesh->GetRenderData()){
         TArray<TSharedPtr<FJsonValue>> Lods;for(const auto& Lod:Data->LODResources){auto Entry=MakeShared<FJsonObject>();Entry->SetNumberField(TEXT("triangles"),Lod.GetNumTriangles());Entry->SetNumberField(TEXT("uv_channels"),Lod.VertexBuffers.StaticMeshVertexBuffer.GetNumTexCoords());Lods.Add(MakeShared<FJsonValueObject>(Entry));}Report->SetArrayField(TEXT("backdrop_lods"),Lods);
     }

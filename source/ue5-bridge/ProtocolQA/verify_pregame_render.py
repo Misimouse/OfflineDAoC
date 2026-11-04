@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--appearance', type=Path, help='Private original appearance catalogue with UI swatches')
     parser.add_argument('--prefix', choices=('cel_m','cel_f','elf_m','elf_f','fir_m','fir_f','lur_m','lur_f','syl_m','syl_f'))
     parser.add_argument('--orbit', type=int, default=90, help='Diagnostic second camera angle')
+    parser.add_argument('--ambient', action='store_true', help='Require the original ambient particle sidecar and motion checks')
     args = parser.parse_args()
     assert 640 <= args.width <= 7680 and 480 <= args.height <= 2160
     if args.screen == 'customize':
@@ -54,6 +55,8 @@ def main():
         command.append('-DaocBridgeLobbyAppearance=' + str(args.appearance))
     if args.prefix:
         command.append('-DaocBridgeLobbyTestPrefix=' + args.prefix)
+    if args.ambient:
+        command.append('-DaocBridgeLobbyAmbientTest')
     started = time.time()
     with (args.output / 'native.log').open('w', encoding='utf-8') as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=180,
@@ -63,6 +66,8 @@ def main():
     assert report_path.exists() and report_path.stat().st_mtime >= started, 'No fresh result'
     report = json.loads(report_path.read_text(encoding='utf-8-sig'))
     assert report['passed'] and not report['live_account'], report
+    if args.ambient:
+        assert report['ambient_emitters'] == 1 and report['ambient_particles'] == 180, report
     assert (report['preview_width'], report['preview_height']) == (args.width, args.height), report
     assert report['backdrop_lods'] == [{'triangles': 62798, 'uv_channels': 4}], report
     images = [shot, Path(str(shot) + '.scene.png')]

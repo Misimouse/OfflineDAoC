@@ -183,3 +183,12 @@ Inventory portraits copy the equipped figure's visible head/hair, materials and 
 The opt-in `-DaocBridgeAppearanceTest` extends disposable native armour acceptance with world/portrait comparisons and ordinary helmet, circlet, full helmet, hidden helmet and hood cases for the ten supported figures. A run passed 2,662 checks; a rendered portrait run passed 2,489 checks. Native character-menu regression passed 36 checks. These automated counts are separate from manual acceptance.
 
 Stage `ProtocolQA/verify_character_return_real.py` alongside the prepared private QA helpers and set `DAOC_BRIDGE_QA_APPEARANCE=1` to test original look-store writes, same-connection world entry and fresh-process reload. It backs up and restores the isolated look file as well as the marked disposable database. Appearance remains in the original local Godot look store; this does not implement server-wide cross-client appearance persistence.
+
+
+## Original lobby ambient emitter
+
+`Godot/export_pregame_particles.gd` exports the original Hibernian `grnglow` ambient emitter and source sprite into a private output directory. It explicitly supports the emitter features present in this source scene, rather than silently accepting unsupported effects. Run `prepare_pregame_particles_unreal.py` in an isolated Unreal editor with `DAOC_BRIDGE_WORKSPACE` set; it creates separate `PregameParticles_v01` resources and saves no map. Place the resulting `lobby_particles.json` beside `lobby_motion.json` to enable it. Existing imports and source textures remain unchanged.
+
+The capture-only procedural sprites retain original emission rate, lifetime, radius, emitter box/basis, velocity and grow/fade values. Trajectories are reproducible native approximations using those source parameters, not a frame-identical replay of Godot's GPU random stream. The original radius is converted to a 12.5 cm full sprite width; 180 concurrent sprites cover the source rate/lifetime. They face the current orbit camera, have no collision and are owned/removed with the lobby backdrop. No world or spell emitter is changed.
+
+`ProtocolQA/verify_pregame_render.py --ambient` requires this resource, checks actual submitted vertices for motion, camera-facing behavior and source diameter, and reports emitter/particle counts. Automated menu acceptance passed 37 checks with all 325 original morph surfaces and 62,798 triangles retained. Visual approval remains pending.
