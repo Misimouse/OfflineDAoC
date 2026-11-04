@@ -3,7 +3,7 @@ import argparse
 from qa_runtime import *
 import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
-parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,47],required=True);class_id=parser.parse_args().class_id
+parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47],required=True);class_id=parser.parse_args().class_id
 D=ROOT/'Reports/starting_spells'/('class_'+str(class_id));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}

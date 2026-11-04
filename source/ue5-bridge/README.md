@@ -192,3 +192,12 @@ Stage `ProtocolQA/verify_character_return_real.py` alongside the prepared privat
 The capture-only procedural sprites retain original emission rate, lifetime, radius, emitter box/basis, velocity and grow/fade values. Trajectories are reproducible native approximations using those source parameters, not a frame-identical replay of Godot's GPU random stream. The original radius is converted to a 12.5 cm full sprite width; 180 concurrent sprites cover the source rate/lifetime. They face the current orbit camera, have no collision and are owned/removed with the lobby backdrop. No world or spell emitter is changed.
 
 `ProtocolQA/verify_pregame_render.py --ambient` requires this resource, checks actual submitted vertices for motion, camera-facing behavior and source diameter, and reports emitter/particle counts. Automated menu acceptance passed 37 checks with all 325 original morph surfaces and 62,798 triangles retained. Visual approval remains pending.
+
+
+## Reproducible character capability audit
+
+`ProtocolQA/audit_character_capabilities.py --repository <checkout> --install <playable> --workspace <private-bridge> --output <private-report.json>` reads only the selected server properties, original installed creation catalogue/figure metadata and server class source. It reuses the original class-catalogue parser, without invoking its writer. It records source availability separately from starting-class eligibility, configuration filters and native appearance availability. No played rows, accounts or credentials are read into its report.
+
+Current evidence: Bainshee exists in the server source/starting list but is disabled and absent from the installed creation catalogue; server gender constraints require female characters. Vampiir and Hibernian Mauler are disabled, omitted from the starting list and have empty eligible-race declarations in this fork. Shar male/female metadata exists in Godot but has not been imported into native appearance. Minotaur asset mapping remains unaudited. This is a work inventory, not expansion enablement or certification of spell completeness.
+
+The disposable starting-spell probe also accepts Stalker (54) and Forester (57). Both installed-gateway cases passed received-versus-visible comparisons and normal return/shutdown with database restoration: Stalker received no level-one spells; Forester received Grove's Protection. These compare the actual server packets with the bridge UI; they do not establish every spell the original game should grant at every level.
