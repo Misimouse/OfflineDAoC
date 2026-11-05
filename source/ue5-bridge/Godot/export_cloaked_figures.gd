@@ -4,18 +4,20 @@ extends "export_models.gd"
 func run()->void:
     var base:=""
     var races:Array=["cel_m"]
+    var factory_path:="res://game/fig3_figure.gd"
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--output="):base=arg.trim_prefix("--output=")
         if arg.begins_with("--races="):races=Array(arg.trim_prefix("--races=").split(","))
+        if arg.begins_with("--figure-factory="):factory_path=arg.trim_prefix("--figure-factory=")
     assert(not base.is_empty() and not base.trim_suffix("/").ends_with("SourceArmour"))
     DirAccess.make_dir_recursive_absolute(base)
-    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087"}
+    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087","mino":"1419"}
     var results:Array=[]
     for race in races:
         assert(ids.has(race))
         export_folder=base.path_join(race);DirAccess.make_dir_recursive_absolute(export_folder);material_number=0
         var holder:=Node3D.new();holder.name="Cloaked_"+race;root.add_child(holder)
-        var factory=load("res://game/fig3_figure.gd");var figure=factory.new();holder.add_child(figure);assert(figure.load_figure(race))
+        var factory=load(factory_path);var figure=factory.new();holder.add_child(figure);assert(figure.load_figure(race))
         figure.apply(factory.npc_look("bridge-model-"+String(ids[race]),figure.meta))
         var cloak_material:ShaderMaterial=figure._material(false,true)
         cloak_material.set_shader_parameter("albedo_tex",figure._tex("cat_cloak"))

@@ -20,16 +20,17 @@ def values(document, binary, index):
     return result
 
 
-def verify(lab, game, output):
+def verify(lab, game, output, expected_races=None):
     lab, game, output = lab.resolve(), game.resolve(), output.resolve()
     assert output.is_relative_to(lab) and not lab.is_relative_to(game)
     rows = json.loads((lab / 'SourceCosmetics/exported.json').read_text(encoding='utf-8-sig'))
     original = json.loads((lab / 'SourceFigures/exported.json').read_text(encoding='utf-8-sig'))
-    assert {row['race'] for row in rows} == {'sha_m', 'sha_f'} and len(rows) == 2
+    expected_races=set(expected_races or ['sha_m','sha_f'])
+    assert {row['race'] for row in rows} == expected_races and len(rows) == len(expected_races)
     report = {'passed': False, 'installed': False, 'races': {}, 'scope': 'Outfit topology, variants, weights, cloak UV channels and bind skeleton only; not native rendering or race activation.'}
     for row in rows:
         race = row['race']
-        assert str(row['base_id']) == {'sha_m': '1075', 'sha_f': '1087'}[race]
+        assert str(row['base_id']) == {'sha_m': '1075', 'sha_f': '1087','mino':'1419'}[race]
         file = Path(row['file']).resolve()
         assert file.is_relative_to(lab / 'SourceCosmetics')
         document, binary = read_glb(file)
@@ -91,5 +92,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['lab', 'game', 'output']:
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--races',default='sha_m,sha_f')
     args = parser.parse_args()
-    print(json.dumps(verify(args.lab, args.game, args.output)))
+    print(json.dumps(verify(args.lab, args.game, args.output,args.races.split(','))))

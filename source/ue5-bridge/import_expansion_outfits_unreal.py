@@ -1,4 +1,4 @@
-"""Import verified Shar outfits in the private expansion host; never activate a race."""
+"""Import verified expansion outfits in the private host; never activate a race."""
 import hashlib
 import json
 import os
@@ -8,6 +8,8 @@ import traceback
 import unreal
 
 lab = Path(os.environ['DAOC_EXPANSION_RACE_LAB']).resolve()
+package = Path(os.environ.get('DAOC_EXPANSION_RACE_PACKAGE',str(lab))).resolve()
+assert package.is_relative_to(lab)
 project = Path(unreal.Paths.project_dir()).resolve()
 assert project == lab / 'NativeHost'
 content = (project / 'Plugins/DAoCVisualBridge/Content').resolve()
@@ -19,16 +21,18 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 report = {'passed': False, 'installed': False, 'races': {}, 'errors': [], 'race_activation': False,
           'pending': ['Armour texture/material catalogue', 'Native outfit/helmet/cloak rendering and motion acceptance', 'Server race rules and transport']}
 try:
-    verified = read(lab / 'outfit_exports_verified.json')
+    verified = read(package / 'outfit_exports_verified.json')
     assert verified['passed'] and not verified['installed']
-    sources = read(lab / 'SourceCosmetics/exported.json')
-    assert {r['race'] for r in sources} == {'sha_m', 'sha_f'}
-    models = read(lab / 'models_expansion_candidate.json')
+    sources = read(package / 'SourceCosmetics/exported.json')
+    source_races = {r['race'] for r in sources}
+    assert source_races == set(verified['races'])
+    assert source_races in ({'sha_m', 'sha_f'}, {'mino'})
+    models = read(package / 'models_expansion_candidate.json')
     definitions = {}
     for row in sources:
         race, ident = row['race'], str(row['base_id'])
         file = Path(row['file']).resolve()
-        assert file.is_relative_to(lab / 'SourceCosmetics')
+        assert file.is_relative_to(package / 'SourceCosmetics')
         sha = hashlib.sha256(file.read_bytes()).hexdigest()
         assert sha == verified['races'][race]['sha256']
         destination = '/DAoCVisualBridge/ExpansionOutfits_v01/' + race + '_' + sha[:12]
@@ -70,7 +74,8 @@ try:
             name = str(material.material_slot_name)
             assert name in descriptors
             sections.append(dict(descriptors[name], index=index))
-        assert len(sections) == len(descriptors) == 31
+        assert len(sections) == len(descriptors) == verified['races'][race]['sections']
+        if package==lab:assert len(sections)==31
         definition = {'asset': mesh.get_path_name(), 'skeleton': skeleton.get_path_name(), 'base_id': ident,
                       'original_asset': original.get_path_name(), 'gender': 'f' if race.endswith('_f') else 'm',
                       'sections': sections, 'clothes': row['clothes'], 'variants': row['variants'], 'cloaks': row['cloaks'], 'source_sha256': sha}
@@ -78,10 +83,10 @@ try:
         models[ident]['asset'] = mesh.get_path_name()
         report['races'][race] = {'asset': mesh.get_path_name(), 'sections': len(sections), 'verified_common_bones': len(common),
                                  'source_only_bones': sorted(old_bones.keys() - common), 'outfit_only_bones': sorted(new_bones.keys() - common), 'source_sha256': sha}
-    (lab / 'outfit_definitions_candidate.json').write_text(json.dumps(definitions, indent=2), encoding='utf-8')
-    (lab / 'models_outfits_candidate.json').write_text(json.dumps(models, indent=2), encoding='utf-8')
+    (package / 'outfit_definitions_candidate.json').write_text(json.dumps(definitions, indent=2), encoding='utf-8')
+    (package / 'models_outfits_candidate.json').write_text(json.dumps(models, indent=2), encoding='utf-8')
     report['passed'] = True
 except Exception:
     report['errors'].append(traceback.format_exc())
-(lab / 'native_outfit_import.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+(package / 'native_outfit_import.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
 assert report['passed'], report['errors']
