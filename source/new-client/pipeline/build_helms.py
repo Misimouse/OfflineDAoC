@@ -29,7 +29,7 @@ import nif_static
 OUT = ROOT / 'godot/content/helms'
 FIG_TEX = ROOT / 'godot/content/characters/fig3_textures/original'
 DB = ROOT.parent / 'new class test - CLAUDE VERSION/runtime/data/opendaoc.sqlite3.db'
-PREFIXES = ['bri', 'ava', 'hig', 'sar', 'inc', 'nor', 'tro', 'dwa', 'kob', 'val', 'cel', 'fir', 'elf', 'lur', 'syl']
+PREFIXES = ['bri', 'ava', 'hig', 'sar', 'inc', 'nor', 'tro', 'dwa', 'kob', 'val', 'cel', 'fir', 'elf', 'lur', 'syl', 'sha']
 
 
 def wanted_models():

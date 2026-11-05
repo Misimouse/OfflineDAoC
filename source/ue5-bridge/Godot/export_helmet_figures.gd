@@ -5,15 +5,21 @@ func run()->void:
     var base:=""
     var races:Array=["cel_m"]
     var wanted:Array=[]
+    var factory_path:="res://game/fig3_figure.gd"
+    var catalogue_path:="res://content/helms/helms.json"
+    var original_textures:=""
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--output="):base=arg.trim_prefix("--output=")
         if arg.begins_with("--races="):races=Array(arg.trim_prefix("--races=").split(","))
         if arg.begins_with("--models="):wanted=Array(arg.trim_prefix("--models=").split(","))
+        if arg.begins_with("--figure-factory="):factory_path=arg.trim_prefix("--figure-factory=")
+        if arg.begins_with("--helmet-catalogue="):catalogue_path=arg.trim_prefix("--helmet-catalogue=")
+        if arg.begins_with("--original-helmet-textures="):original_textures=arg.trim_prefix("--original-helmet-textures=")
     assert(not base.is_empty())
     DirAccess.make_dir_recursive_absolute(base)
-    var factory=load("res://game/fig3_figure.gd")
-    var library:Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://content/helms/helms.json")).models
-    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708"}
+    var factory=load(factory_path)
+    var library:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(catalogue_path)).models
+    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087"}
     var results:Array=[]
     for race in races:
         assert(ids.has(race))
@@ -25,6 +31,11 @@ func run()->void:
             var holder:=Node3D.new();root.add_child(holder);holder.name="Helmet_"+String(race)+"_"+ident
             var fig=factory.new();holder.add_child(fig);assert(fig.load_figure(race))
             fig.apply(factory.npc_look("bridge-model-"+ids[race],fig.meta))
+            if not original_textures.is_empty() and entry.has("full") and entry.has("tex"):
+                var key:=String(entry.tex).to_lower()
+                var image:=Image.load_from_file(original_textures.path_join(key+".png"));assert(image!=null)
+                var texture:=ImageTexture.create_from_image(image)
+                fig._textures[key]=texture;factory._tex_cache[String(fig._texture_dir)+key]=texture
             fig.anim.stop();fig.anim.play("RESET");fig.anim.advance(0)
             fig.set_helm(int(ident))
             await process_frame

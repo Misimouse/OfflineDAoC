@@ -1,20 +1,37 @@
 """Import original helmet assemblies into a separate library; candidates only."""
-import copy,hashlib,json,re,traceback
+import copy,hashlib,json,os,re,traceback
 from pathlib import Path
 import unreal
 
-R=Path(__file__).resolve().parent;D=R/'Reports/helmets';D.mkdir(parents=True,exist_ok=True)
+R=Path(os.environ.get('DAOC_HELMET_WORKSPACE',str(Path(__file__).resolve().parent))).resolve();D=R/'Reports/helmets'
+if 'DAOC_HELMET_WORKSPACE' in os.environ:
+    assert Path(unreal.Paths.project_dir()).resolve()==R/'NativeHost'
+    assert (R/'NativeHost/Plugins/DAoCVisualBridge/Content').resolve().is_relative_to(R),'Never import helmets through shared content junctions'
+D.mkdir(parents=True,exist_ok=True)
 assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);tools=unreal.AssetToolsHelpers.get_asset_tools()
-library='/DAoCVisualBridge/Helmets_v01'
+library='/DAoCVisualBridge/ExpansionHelmets_v01' if 'DAOC_HELMET_WORKSPACE' in os.environ else '/DAoCVisualBridge/Helmets_v01'
 report={'passed':False,'models':{},'errors':[],'active_catalog_changed':False}
 def write():(D/'import.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 try:
-    active=R/'equipment_catalog_v01.json';before=hashlib.sha256(active.read_bytes()).hexdigest()
-    catalog=json.loads(active.read_text(encoding='utf-8-sig'));models=json.loads((R/'models.json').read_text(encoding='utf-8-sig'))
+    active=Path(os.environ.get('DAOC_HELMET_EQUIPMENT',str(R/'equipment_catalog_v01.json'))).resolve()
+    model_file=Path(os.environ.get('DAOC_HELMET_MODELS',str(R/'models.json'))).resolve()
+    assert active.is_relative_to(R) and model_file.is_relative_to(R)
+    before=hashlib.sha256(active.read_bytes()).hexdigest()
+    catalog=json.loads(active.read_text(encoding='utf-8-sig'));models=json.loads(model_file.read_text(encoding='utf-8-sig'))
+    source_folder=Path(os.environ.get('DAOC_HELMET_SOURCE',str(R/'SourceHelmets'))).resolve()
+    assert source_folder.is_relative_to(R)
+    verified=None
+    if 'DAOC_HELMET_WORKSPACE' in os.environ:
+        verified=json.loads((source_folder/'verified.json').read_text(encoding='utf-8-sig'))
+        assert verified['passed']
+        assert hashlib.sha256((source_folder/'exported.json').read_bytes()).hexdigest()==verified['manifest_sha256']
     helmets={};unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous([library],True)
     normalize=lambda name:re.sub(r'[-_ ]','',str(name)).lower()
-    for row in json.loads((R/'SourceHelmets/exported.json').read_text(encoding='utf-8-sig')):
+    for row in json.loads((source_folder/'exported.json').read_text(encoding='utf-8-sig')):
         key=row['race']+'/'+str(row['model']);sha=hashlib.sha256(Path(row['file']).read_bytes()).hexdigest()
+        if verified is not None:
+            assert Path(row['file']).resolve().is_relative_to(source_folder)
+            assert sha==verified['source_sha256'][key],(key,'Verified source changed')
         destination=library+'/'+row['race']+'_'+sha[:16]
         existing=assets.list_assets(destination,recursive=True,include_folder=False)
         if not existing:
@@ -30,6 +47,7 @@ try:
             assert normalize(name) in body_names,(key,'missing leader bone',str(name))
             a=source.get_bone_transform(body_names[normalize(name)],True);b=target.get_bone_transform(name,True)
             assert a.translation.distance(b.translation)<.1,(key,'reference translation mismatch',str(name))
+            assert a.scale3d.distance(b.scale3d)<.001,(key,'reference scale mismatch',str(name))
             dot=sum(getattr(a.rotation,axis)*getattr(b.rotation,axis) for axis in ('x','y','z','w'))
             assert abs(dot)>.99999,(key,'reference rotation mismatch',str(name))
         skeleton=mesh.get_editor_property('skeleton');skeleton.add_compatible_skeleton(body.get_editor_property('skeleton'));assets.save_loaded_asset(skeleton)
@@ -46,7 +64,9 @@ try:
             unreal.SystemLibrary.collect_garbage()
     catalog['armour']['helmets']=helmets
     assert hashlib.sha256(active.read_bytes()).hexdigest()==before
-    (R/'equipment_catalog_helmets_candidate.json').write_text(json.dumps(catalog,indent=2),encoding='utf-8')
+    destination=Path(os.environ.get('DAOC_HELMET_OUTPUT',str(R/'equipment_catalog_helmets_candidate.json'))).resolve()
+    assert destination.is_relative_to(R) and destination!=active
+    destination.write_text(json.dumps(catalog,indent=2),encoding='utf-8')
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
 write();assert report['passed'],report['errors']

@@ -9,7 +9,7 @@ func run()->void:
         if arg.begins_with("--races="):races=Array(arg.trim_prefix("--races=").split(","))
     assert(not base.is_empty() and not base.trim_suffix("/").ends_with("SourceArmour"))
     DirAccess.make_dir_recursive_absolute(base)
-    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708"}
+    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087"}
     var results:Array=[]
     for race in races:
         assert(ids.has(race))

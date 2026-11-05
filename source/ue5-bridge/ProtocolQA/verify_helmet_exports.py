@@ -1,5 +1,5 @@
 """Check converted helmet geometry/skin/UVs without Unreal or a live account."""
-import argparse,json,math,struct
+import argparse,hashlib,json,math,struct
 from pathlib import Path
 
 def inspect(row):
@@ -30,10 +30,16 @@ def inspect(row):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('directory',type=Path);parser.add_argument('--expected',type=int,default=540);args=parser.parse_args()
     rows=json.loads((args.directory/'exported.json').read_text(encoding='utf-8-sig'));assert len(rows)==args.expected
-    vertices=0;keys=set()
+    vertices=0;keys=set();sources={}
     for row in rows:
-        key=(row['race'],row['model']);assert key not in keys;keys.add(key);vertices+=inspect(row)
-    report={'passed':True,'assemblies':len(rows),'races':len({row['race'] for row in rows}),'vertices':vertices,'real_server':False}
-    (args.directory/'verified.json').write_text(json.dumps(report,indent=2),encoding='utf-8');print(json.dumps(report))
+        key=(row['race'],row['model']);assert key not in keys;keys.add(key)
+        path=Path(row['file']).resolve();assert path.is_relative_to(args.directory.resolve())
+        before=hashlib.sha256(path.read_bytes()).hexdigest();vertices+=inspect(row)
+        assert hashlib.sha256(path.read_bytes()).hexdigest()==before
+        sources[row['race']+'/'+str(row['model'])]=before
+    report={'passed':True,'assemblies':len(rows),'races':len({row['race'] for row in rows}),'vertices':vertices,'real_server':False,
+            'manifest_sha256':hashlib.sha256((args.directory/'exported.json').read_bytes()).hexdigest(),'source_sha256':sources}
+    (args.directory/'verified.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+    print(json.dumps({k:v for k,v in report.items() if k!='source_sha256'}))
 
 if __name__=='__main__':main()
