@@ -7,6 +7,7 @@ parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
+parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
@@ -17,10 +18,12 @@ assert candidate_mode==bool(args.server_source),'Candidate creation requires the
 assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
 assert not args.starter_equipment_repair or args.shar_candidate
+assert not args.shar_promotion or (args.shar_candidate and args.starter_equipment_repair)
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
 if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(exist_ok=True)
+if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -62,6 +65,10 @@ def wait(predicate,label,seconds=45):
     raise RuntimeError(label+'; lobby feedback='+str(snapshot.get('character_lobby',{}).get('feedback')))
 
 def lobby():return snapshot.get('character_lobby',{})
+
+def settle(seconds):
+    end=time.monotonic()+seconds
+    while time.monotonic()<end:pump()
 
 def send(action,**values):
     global serial
@@ -110,6 +117,16 @@ try:
                 keys=list(row)
                 db.execute('INSERT INTO ItemTemplate ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
             report['starter_repair_reference']=repair['reference'];report['starter_repair_inserted_templates']=[row['Id_nb'] for row in repair['insert_rows']]
+        if args.shar_promotion:
+            template=db.execute("SELECT * FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy') LIMIT 1").fetchone();assert template
+            trainer_classes={42:'Mentalist',43:'Blademaster',44:'Hero',45:'Champion',50:'Ranger'}
+            for advanced,title in trainer_classes.items():
+                base={42:51,43:52,44:52,45:52,50:54}[advanced]
+                starts=db.execute('SELECT * FROM StartupLocation WHERE RaceID=9 AND ClassID=? AND Region=200 AND RealmID=3 AND ClientRegionID=0 AND MinVersion=0',(base,)).fetchall();assert len(starts)==1
+                start=starts[0];trainer=dict(template)
+                trainer.update(Mob_ID='codex-qa-shar-trainer-'+str(advanced),Name='Codex Shar '+title+' Trainer',ClassType='DOL.GS.Trainer.'+title+'Trainer',Guild=title+' Trainer',Model=342,Level=50,Realm=3,Flags=0,AggroLevel=0,Speed=0,Region=200,X=start['XPos']+80,Y=start['YPos']+40,Z=start['ZPos'])
+                assert not db.execute('SELECT 1 FROM Mob WHERE Mob_ID=?',(trainer['Mob_ID'],)).fetchone()
+                db.execute('INSERT INTO Mob ('+','.join('"'+key+'"' for key in trainer)+') VALUES ('+','.join('?' for key in trainer)+')',list(trainer.values()))
         if candidate_mode:
             prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone();assert prop
             pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
@@ -281,6 +298,10 @@ try:
                     db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=?,Direction=?,BindXpos=?,BindYpos=?,BindZpos=?,BindRegion=?,BindHeading=? WHERE Name=? AND AccountName=?',
                         (start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],name,account_name))
                     report['qa_connacht_relocation']={'source_startup_id':start['StartupLoc_ID'],'original_dol_spawn_verified_first':True,'reason':'Native map currently supports zone207 only; fixture relocation is not a replacement startup rule.'}
+                    if args.shar_promotion:
+                        # Level advancement is an explicit disposable fixture, not a GM command
+                        # or a direct class assignment. The original trainer performs promotion.
+                        db.execute('UPDATE DOLCharacters SET Level=5,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells=?,DisabledAbilities=? WHERE Name=? AND AccountName=?',('', '', name,account_name))
             if args.shar_candidate:
                 # Account.Characters caches the just-created object. Reconnect
                 # normally so the fixture relocation is read from the database;
@@ -300,15 +321,31 @@ try:
             send('character_enter',lobby_revision=lobby()['revision'],name=name)
             wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'New character enters '+figure,45)
             wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Chosen figure and look reach world '+figure)
+            if args.shar_promotion:
+                title=trainer_classes[advanced];trainer_name='Codex Shar '+title+' Trainer'
+                player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+                send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0)
+                wait(lambda:any(e.get('name')==trainer_name for e in snapshot['entities']),'Original Shar trainer visible '+title,20)
+                npc=next(e for e in snapshot['entities'] if e.get('name')==trainer_name)
+                send('interact',entity_id=npc['id'])
+                wait(lambda:any(word.casefold()==title.casefold() for word in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[])),'Original promotion keyword '+title,20)
+                talk=snapshot['interaction']['talk'];word=next(word for word in talk['keywords'] if word.casefold()==title.casefold())
+                send('keyword',reply_id=talk['id'],word=word)
+                def promoted():
+                    with checked() as db:
+                        row=db.execute('SELECT Class,Level FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
+                        return row and row['Class']==advanced and row['Level']==5
+                wait(promoted,'Original trainer saves Shar advanced class '+title,25)
+                settle(3)
             audit=snapshot.get('qa_skill_audit',{});assert audit
             expected={str(x['name']) for x in audit['skills'] if int(x['page']) in [3,4]}
             for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
             actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
             assert actual==expected,(figure,expected,actual)
-            if args.classic_class_batch is not None or args.shar_candidate:
+            if (args.classic_class_batch is not None or args.shar_candidate) and not args.shar_promotion:
                 base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
                 assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
-            if args.starter_equipment_repair:verify_starter(base,figure)
+            if args.starter_equipment_repair and not args.shar_promotion:verify_starter(base,figure)
             send('chat',text='/quit')
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
@@ -318,10 +355,16 @@ try:
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
                 retained={str(e['name']) for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
                 assert retained==expected,('Existing character spell loss',advanced,expected,retained)
-                if args.starter_equipment_repair:verify_starter(base,figure)
+                if args.starter_equipment_repair and not args.shar_promotion:verify_starter(base,figure)
+                if args.shar_promotion:
+                    with checked() as db:
+                        saved=db.execute('SELECT Class,Level FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
+                        assert saved['Class']==advanced and saved['Level']==5
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
             report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate});save_report()
+            if args.shar_promotion:
+                report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
     expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else 10)
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count

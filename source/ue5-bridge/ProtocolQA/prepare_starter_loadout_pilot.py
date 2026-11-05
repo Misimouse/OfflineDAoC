@@ -21,6 +21,7 @@ def prepare(workspace, lab):
     pilot = read(lab / 'equipment_helmets_full_candidate.json')
     dependencies = read(lab / 'starter_weapon_dependencies.json')
     assert dependencies['passed'] and not dependencies['installed']
+    assert dependencies['models'] == {key: full['models'][key] for key in ['19', '59', '445', '454']}
     armour = full['armour']
     models = {str(item['model']) for row in loadouts.values() for item in row['items'] if item['slot'] in [22, 23, 25, 27, 28]}
     assert models == {str(model) for model in [378, 379, 380, 381, 382, 383, 384, 385, 386, 387, 393, 394, 395, 396, 397]}
