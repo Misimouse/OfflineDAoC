@@ -1,5 +1,6 @@
 """Run only the independent Minotaur owner-review copy; never use the normal DB."""
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,6 +23,14 @@ def main(root, install, engine, smoke=False, smoke_world=False):
     root,install,engine=(p.resolve() for p in (root,install,engine))
     assert root.name=='MinotaurOwnerReview' and root.parent.name=='ExpansionRaceLab'
     assert json.loads((root/'prepared.json').read_text())['prepared']
+    joint=root/'joint_integration.json'
+    if joint.exists():
+        receipt=json.loads(joint.read_text())
+        assert receipt['installed'] and receipt['review_only'] and receipt['all_existing_rows_preserved']
+        assert not receipt['normal_installation_modified']
+        for path,expected in receipt['installed_files'].items():
+            path=Path(path).resolve()
+            assert path.is_relative_to(root) and hashlib.sha256(path.read_bytes()).hexdigest()==expected, 'Private joint server files changed'
     config=json.loads((root/'private_review_config.json').read_text())
     assert config['server_port']==10361 and config['bridge_port']==19747
     tasks=json.loads((root/'SourceModels/tasks.json').read_text())

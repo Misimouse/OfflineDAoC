@@ -189,3 +189,16 @@ package with the existing private review by semantic identities, preserves
 matching rows, reports conflicts and reallocates only numeric association/startup
 surrogate IDs. It produces a separate data delta; it never replaces the review
 DB, writes progress records, enables races/classes or changes launcher binaries.
+
+The review delta installer defaults to an in-memory dry run against the existing
+review. It hashes every existing row in all 126 tables, excluding only the
+explicit insertion identities, and verifies that they survive unchanged. With
+`--apply`, it additionally reserves the private TCP/UDP ports, backs up the
+review through SQLite (including committed WAL data), backs up server libraries,
+installs the accepted joint server and inserts only the prepared missing data.
+Failures restore old libraries and, if necessary, the saved logical database.
+Successful installation never replaces the review database or activates another
+race/class. The optional launcher receipt checks the installed library hashes.
+The normal launcher, normal DB, WORK and existing review characters are separate.
+After installation, the actual native menu smoke passed without world entry;
+character, inventory, quest and task table hashes matched the pre-migration backup.
