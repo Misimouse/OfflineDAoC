@@ -7,15 +7,18 @@ func rgb(values:Array)->Array:
     return out
 func run()->void:
     var input:="";var output:=""
+    var menu_path:="res://game/pregame.gd";var factory_path:="res://game/fig3_figure.gd"
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--catalog="):input=arg.trim_prefix("--catalog=")
         if arg.begins_with("--output="):output=arg.trim_prefix("--output=")
+        if arg.begins_with("--palette-menu="):menu_path=arg.trim_prefix("--palette-menu=")
+        if arg.begins_with("--figure-factory="):factory_path=arg.trim_prefix("--figure-factory=")
     assert(not input.is_empty() and not output.is_empty() and input!=output)
     var catalog:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(input))
-    var menu=load("res://game/pregame.gd").new()
+    var menu=load(menu_path).new()
     for key in catalog.figures:
         var row:Dictionary=catalog.figures[key]
-        var figure=load("res://game/fig3_figure.gd").new();root.add_child(figure)
+        var figure=load(factory_path).new();root.add_child(figure)
         assert(figure.load_figure(String(row.race)))
         menu._figure=figure
         menu.draft={"look":figure.look}

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace):
+def verify(workspace, include_promotion=False):
     workspace=workspace.resolve()
     lab=workspace/'ExpansionRaceLab'
     creation=workspace/'Reports/minotaur_creation/real_protocol.json'
@@ -37,6 +37,19 @@ def verify(workspace):
             'native_playable_creation_accepted':False,'mauler_enabled':False,
             'evidence':{str(p.relative_to(workspace)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [creation,build,source]},
             'pending':['Native creation/customization UI','Native modular equipment and helmets','Original trainer promotion']}
+    if include_promotion:
+        path=workspace/'Reports/minotaur_promotion/real_protocol.json'
+        promotion=json.loads(path.read_text())
+        assert promotion['passed'] and promotion['real_protocol'] and promotion['disposable_only']
+        assert all(promotion[k] for k in ['database_restored','appearance_profile_restored','bridge_config_restored','candidate_files_restored','normal_shutdown'])
+        assert promotion['candidate_build_receipt_sha256']==hashlib.sha256(build.read_bytes()).hexdigest()
+        assert len(promotion['cases'])==4 and {c['selected_class'] for c in promotion['cases']}=={43,44,45,46}
+        for case in promotion['cases']:
+            assert case['level']==5 and case['figure']=='mino' and case['world_model']==1419
+            assert all(case[k] for k in ['original_trainer_promotion','advanced_class_retained','saved_return','existing_character_reentry','spell_list_complete','appearance_retained'])
+        result['promotion_cases']=4
+        result['evidence'][str(path.relative_to(workspace))]=hashlib.sha256(path.read_bytes()).hexdigest()
+        result['pending'].remove('Original trainer promotion')
     (lab/'MinotaurServerCandidate/verified_creation.json').write_text(json.dumps(result,indent=2))
     return result
 
@@ -44,5 +57,6 @@ def verify(workspace):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',type=Path,required=True)
+    parser.add_argument('--include-promotion',action='store_true')
     args=parser.parse_args()
-    print(json.dumps(verify(args.workspace)))
+    print(json.dumps(verify(args.workspace,args.include_promotion)))

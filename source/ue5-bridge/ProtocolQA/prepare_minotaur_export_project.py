@@ -12,6 +12,21 @@ import shutil
 from pathlib import Path
 
 
+def prepare_palette_adapter(source, project, hashes):
+    """Reuse the original menu's sampling without its gameplay dependencies."""
+    path = source / 'game/pregame.gd'
+    original = path.read_text(encoding='utf-8-sig')
+    start = 'func _eye_colours()'
+    end = '# ---------------------------------------------------------------- frame + widgets'
+    assert original.count(start) == original.count(end) == 1
+    methods = original[original.index(start):original.index(end)]
+    assert methods.count('func ') == 4 and 'func _swatch(' in methods
+    methods = methods.replace('Fig3Figure.skin_tint', 'load("res://game/fig3_figure.gd").skin_tint')
+    header = 'extends Node\nvar _figure\nvar draft:Dictionary={}\nvar _swatch_cache:Dictionary={}\n'
+    (project / 'tools/palette_original.gd').write_text(header + methods, encoding='utf-8')
+    hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def prepare(candidate, workspace):
     candidate, workspace = candidate.resolve(), workspace.resolve()
     assert candidate != workspace and candidate.is_relative_to(workspace)
@@ -41,10 +56,12 @@ def prepare(candidate, workspace):
     factory.write_text(text, encoding='utf-8')
     hashes[str(weapons)] = hashlib.sha256(weapons.read_bytes()).hexdigest()
     shutil.copytree(candidate/'content', project/'content', dirs_exist_ok=True)
-    for name in ['export_models.gd', 'export_all_animations.gd', 'export_appearance_parts.gd']:
+    for name in ['export_models.gd', 'export_all_animations.gd', 'export_appearance_parts.gd',
+                 'export_cloaked_figures.gd', 'export_appearance_swatches.gd']:
         path = bridge/name
         hashes[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
         shutil.copy2(path, project/'tools'/name)
+    prepare_palette_adapter(source, project, hashes)
     meta = json.loads((candidate/'content/characters/races/mino/figure.json').read_text())
     tasks = [{'id': '1419', 'name': 'Hibernian modular Minotaur candidate',
               'info': {'race': 'mino', **{key: meta[key] for key in ['clip_seconds', 'cast_clips'] if key in meta}}, 'equipment': []}]

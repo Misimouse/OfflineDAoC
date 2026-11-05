@@ -11,12 +11,18 @@ parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--minotaur-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
+parser.add_argument('--minotaur-promotion',action='store_true')
+parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
+promoting=args.shar_promotion or args.minotaur_promotion
+assert not args.shar_promotion or args.shar_candidate
+assert not args.minotaur_promotion or args.minotaur_candidate
+assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
 candidate_mode=args.bainshee_candidate or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate
@@ -25,8 +31,8 @@ assert candidate_mode==bool(args.server_source),'Candidate creation requires the
 assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
 assert not args.starter_equipment_repair or args.shar_candidate
-assert not args.shar_promotion or (args.shar_candidate and args.starter_equipment_repair)
-assert not args.shar_gm_transfer or (args.shar_candidate and args.starter_equipment_repair and not args.shar_promotion)
+assert not promoting or args.minotaur_candidate or (args.shar_candidate and args.starter_equipment_repair)
+assert not args.shar_gm_transfer or (args.shar_candidate and args.starter_equipment_repair and not promoting)
 assert not args.candidate_build or candidate_mode
 assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires a sealed build with the canonical bridge overlay'
 assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation requires its sealed private source variant'
@@ -35,11 +41,12 @@ assert not args.minotaur_candidate or args.candidate_build, 'Minotaur creation r
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
 if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(exist_ok=True)
-if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
+if promoting:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
 if args.shar_gm_transfer:D=ROOT/'Reports/shar_gm_transfer';D.mkdir(exist_ok=True)
 if args.vampiir_candidate:D=ROOT/'Reports/vampiir_creation';D.mkdir(exist_ok=True)
 if args.vampiir_shar:D=ROOT/'Reports/vampiir_shar_creation';D.mkdir(exist_ok=True)
 if args.minotaur_candidate:D=ROOT/'Reports/minotaur_creation';D.mkdir(exist_ok=True)
+if args.minotaur_promotion:D=ROOT/'Reports/minotaur_promotion';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -149,14 +156,15 @@ try:
                 keys=list(row)
                 db.execute('INSERT INTO ItemTemplate ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
             report['starter_repair_reference']=repair['reference'];report['starter_repair_inserted_templates']=[row['Id_nb'] for row in repair['insert_rows']]
-        if args.shar_promotion:
+        if promoting:
             template=db.execute("SELECT * FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy') LIMIT 1").fetchone();assert template
-            trainer_classes={42:'Mentalist',43:'Blademaster',44:'Hero',45:'Champion',50:'Ranger'}
+            trainer_classes=({43:'Blademaster',44:'Hero',45:'Champion',46:'Warden'} if args.minotaur_promotion else {42:'Mentalist',43:'Blademaster',44:'Hero',45:'Champion',50:'Ranger'})
+            trainer_prefix='Codex Minotaur ' if args.minotaur_promotion else 'Codex Shar '
             for advanced,title in trainer_classes.items():
-                base={42:51,43:52,44:52,45:52,50:54}[advanced]
+                base={42:51,43:52,44:52,45:52,46:53,50:54}[advanced]
                 starts=db.execute('SELECT * FROM StartupLocation WHERE RaceID=9 AND ClassID=? AND Region=200 AND RealmID=3 AND ClientRegionID=0 AND MinVersion=0',(base,)).fetchall();assert len(starts)==1
                 start=starts[0];trainer=dict(template)
-                trainer.update(Mob_ID='codex-qa-shar-trainer-'+str(advanced),Name='Codex Shar '+title+' Trainer',ClassType='DOL.GS.Trainer.'+title+'Trainer',Guild=title+' Trainer',Model=342,Level=50,Realm=3,Flags=0,AggroLevel=0,Speed=0,Region=200,X=start['XPos']+80,Y=start['YPos']+40,Z=start['ZPos'])
+                trainer.update(Mob_ID='codex-qa-shar-trainer-'+str(advanced),Name=trainer_prefix+title+' Trainer',ClassType='DOL.GS.Trainer.'+title+'Trainer',Guild=title+' Trainer',Model=342,Level=50,Realm=3,Flags=0,AggroLevel=0,Speed=0,Region=200,X=start['XPos']+80,Y=start['YPos']+40,Z=start['ZPos'])
                 assert not db.execute('SELECT 1 FROM Mob WHERE Mob_ID=?',(trainer['Mob_ID'],)).fetchone()
                 db.execute('INSERT INTO Mob ('+','.join('"'+key+'"' for key in trainer)+') VALUES ('+','.join('?' for key in trainer)+')',list(trainer.values()))
         if candidate_mode:
@@ -398,7 +406,7 @@ try:
                     else:
                         assert all(row[key]==original[source] for key,source in [('Xpos','XPos'),('Ypos','YPos'),('Zpos','ZPos')])
                         report['original_spawn_and_bind_preserved_before_entry']=True
-                    if args.shar_promotion:
+                    if promoting:
                         # Level advancement is an explicit disposable fixture, not a GM command
                         # or a direct class assignment. The original trainer performs promotion.
                         db.execute('UPDATE DOLCharacters SET Level=5,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells=?,DisabledAbilities=? WHERE Name=? AND AccountName=?',('', '', name,account_name))
@@ -428,11 +436,11 @@ try:
                 assert snapshot['zone_id']==207 and len(player['position_m'])==3
                 report['server_authorized_gm_transfer']=True
                 verify_original_bind(name,base)
-            if args.shar_promotion:
-                title=trainer_classes[advanced];trainer_name='Codex Shar '+title+' Trainer'
+            if promoting:
+                title=trainer_classes[advanced];trainer_name=trainer_prefix+title+' Trainer'
                 player=next(e for e in snapshot['entities'] if e['id']=='player:local')
                 send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0)
-                wait(lambda:any(e.get('name')==trainer_name for e in snapshot['entities']),'Original Shar trainer visible '+title,20)
+                wait(lambda:any(e.get('name')==trainer_name for e in snapshot['entities']),'Original expansion trainer visible '+title,20)
                 npc=next(e for e in snapshot['entities'] if e.get('name')==trainer_name)
                 send('interact',entity_id=npc['id'])
                 wait(lambda:any(word.casefold()==title.casefold() for word in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[])),'Original promotion keyword '+title,20)
@@ -442,17 +450,17 @@ try:
                     with checked() as db:
                         row=db.execute('SELECT Class,Level FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
                         return row and row['Class']==advanced and row['Level']==5
-                wait(promoted,'Original trainer saves Shar advanced class '+title,25)
+                wait(promoted,'Original trainer saves expansion advanced class '+title,25)
                 settle(3)
             audit=snapshot.get('qa_skill_audit',{});assert audit
             expected={str(x['name']) for x in audit['skills'] if int(x['page']) in [3,4]}
             for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
             actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
             assert actual==expected,(figure,expected,actual)
-            if (args.classic_class_batch is not None or args.shar_candidate or args.minotaur_candidate) and not args.shar_promotion:
+            if (args.classic_class_batch is not None or args.shar_candidate or args.minotaur_candidate) and not promoting:
                 base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
                 assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
-            if args.starter_equipment_repair and not args.shar_promotion:verify_starter(base,figure)
+            if args.starter_equipment_repair and not promoting:verify_starter(base,figure)
             send('chat',text='/quit')
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
@@ -463,8 +471,8 @@ try:
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
                 retained={str(e['name']) for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
                 assert retained==expected,('Existing character spell loss',advanced,expected,retained)
-                if args.starter_equipment_repair and not args.shar_promotion:verify_starter(base,figure)
-                if args.shar_promotion:
+                if args.starter_equipment_repair and not promoting:verify_starter(base,figure)
+                if promoting:
                     with checked() as db:
                         saved=db.execute('SELECT Class,Level FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
                         assert saved['Class']==advanced and saved['Level']==5
@@ -474,7 +482,7 @@ try:
             if args.minotaur_candidate:
                 report['cases'][-1].update(original_saved_appearance_bytes=verify_minotaur_saved_appearance(name,look),look=look)
                 save_report()
-            if args.shar_promotion:
+            if promoting:
                 report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()
             if args.shar_gm_transfer:
                 verify_original_bind(name,base)
@@ -497,6 +505,12 @@ finally:
         server.stdin.write('exit\n');server.stdin.flush()
         try:server.wait(timeout=45)
         except subprocess.TimeoutExpired:server.kill();server.wait();report['errors'].append('Private server required forced stop')
+    if args.review_output and report['passed'] and client.returncode==0 and server.returncode==0:
+        try:
+            from export_minotaur_review_bundle import export as export_review
+            report['review_bundle']=export_review(RUN,DB,SERVER,ROOT,args.review_output,account,password,rules.OUT)
+        except Exception:
+            report['errors'].append('Review bundle preparation failed: '+traceback.format_exc())
     for log in logs:log.close()
     if store_before is None:store.unlink(missing_ok=True)
     else:store.write_bytes(store_before)
