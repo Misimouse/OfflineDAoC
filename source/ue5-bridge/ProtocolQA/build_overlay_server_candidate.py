@@ -19,7 +19,6 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
     edits=[]
     sources={name:overlay/name for name in files}
     variants_report={}
-    assert not (vampiir_creation and minotaur_reference), 'Combined activation needs separate acceptance'
     if minotaur_reference:
         from prepare_minotaur_rule_variants import variants
         manifest=variants(minotaur_reference,server_source,output/'SourceVariants')
@@ -29,14 +28,16 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
             variants_report[name]={**row,'scope':'Private Hibernian Minotaur base stats and four source-authorized advanced class eligibility rules.'}
     if vampiir_creation:
         name='GameServer/GlobalConstants.cs';original=server_source/name
-        raw=original.read_bytes();anchor=b'// eCharacterClass.Vampiir,'
+        original_raw=original.read_bytes()
+        raw=sources[name].read_bytes() if name in sources else original_raw
+        anchor=b'// eCharacterClass.Vampiir,'
         assert raw.count(anchor)==1, 'Review changed original Vampiir starting-class rule'
-        candidate=output/'SourceVariants/GlobalConstants.cs';candidate.parent.mkdir(exist_ok=True)
+        candidate=output/('SourceVariants/CombinedGlobalConstants.cs' if minotaur_reference else 'SourceVariants/GlobalConstants.cs');candidate.parent.mkdir(exist_ok=True)
         candidate.write_bytes(raw.replace(anchor,b'eCharacterClass.Vampiir,',1))
         sources[name]=candidate
-        variants_report[name]={'original_sha256':hashlib.sha256(raw).hexdigest(),
+        variants_report[name]={'original_sha256':hashlib.sha256(original_raw).hexdigest(),
             'candidate_sha256':hashlib.sha256(candidate.read_bytes()).hexdigest(),
-            'path':str(candidate),'scope':'Enable the existing Vampiir starting-class rule only in this private build.'}
+            'path':str(candidate),'scope':'Enable the existing Vampiir starting-class rule only in this private build.'+(' Preserve the separately verified Hibernian Minotaur stats variant.' if minotaur_reference else '')}
     for name,source in sources.items():
         assert source.is_file() and (source.resolve().is_relative_to(overlay) or source.resolve().is_relative_to(output))
         relative=Path(name).relative_to('GameServer').as_posix()
@@ -63,7 +64,7 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
     report={'passed':True,'installed':False,'source_root':str(server_source),'overlay_root':str(overlay),
         'overlay_base_commit':definition['base_commit'],'overlay_source_sha256':{name:hashlib.sha256((overlay/name).read_bytes()).hexdigest() for name in files},
         'compiled_bridge_overlay_verified':True,'libraries':str(libraries),'binaries_sha256':binaries,
-        'candidate_features':['vampiir_creation'] if vampiir_creation else (['minotaur_creation'] if minotaur_reference else []),'source_variants':variants_report}
+        'candidate_features':(['vampiir_creation'] if vampiir_creation else [])+(['minotaur_creation'] if minotaur_reference else []),'source_variants':variants_report}
     (output/'build_receipt.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
 

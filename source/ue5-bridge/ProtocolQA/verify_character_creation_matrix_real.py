@@ -2,6 +2,7 @@
 from qa_runtime import *
 import hashlib,shutil,socket,sqlite3,subprocess,time,traceback
 import argparse,ast,importlib.util,re,sys
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
@@ -13,6 +14,7 @@ parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--minotaur-promotion',action='store_true')
 parser.add_argument('--minotaur-original-start',action='store_true')
+parser.add_argument('--combined-expansions',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
 parser.add_argument('--server-source',type=Path)
@@ -24,6 +26,7 @@ promoting=args.shar_promotion or args.minotaur_promotion
 assert not args.shar_promotion or args.shar_candidate
 assert not args.minotaur_promotion or args.minotaur_candidate
 assert not args.minotaur_original_start or (args.minotaur_candidate and not promoting)
+assert not args.combined_expansions or args.candidate_build
 assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
@@ -50,6 +53,7 @@ if args.vampiir_shar:D=ROOT/'Reports/vampiir_shar_creation';D.mkdir(exist_ok=Tru
 if args.minotaur_candidate:D=ROOT/'Reports/minotaur_creation';D.mkdir(exist_ok=True)
 if args.minotaur_promotion:D=ROOT/'Reports/minotaur_promotion';D.mkdir(exist_ok=True)
 if args.minotaur_original_start:D=ROOT/'Reports/minotaur_original_start';D.mkdir(exist_ok=True)
+if args.combined_expansions:D=ROOT/'Reports/combined_expansions'/D.name;D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -202,7 +206,7 @@ try:
                     db.execute('INSERT INTO StartupLocation ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
                 report['shar_startup_reference']=proposal['reference']
                 report['shar_startup_insert_rows']=proposal['insert_rows']
-    if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate:
+    if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate or args.combined_expansions:
         config_data=json.loads(config_before);config_data['custom_class']=False
         config.write_text(json.dumps(config_data),encoding='utf-8')
     if candidate_mode:
@@ -222,7 +226,10 @@ try:
             for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
                 if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
         rules.GS=server_source/'GameServer'
-        if args.vampiir_candidate or args.minotaur_candidate:
+        if args.combined_expansions:
+            assert set(receipt.get('candidate_features',[]))=={'vampiir_creation','minotaur_creation'}
+            report['combined_expansion_build']=True
+        if args.vampiir_candidate or args.minotaur_candidate or args.combined_expansions:
             assert ('minotaur_creation' if args.minotaur_candidate else 'vampiir_creation') in receipt.get('candidate_features',[])
             variant=receipt['source_variants']['GameServer/GlobalConstants.cs']
             variant_path=Path(variant['path']).resolve();assert variant_path.is_relative_to(candidate_root)
@@ -232,7 +239,7 @@ try:
             shutil.copytree(rules.GS/'playerclasses',rule_source/'playerclasses',dirs_exist_ok=True)
             (rule_source/'Enums').mkdir(exist_ok=True);shutil.copy2(rules.GS/'Enums/eCharacterClass.cs',rule_source/'Enums/eCharacterClass.cs')
             shutil.copy2(variant_path,rule_source/'GlobalConstants.cs')
-            if args.minotaur_candidate:
+            if args.minotaur_candidate or args.combined_expansions:
                 for relative,entry in receipt['source_variants'].items():
                     source=Path(entry['path']).resolve();assert source.is_relative_to(candidate_root)
                     assert hashlib.sha256(source.read_bytes()).hexdigest()==entry['candidate_sha256']
@@ -246,12 +253,12 @@ try:
         elif args.minotaur_candidate:
             assert {int(k) for k,v in candidate['classes'].items() if 21 in v['races']}=={43,44,45,46}
             assert candidate['race_genders']['21']=='male'
-        elif args.shar_candidate:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
+        elif args.shar_candidate:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}==({42,43,44,45,50,58} if args.combined_expansions else {42,43,44,45,50})
         else:assert candidate['classes']['58']['races']==([9,12,18] if args.vampiir_shar else [9,12]) and candidate['classes']['58']['stats']==['CON','STR','DEX']
         original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
         text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
         restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
-        if uses_shar or args.minotaur_candidate:
+        if uses_shar or args.minotaur_candidate or args.combined_expansions:
             from minotaur_transport_metadata import apply as apply_expansion_metadata
             canonical_net=(Path(__file__).resolve().parents[2]/'new-client/godot/game/net/server.gd').read_text(encoding='utf-8-sig')
             text=apply_expansion_metadata(original_net.read_text(encoding='utf-8-sig'),canonical_net)
@@ -329,7 +336,7 @@ try:
         report['female_only_choices']=True
     if args.shar_candidate:
         choices=[c for c in lobby()['choices'] if c['race']=='Shar']
-        assert len(choices)==10 and {c['class_id'] for c in choices}=={42,43,44,45,50}
+        assert len(choices)==(12 if args.combined_expansions else 10) and {c['class_id'] for c in choices}==({42,43,44,45,50,58} if args.combined_expansions else {42,43,44,45,50})
         assert all(sum(c['class_id']==cid and c['female']==female for c in choices)==1 for cid in [42,43,44,45,50] for female in [False,True])
         report['shar_choices_complete']=True
     if args.vampiir_shar:
@@ -338,6 +345,15 @@ try:
         shar_choices=[c for c in lobby()['choices'] if c['race']=='Shar']
         assert len(shar_choices)==12 and {c['class_id'] for c in shar_choices}=={42,43,44,45,50,58}
         report['combined_shar_vampiir_choices_complete']=True
+    if args.combined_expansions:
+        groups={'bainshee':[c for c in lobby()['choices'] if c['class_id']==39],
+                'vampiir':[c for c in lobby()['choices'] if c['class_id']==58],
+                'shar':[c for c in lobby()['choices'] if c['race']=='Shar'],
+                'minotaur':[c for c in lobby()['choices'] if c['race']=='Minotaur']}
+        counts={key:len(value) for key,value in groups.items()}
+        assert counts=={'bainshee':3,'vampiir':6,'shar':12,'minotaur':4},counts
+        assert all(c['female'] for c in groups['bainshee']) and all(not c['female'] for c in groups['minotaur'])
+        report['combined_choices_verified']={key:len(value) for key,value in groups.items()}
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
     cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else ([('Celt','cel',58,54),('Lurikeen','lur',58,54)] if args.vampiir_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)])
     if args.minotaur_candidate:
@@ -475,7 +491,7 @@ try:
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
             if args.shar_gm_transfer:verify_original_bind(name,base)
-            if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate:
+            if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate or args.combined_expansions:
                 send('character_enter',lobby_revision=lobby()['revision'],name=name)
                 wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
@@ -488,7 +504,7 @@ try:
                         assert saved['Class']==advanced and saved['Level']==5
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
-            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate});save_report()
+            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate or args.combined_expansions});save_report()
             if args.minotaur_candidate:
                 report['cases'][-1].update(original_saved_appearance_bytes=verify_minotaur_saved_appearance(name,look),look=look)
                 if args.minotaur_original_start:

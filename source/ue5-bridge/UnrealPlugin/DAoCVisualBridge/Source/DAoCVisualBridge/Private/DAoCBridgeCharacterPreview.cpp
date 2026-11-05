@@ -139,9 +139,13 @@ void UDAoCBridgeSubsystem::UpdateLobbyCamera(){
     const FVector Origin(0,0,-200000);FVector Center=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,110);
     // Shar's original figure is taller at this fixed creation camera. Keep its
     // feet above the lower UI frame without changing the established races.
-    if(CharacterLobbyScreen==TEXT("create")&&(CharacterLobbyPreviewModel==1075||CharacterLobbyPreviewModel==1087||CharacterLobbyPreviewModel==1419))Center.Z-=30;
+    if(CharacterLobbyScreen==TEXT("create")&&(CharacterLobbyPreviewModel==1075||CharacterLobbyPreviewModel==1087))Center.Z-=30;
+    if(CharacterLobbyScreen==TEXT("create")&&CharacterLobbyPreviewModel==1419)Center.Z-=10;
     const FVector OriginalEye=Origin+FVector(-.727,-4.28,-3.81)*100;
     FVector Offset=OriginalEye-Center;
+    // The Minotaur's horns extend above the shared creation framing. Keep
+    // the complete original mesh inside the UI opening without shrinking it.
+    if(CharacterLobbyScreen==TEXT("create")&&CharacterLobbyPreviewModel==1419)Offset*=1.15f;
     if(CharacterLobbyScreen==TEXT("customize")){
         const float Scale=CharacterLobbyPreviewActor->GetActorScale3D().X;Center=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,160*Scale);
         if(auto* Figure=Cast<ASkeletalMeshActor>(CharacterLobbyPreviewActor.Get())){auto* Body=Figure->GetSkeletalMeshComponent();for(const FName Bone:{FName(TEXT("Bip01_Head")),FName(TEXT("Bip01 Head"))})if(Body->GetBoneIndex(Bone)>=0){Center=Body->GetBoneLocation(Bone)+FVector(0,0,4*Scale);break;}}

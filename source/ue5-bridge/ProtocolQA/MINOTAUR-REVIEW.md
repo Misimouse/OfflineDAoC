@@ -71,6 +71,30 @@ helmet equipment need not display a mesh on this race. Numeric matches in
 unrelated texture, effect or armour columns are different ID namespaces and
 must not become helmet mappings. Do not force another race's helmet onto it.
 
+## Joint expansion regression candidate
+
+`build_overlay_server_candidate.py` accepts `--vampiir-creation` together with
+`--minotaur-reference` for a separate joint candidate. It composes both changes
+in a new GlobalConstants file while preserving the isolated Minotaur variant
+and its manifest. Normal source files and installed server libraries are not
+replaced. Bainshee and Shar rules remain those of the existing source.
+
+Run the real creation matrices with `--combined-expansions` and the joint
+`--candidate-build`; this writes evidence under `Reports/combined_expansions`
+without replacing the earlier independent acceptance reports. The combined
+menu must retain 3 female Bainshee, 6 Vampiir, 12 Shar and 4 male Minotaur choices.
+The Minotaur run additionally uses `--minotaur-original-start`.
+
+`verify_combined_expansions.py --workspace PRIVATE_WORKSPACE` requires all
+twenty-three real creation/appearance/skill/saved-return cases (including ten
+Shar starter-equipment runs), unchanged normal
+sources, matching build hashes, restored disposable databases and normal
+shutdown. It also checks native creation/customization and equipment evidence.
+The broader native facial-weight suite still reports the source-empty
+Minotaur horn target limitation; its failure is retained explicitly in the
+joint seal. This is not deployment approval or joint live-world acceptance.
+Mauler remains outside this package.
+
 The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,
 textures or morph geometry. Shar and Vampiir native regression cases run against
