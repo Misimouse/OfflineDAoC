@@ -1,19 +1,23 @@
 """Create and reenter ten original race/sex figures in a marked disposable database only."""
 from qa_runtime import *
 import hashlib,shutil,socket,sqlite3,subprocess,time,traceback
-import argparse,importlib.util
+import argparse,importlib.util,sys
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
+parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
-assert args.bainshee_candidate==bool(args.server_source),'Bainshee creation requires the explicit candidate server source'
-assert args.classic_class_batch is None or not args.bainshee_candidate
+candidate_mode=args.bainshee_candidate or args.shar_candidate
+assert not (args.bainshee_candidate and args.shar_candidate)
+assert candidate_mode==bool(args.server_source),'Candidate creation requires the explicit server source'
+assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
+if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -51,6 +55,7 @@ def wait(predicate,label,seconds=45):
     while time.monotonic()<end:
         pump()
         if predicate():return
+    (D/'timeout_snapshot.json').write_text(json.dumps(snapshot,indent=2),encoding='utf-8')
     raise RuntimeError(label+'; lobby feedback='+str(snapshot.get('character_lobby',{}).get('feedback')))
 
 def lobby():return snapshot.get('character_lobby',{})
@@ -75,29 +80,66 @@ try:
         # disposable and the entire database is restored in finally.
         db.execute('DELETE FROM DOLCharacters WHERE AccountName=?',(account_name,))
         db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(account_name,))
-        if args.bainshee_candidate:
+        if candidate_mode:
             prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone();assert prop
             pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
             spec=importlib.util.spec_from_file_location('candidate_class_rules',pipeline)
             rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
-            disabled=rules.id_set(prop['Value']);report['qa_bainshee_previously_disabled']=39 in disabled;disabled.discard(39)
-            db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
-    if args.classic_class_batch is not None:
+            if args.bainshee_candidate:
+                disabled=rules.id_set(prop['Value']);report['qa_bainshee_previously_disabled']=39 in disabled;disabled.discard(39)
+                db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
+            else:
+                prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert prop
+                disabled=rules.id_set(prop['Value']);report['qa_shar_previously_disabled']=18 in disabled;disabled.discard(18)
+                db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(disabled)),))
+                sys.path.insert(0,str(Path(__file__).resolve().parent))
+                from prepare_shar_startup_proposal import prepare as prepare_shar_starts
+                proposal=prepare_shar_starts(ROOT/'References/DOLPublic_b5b29c2ada76/StartupLocation.source.json',DB)
+                assert proposal['passed'] and not proposal['database_modified']
+                columns={row[1] for row in db.execute('PRAGMA table_info(StartupLocation)')}
+                for row in proposal['insert_rows']:
+                    assert set(row)<=columns and row['RaceID']==18 and row['Region']==200 and row['ClassID'] in [51,52,54]
+                    keys=list(row)
+                    db.execute('INSERT INTO StartupLocation ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
+                report['shar_startup_reference']=proposal['reference']
+                report['shar_startup_insert_rows']=proposal['insert_rows']
+    if args.classic_class_batch is not None or args.shar_candidate:
         config_data=json.loads(config_before);config_data['custom_class']=False
         config.write_text(json.dumps(config_data),encoding='utf-8')
-    if args.bainshee_candidate:
+    if candidate_mode:
         server_source=args.server_source.resolve();assert (server_source/'GameServer/playerclasses/hibernia/ClassBainshee.cs').exists()
         build=server_source/'Release';assert (build/'GameServer.dll').exists()
         for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
             for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
                 if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
-        rules.GS=server_source/'GameServer';rules.DB=DB;rules.OUT=RUN/'bainshee_server_classes.json';rules.main()
-        candidate=json.loads(rules.OUT.read_text());assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
+        rules.GS=server_source/'GameServer';rules.DB=DB;rules.OUT=RUN/('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json');rules.main()
+        candidate=json.loads(rules.OUT.read_text())
+        if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
+        else:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
         original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
         text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
         restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
+        if args.shar_candidate:
+            text=original_net.read_text(encoding='utf-8-sig')
+            for old,new in [
+                ('15: ["Sylvan", "syl", 700, 708]}','15: ["Sylvan", "syl", 700, 708], 18: ["Shar", "sha", 1075, 1087]}'),
+                ('"Valkyn": 14, "Sylvan": 15}','"Valkyn": 14, "Sylvan": 15, "Shar": 18}'),
+                ('15: [70, 55, 60, 45, 70, 60, 60, 60]}','15: [70, 55, 60, 45, 70, 60, 60, 60], 18: [60, 50, 80, 50, 60, 60, 60, 60]}')]:
+                assert text.count(old)==1,('Private Shar transport anchor',old)
+                text=text.replace(old,new,1)
+            original_net.write_text(text,encoding='utf-8')
+            report['private_transport_sha256']=hashlib.sha256(original_net.read_bytes()).hexdigest()
         report['candidate_only']=True;report['server_build_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
     for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
+    if args.shar_candidate:
+        p=RUN/'Godot/character_lobby.gd';text=p.read_text(encoding='utf-8-sig')
+        old='["Celt","Firbolg","Elf","Lurikeen","Sylvan"]';assert text.count(old)==1
+        text=text.replace(old,'["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]',1)
+        old='"Sylvan":"syl"}';assert text.count(old)==1
+        p.write_text(text.replace(old,'"Sylvan":"syl","Shar":"sha"}',1),encoding='utf-8')
+        p=RUN/'Godot/character_appearance.gd';text=p.read_text(encoding='utf-8-sig');old='"syl_m","syl_f"]';assert text.count(old)==1
+        p.write_text(text.replace(old,'"syl_m","syl_f","sha_m","sha_f"]',1),encoding='utf-8')
+        report['private_gateway_only']=True
     p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
     # Observe the original parsed skill lists without changing their contents.
     p=RUN/'Godot/live_gateway.gd';text=p.read_text();anchor='var states:Array=[]';assert anchor in text
@@ -105,6 +147,18 @@ try:
     p=RUN/'Godot/visual_bridge.gd';text=p.read_text();assert '["character",' in text;p.write_text(text.replace('["character",','["qa_skill_audit","character",'),encoding='utf-8')
     (RUN/'SourceModels').mkdir(exist_ok=True);shutil.copy2(ROOT/'SourceModels/tasks.json',RUN/'SourceModels/tasks.json')
     tasks=json.loads((ROOT/'SourceModels/tasks.json').read_text())
+    if args.shar_candidate:
+        expansion_tasks=json.loads((ROOT/'ExpansionRaceLab/OriginalTasks/tasks.json').read_text(encoding='utf-8-sig'))
+        shar_tasks=[t for t in expansion_tasks if str(t['id']) in ['1075','1087']];assert len(shar_tasks)==2
+        assert {t['info']['race'] for t in shar_tasks}=={'sha_m','sha_f'}
+        tasks+=shar_tasks
+        target=RUN/'SourceModels/tasks.json';saved=backup/'original_tasks.json';shutil.copy2(target,saved);restored_files.append((target,saved))
+        target.write_text(json.dumps(tasks),encoding='utf-8')
+        target=RUN/'models.json';saved=backup/'original_models.json';shutil.copy2(target,saved);restored_files.append((target,saved))
+        native=json.loads(target.read_text(encoding='utf-8-sig'))
+        extra=json.loads((ROOT/'ExpansionRaceLab/models_outfits_candidate.json').read_text(encoding='utf-8-sig'))
+        native.update({ident:extra[ident] for ident in ['1075','1087']})
+        target.write_text(json.dumps(native),encoding='utf-8')
     models={t.get('info',{}).get('race'):int(t['id']) for t in tasks if t.get('info',{}).get('race')}
     (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
     log=(D/'server.log').open('w');logs.append(log)
@@ -119,7 +173,8 @@ try:
     account='codexqa'+hashlib.sha256(RUN.name.encode()).hexdigest()[:10];password=hashlib.sha256(('disposable-local-protocol-qa:'+RUN.name).encode()).hexdigest()[:24]
     ce=dict(env,DOTNET_ROOT=str(sdk),DOTNET_ROOT_X64=str(sdk),PATH=str(sdk)+os.pathsep+env['PATH'])
     log=(D/'client.log').open('w');logs.append(log)
-    client=subprocess.Popen([str(game/'tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character-menu'],cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+    client_command=[str(game/'tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character-menu']
+    client=subprocess.Popen(client_command,cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
     end=time.monotonic()+50
     while time.monotonic()<end:
         try:sock=socket.create_connection(('127.0.0.1',19737),timeout=.3);sock.settimeout(.1);break
@@ -132,8 +187,14 @@ try:
         assert len(choices)==3 and all(c['female'] for c in choices)
         assert {c['race'] for c in choices}=={'Celt','Elf','Lurikeen'}
         report['female_only_choices']=True
+    if args.shar_candidate:
+        choices=[c for c in lobby()['choices'] if c['race']=='Shar']
+        assert len(choices)==10 and {c['class_id'] for c in choices}=={42,43,44,45,50}
+        assert all(sum(c['class_id']==cid and c['female']==female for c in choices)==1 for cid in [42,43,44,45,50] for female in [False,True])
+        report['shar_choices_complete']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
     cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)]
+    if args.shar_candidate:cases=[('Shar','sha',42,51),('Shar','sha',43,52),('Shar','sha',44,52),('Shar','sha',45,52),('Shar','sha',50,54)]
     if args.classic_class_batch is not None:
         repo=Path(__file__).resolve().parents[3]
         pipeline=repo/'source/new-client/pipeline/build_server_classes.py'
@@ -176,8 +237,36 @@ try:
             selected=next(c for c in lobby()['characters'] if c['name']==name)
             assert selected['prefix']==figure and selected['look']==look,(figure,selected)
             with checked() as db:
-                row=db.execute('SELECT Class,Level,Gender FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
+                row=db.execute('SELECT Class,Level,Gender,Xpos,Ypos,Zpos,Region,Direction FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
                 assert row and row['Class']==base and row['Level']==1 and bool(row['Gender'])==female
+                if args.shar_candidate:
+                    original=next(value for value in proposal['original_rows'] if value['ClassID']==base)
+                    assert all(row[key]==original[source] for key,source in [('Xpos','XPos'),('Ypos','YPos'),('Zpos','ZPos'),('Region','Region'),('Direction','Heading')]),('Original DOL Shar start not applied',dict(row),original)
+                    # The native bridge currently publishes only Connacht zone207.
+                    # First verify the real DOL start above, then move this disposable
+                    # fixture to an existing authoritative Connacht start for entry QA.
+                    starts=db.execute('SELECT * FROM StartupLocation WHERE RaceID=9 AND ClassID=? AND Region=200 AND RealmID=3 AND ClientRegionID=0 AND MinVersion=0',(base,)).fetchall()
+                    assert len(starts)==1
+                    start=starts[0]
+                    db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=?,Direction=?,BindXpos=?,BindYpos=?,BindZpos=?,BindRegion=?,BindHeading=? WHERE Name=? AND AccountName=?',
+                        (start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],name,account_name))
+                    report['qa_connacht_relocation']={'source_startup_id':start['StartupLoc_ID'],'original_dol_spawn_verified_first':True,'reason':'Native map currently supports zone207 only; fixture relocation is not a replacement startup rule.'}
+            if args.shar_candidate:
+                # Account.Characters caches the just-created object. Reconnect
+                # normally so the fixture relocation is read from the database;
+                # never forge a world-entry packet or alter the server cache.
+                send('logout');client.wait(timeout=90);assert client.returncode==0
+                sock.close();sock=None;session='';buffer=b'';snapshot={}
+                client=subprocess.Popen(client_command,cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+                end=time.monotonic()+50
+                while time.monotonic()<end:
+                    try:sock=socket.create_connection(('127.0.0.1',19737),timeout=.3);sock.settimeout(.1);break
+                    except OSError:time.sleep(.2)
+                else:raise RuntimeError('Private bridge reconnect unavailable')
+                wait(lambda:lobby().get('ready') and any(c['name']==name for c in lobby().get('characters',[])),'Fresh login after QA fixture relocation')
+                selected=next(c for c in lobby()['characters'] if c['name']==name)
+                assert selected['prefix']==figure and selected['look']==look
+                report['qa_relocation_loaded_by_fresh_login']=True
             send('character_enter',lobby_revision=lobby()['revision'],name=name)
             wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'New character enters '+figure,45)
             wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Chosen figure and look reach world '+figure)
@@ -186,13 +275,13 @@ try:
             for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
             actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
             assert actual==expected,(figure,expected,actual)
-            if args.classic_class_batch is not None:
+            if args.classic_class_batch is not None or args.shar_candidate:
                 base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
                 assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
             send('chat',text='/quit')
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
-            if args.classic_class_batch is not None:
+            if args.classic_class_batch is not None or args.shar_candidate:
                 send('character_enter',lobby_revision=lobby()['revision'],name=name)
                 wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
@@ -200,7 +289,7 @@ try:
                 assert retained==expected,('Existing character spell loss',advanced,expected,retained)
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
-            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None});save_report()
+            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate});save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
     expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else 10)
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
