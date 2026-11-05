@@ -123,3 +123,17 @@ The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,
 textures or morph geometry. Shar and Vampiir native regression cases run against
 the same private plugin library.
+
+Joint advanced protocol acceptance uses `verify_starting_spells_real.py
+--combined-expansions --candidate-build PRIVATE_CANDIDATE --server-source SOURCE`.
+Run the original Bainshee trainer promotion, Shar-female Vampiir promotion,
+and Bainshee form cycles for races 9, 11 and 12, with their explicit DOL data
+proposals. Evidence is separate under `Reports/combined_expansions/starting_spells`.
+The Bainshee promotion also checks the advanced class and full spell list after
+saved reentry. Form cycles require the original 30-second server timer, unchanged
+inventory and restoration of the selected appearance; these are protocol tests,
+not a live Unreal transformation rendering claim. `verify_combined_expansions.py
+--include-advanced-protocol` requires all five reports from the same joint build,
+including restored QA data and clean shutdown. Missing Bainshee promotion gift
+`bainshee_item` is recorded; the pinned public reference contains no matching
+item. Do not manufacture a replacement as part of this acceptance.

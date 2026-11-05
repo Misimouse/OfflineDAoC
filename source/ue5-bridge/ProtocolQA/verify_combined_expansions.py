@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace, include_native_world=False):
+def verify(workspace, include_native_world=False, include_advanced_protocol=False):
     workspace=workspace.resolve()
     candidate=workspace/'ExpansionRaceLab/CombinedExpansionServerCandidate'
     receipt_path=candidate/'build_receipt.json'
@@ -108,6 +108,28 @@ def verify(workspace, include_native_world=False):
         result['joint_native_world_witnesses']=worlds
         result['scope']='Joint creation and saved return plus three native GM world-entry witnesses; advanced abilities and transformations are separate acceptance.'
         result['pending'][0]='Advanced Bainshee/Vampiir native abilities and transformation review'
+    if include_advanced_protocol:
+        groups={
+            'class_39_level_5_promotion':['original_trainer_promotes_magician','promotion_replaces_base_spell_list','bainshee_class_and_spells_survive_saved_reentry'],
+            'class_58_level_5_promotion_race_18_female':['original_trainer_promotes_stalker','original_career_abilities_received','vampiir_class_and_spells_survive_saved_reentry'],
+            'class_39_level_5_form_cycle':['positive_buff_retains_original_form','original_offensive_cast_transforms','original_timer_restores_appearance_and_inventory'],
+            'class_39_level_5_form_cycle_race_11':['positive_buff_retains_original_form','original_offensive_cast_transforms','original_timer_restores_appearance_and_inventory'],
+            'class_39_level_5_form_cycle_race_12':['positive_buff_retains_original_form','original_offensive_cast_transforms','original_timer_restores_appearance_and_inventory']}
+        for group,checks in groups.items():
+            path=workspace/'Reports/combined_expansions/starting_spells'/group/'real_protocol.json'
+            row=json.loads(path.read_text())
+            assert all(row.get(k) for k in ['passed','real_protocol','disposable_only','combined_expansion_build','complete','database_restored','candidate_server_restored','normal_shutdown'])
+            assert row['candidate_build_receipt_sha256']==receipt_hash
+            assert row['candidate_server_sha256']==receipt['binaries_sha256']['GameServer.dll']
+            assert set(row['visible_spells'])==set(row['expected_spells'])
+            assert all(row['checks'][key] for key in checks)
+            if 'form_cycle' in group:
+                assert row['qa_native_catalogue_restored'] and 25<=row['form_timer_seconds']<=40
+                assert row['form_model']=={9:1883,11:1885,12:1884}[row['race']]
+            evidence[group]=digest(path)
+        result['joint_advanced_protocol_cases']=len(groups)
+        result['advanced_native_rendering_accepted']=False
+        result['pending'][0]='Advanced native transformation rendering and complete expansion data deployment'
     (candidate/'verified_joint_creation.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     return result
 
@@ -116,4 +138,5 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--include-native-world',action='store_true')
-    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world)))
+    parser.add_argument('--include-advanced-protocol',action='store_true')
+    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol)))
