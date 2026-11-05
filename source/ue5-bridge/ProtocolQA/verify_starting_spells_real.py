@@ -13,7 +13,7 @@ parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
-parser.add_argument('--vampiir-race',type=int,choices=[9,12],default=9)
+parser.add_argument('--vampiir-race',type=int,choices=[9,12,18],default=9)
 parser.add_argument('--vampiir-female',action='store_true')
 parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--server-source',type=Path)
@@ -142,7 +142,7 @@ try:
   if promotion_mode:
    values.update(Class=54 if args.vampiir_promotion else 51,Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    if args.vampiir_promotion:
-    model={9:302,12:318}[args.vampiir_race]+(8 if args.vampiir_female else 0)
+    model={9:(302,310),12:(318,326),18:(1075,1087)}[args.vampiir_race][int(args.vampiir_female)]
     values.update(Race=args.vampiir_race,Gender=int(args.vampiir_female),CreationModel=model,CurrentModel=model)
    disabled=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone()[0]
    # Only the disposable candidate enables this promotion; preserve every other class restriction.
@@ -193,6 +193,23 @@ try:
     if saved:shutil.copy2(dst,saved)
     candidate_files.append((dst,saved));shutil.copy2(build/name,dst)
   result['candidate_server_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
+ if args.vampiir_promotion and args.vampiir_race==18:
+  import sys
+  sys.path.insert(0,str(Path(__file__).resolve().parent))
+  from shar_transport_metadata import apply as apply_shar_transport
+  target=RUN/'LobbyProject/game/net/server.gd';saved=backup/'original_shar_transport.gd';shutil.copy2(target,saved);candidate_files.append((target,saved))
+  canonical=(Path(__file__).resolve().parents[2]/'new-client/godot/game/net/server.gd').read_text(encoding='utf-8-sig')
+  target.write_text(apply_shar_transport(target.read_text(encoding='utf-8-sig'),canonical),encoding='utf-8')
+  for target in [RUN/'SourceModels/tasks.json',RUN/'models.json']:
+   saved=backup/('original_shar_'+target.name);shutil.copy2(target,saved);candidate_files.append((target,saved))
+   current=json.loads(target.read_text(encoding='utf-8-sig'))
+   if target.name=='tasks.json':
+    extra=json.loads((ROOT/'ExpansionRaceLab/OriginalTasks/tasks.json').read_text(encoding='utf-8-sig'))
+    current=[row for row in current if str(row['id']) not in ['1075','1087']]+[row for row in extra if str(row['id']) in ['1075','1087']]
+   else:
+    extra=json.loads((ROOT/'ExpansionRaceLab/models_outfits_candidate.json').read_text(encoding='utf-8-sig'));current.update({key:extra[key] for key in ['1075','1087']})
+   target.write_text(json.dumps(current),encoding='utf-8')
+  result['canonical_shar_transport_staged_privately']=True
  if args.bainshee_form_cycle:
   assert native_catalog.resolve().is_relative_to(RUN.resolve())
   models=json.loads((ROOT/'models.json').read_text())

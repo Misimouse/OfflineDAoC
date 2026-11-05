@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace):
+def verify(workspace, include_shar=False):
     workspace = workspace.resolve()
     evidence = []
     def read(relative):
@@ -51,6 +51,41 @@ def verify(workspace):
     report = {'passed':True,'installed':False,'creation_cases':4,'promotion_cases':promotions,
               'level_six_stat_boundary_passed':True,'bainshee_promotion_regression_passed':True,
               'evidence':evidence,'scope':'Private Celt/Lurikeen Vampiir acceptance only. Combined Shar eligibility, native creation presentation and normal activation are separate gates.'}
+    if include_shar:
+        combined=read('Reports/vampiir_shar_creation/real_protocol.json')
+        assert combined['database_restored'] and combined['normal_shutdown'] and combined['appearance_profile_restored']
+        assert combined['combined_shar_vampiir_choices_complete'] and combined['canonical_transport_metadata_verified']
+        assert len(combined['cases'])==6 and {case['figure'] for case in combined['cases']}=={'cel_m','cel_f','lur_m','lur_f','sha_m','sha_f'}
+        assert all(case['selected_class']==58 and case['base_class']==54 and case['existing_character_reentry'] for case in combined['cases'])
+        for sex,model in [('male',1075),('female',1087)]:
+            relative='Reports/starting_spells/class_58_level_5_promotion_race_18_'+sex
+            promoted=read(relative+'/real_protocol.json')
+            assert promoted['database_restored'] and promoted['normal_shutdown'] and promoted['candidate_server_restored']
+            assert promoted['canonical_shar_transport_staged_privately'] and promoted['checks']['vampiir_class_and_spells_survive_saved_reentry']
+            snapshot=workspace/relative/'druid_level1_snapshot.json'
+            state=json.loads(snapshot.read_text(encoding='utf-8-sig'))
+            player=next(entity for entity in state['entities'] if entity['id']=='player:local')
+            assert player['model_id']==model
+            evidence.append({'path':str(snapshot),'sha256':hashlib.sha256(snapshot.read_bytes()).hexdigest()})
+        folder=workspace/'ExpansionRaceLab/VampiirSharLobbyAcceptance'
+        summary=json.loads((folder/'summary.json').read_text(encoding='utf-8-sig'))
+        assert set(summary)=={'sha_m_create','sha_f_create'}
+        for result in summary.values():
+            assert result['passed'] and result['shar_vampiir_creation_tested'] and result['checks']>=67 and not result['failures'] and not result['live_account']
+        for case in summary:
+            capture=folder/case/'screen.png'
+            assert capture.read_bytes().startswith(b'\x89PNG\r\n\x1a\n') and capture.stat().st_size>10000
+            evidence.append({'path':str(capture),'sha256':hashlib.sha256(capture.read_bytes()).hexdigest()})
+        inputs=json.loads((folder/'inputs.json').read_text(encoding='utf-8-sig'))
+        assert inputs and all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==expected for path,expected in inputs.items())
+        from verify_shar_lobby import verify as verify_shar_regression
+        baseline=verify_shar_regression(workspace/'ExpansionRaceLab')
+        assert baseline['passed'] and baseline['native_inputs']==inputs
+        for path in [folder/'summary.json',folder/'inputs.json']:
+            evidence.append({'path':str(path),'sha256':hashlib.sha256(path.read_bytes()).hexdigest()})
+        report.update(combined_creation_cases=6,shar_promotion_cases=2,combined_native_checks=sum(row['checks'] for row in summary.values()),
+                      original_shar_ui_regression_passed=True,
+                      scope='Private Celt/Lurikeen/Shar Vampiir creation and promotion plus native Shar class controls. Normal activation, original expanded class descriptions and owner visual approval remain separate.')
     output = workspace/'ExpansionRaceLab/VampiirAcceptance/verified.json'
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_text(json.dumps(report,indent=2),encoding='utf-8')
@@ -60,5 +95,6 @@ def verify(workspace):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',type=Path,required=True)
-    report=verify(parser.parse_args().workspace)
-    print(json.dumps({key:report[key] for key in ['passed','installed','creation_cases','level_six_stat_boundary_passed','bainshee_promotion_regression_passed']}))
+    parser.add_argument('--include-shar',action='store_true')
+    args=parser.parse_args();report=verify(args.workspace,args.include_shar)
+    print(json.dumps({key:report[key] for key in ['passed','installed','creation_cases','combined_creation_cases','combined_native_checks','level_six_stat_boundary_passed','bainshee_promotion_regression_passed'] if key in report}))

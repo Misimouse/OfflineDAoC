@@ -1,4 +1,4 @@
-"""Create and reenter ten original race/sex figures in a marked disposable database only."""
+"""Create and reenter scoped original race/sex/class matrices in a marked disposable database only."""
 from qa_runtime import *
 import hashlib,shutil,socket,sqlite3,subprocess,time,traceback
 import argparse,ast,importlib.util,re,sys
@@ -6,6 +6,7 @@ import argparse,ast,importlib.util,re,sys
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--vampiir-candidate',action='store_true')
+parser.add_argument('--vampiir-shar',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
@@ -15,6 +16,8 @@ parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
+uses_shar=args.shar_candidate or args.vampiir_shar
+assert not args.vampiir_shar or args.vampiir_candidate
 candidate_mode=args.bainshee_candidate or args.shar_candidate or args.vampiir_candidate
 assert sum([args.bainshee_candidate,args.shar_candidate,args.vampiir_candidate])<=1
 assert candidate_mode==bool(args.server_source),'Candidate creation requires the explicit server source'
@@ -33,6 +36,7 @@ if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(
 if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
 if args.shar_gm_transfer:D=ROOT/'Reports/shar_gm_transfer';D.mkdir(exist_ok=True)
 if args.vampiir_candidate:D=ROOT/'Reports/vampiir_creation';D.mkdir(exist_ok=True)
+if args.vampiir_shar:D=ROOT/'Reports/vampiir_shar_creation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -151,14 +155,14 @@ try:
                 target_class=58 if args.vampiir_candidate else 39
                 disabled=rules.id_set(prop['Value']);report['qa_class_previously_disabled']=target_class in disabled;disabled.discard(target_class)
                 db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
-                if args.vampiir_candidate:
+                if args.vampiir_candidate and not args.vampiir_shar:
                     # First isolate the class path on the two established figures;
                     # combined Shar/Vampiir admission is a separate acceptance case.
                     races=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert races
                     excluded=rules.id_set(races['Value']);excluded.add(18)
                     db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(excluded)),))
                     report['private_race_scope']='Celt/Lurikeen only; Shar temporarily excluded in this disposable probe'
-            else:
+            if uses_shar:
                 prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert prop
                 disabled=rules.id_set(prop['Value']);report['qa_shar_previously_disabled']=18 in disabled;disabled.discard(18)
                 db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(disabled)),))
@@ -208,11 +212,11 @@ try:
         candidate=json.loads(rules.OUT.read_text())
         if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
         elif args.shar_candidate:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
-        else:assert candidate['classes']['58']['races']==[9,12] and candidate['classes']['58']['stats']==['CON','STR','DEX']
+        else:assert candidate['classes']['58']['races']==([9,12,18] if args.vampiir_shar else [9,12]) and candidate['classes']['58']['stats']==['CON','STR','DEX']
         original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
         text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
         restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
-        if args.shar_candidate:
+        if uses_shar:
             text=original_net.read_text(encoding='utf-8-sig')
             for old,new in [
                 ('15: ["Sylvan", "syl", 700, 708]}','15: ["Sylvan", "syl", 700, 708], 18: ["Shar", "sha", 1075, 1087]}'),
@@ -232,7 +236,7 @@ try:
             report['private_transport_sha256']=hashlib.sha256(original_net.read_bytes()).hexdigest()
         report['candidate_only']=True;report['server_build_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
     for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
-    if args.shar_candidate:
+    if uses_shar:
         p=RUN/'Godot/character_lobby.gd';text=p.read_text(encoding='utf-8-sig')
         assert '["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]' in text
         assert '"Sylvan":"syl","Shar":"sha"}' in text
@@ -246,7 +250,7 @@ try:
     p=RUN/'Godot/visual_bridge.gd';text=p.read_text();assert '["character",' in text;p.write_text(text.replace('["character",','["qa_skill_audit","character",'),encoding='utf-8')
     (RUN/'SourceModels').mkdir(exist_ok=True);shutil.copy2(ROOT/'SourceModels/tasks.json',RUN/'SourceModels/tasks.json')
     tasks=json.loads((ROOT/'SourceModels/tasks.json').read_text())
-    if args.shar_candidate:
+    if uses_shar:
         expansion_tasks=json.loads((ROOT/'ExpansionRaceLab/OriginalTasks/tasks.json').read_text(encoding='utf-8-sig'))
         shar_tasks=[t for t in expansion_tasks if str(t['id']) in ['1075','1087']];assert len(shar_tasks)==2
         assert {t['info']['race'] for t in shar_tasks}=={'sha_m','sha_f'}
@@ -291,8 +295,15 @@ try:
         assert len(choices)==10 and {c['class_id'] for c in choices}=={42,43,44,45,50}
         assert all(sum(c['class_id']==cid and c['female']==female for c in choices)==1 for cid in [42,43,44,45,50] for female in [False,True])
         report['shar_choices_complete']=True
+    if args.vampiir_shar:
+        choices=[c for c in lobby()['choices'] if c['class_id']==58]
+        assert len(choices)==6 and {c['race'] for c in choices}=={'Celt','Lurikeen','Shar'}
+        shar_choices=[c for c in lobby()['choices'] if c['race']=='Shar']
+        assert len(shar_choices)==12 and {c['class_id'] for c in shar_choices}=={42,43,44,45,50,58}
+        report['combined_shar_vampiir_choices_complete']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
     cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else ([('Celt','cel',58,54),('Lurikeen','lur',58,54)] if args.vampiir_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)])
+    if args.vampiir_shar:cases.append(('Shar','sha',58,54))
     if args.shar_candidate:cases=[('Shar','sha',42,51),('Shar','sha',43,52),('Shar','sha',44,52),('Shar','sha',45,52),('Shar','sha',50,54)]
     if args.classic_class_batch is not None:
         repo=Path(__file__).resolve().parents[3]
@@ -338,7 +349,7 @@ try:
             with checked() as db:
                 row=db.execute('SELECT Class,Level,Gender,Xpos,Ypos,Zpos,Region,Direction FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
                 assert row and row['Class']==base and row['Level']==1 and bool(row['Gender'])==female
-                if args.shar_candidate:
+                if args.shar_candidate or (args.vampiir_shar and race=='Shar'):
                     original=next(value for value in proposal['original_rows'] if value['ClassID']==base)
                     assert all(row[key]==original[source] for key,source in [('Xpos','XPos'),('Ypos','YPos'),('Zpos','ZPos'),('Region','Region'),('Direction','Heading')]),('Original DOL Shar start not applied',dict(row),original)
                     # The native bridge currently publishes only Connacht zone207.
@@ -358,7 +369,7 @@ try:
                         # Level advancement is an explicit disposable fixture, not a GM command
                         # or a direct class assignment. The original trainer performs promotion.
                         db.execute('UPDATE DOLCharacters SET Level=5,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells=?,DisabledAbilities=? WHERE Name=? AND AccountName=?',('', '', name,account_name))
-            if args.shar_candidate:
+            if args.shar_candidate or (args.vampiir_shar and race=='Shar'):
                 # Account.Characters caches the just-created object. Reconnect
                 # normally so the fixture relocation is read from the database;
                 # never forge a world-entry packet or alter the server cache.
@@ -433,7 +444,7 @@ try:
                 verify_original_bind(name,base)
                 report['cases'][-1].update(original_bind_preserved=True,server_authorized_gm_transfer=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else (4 if args.vampiir_candidate else 10))
+    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else ((6 if args.vampiir_shar else 4) if args.vampiir_candidate else 10))
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
