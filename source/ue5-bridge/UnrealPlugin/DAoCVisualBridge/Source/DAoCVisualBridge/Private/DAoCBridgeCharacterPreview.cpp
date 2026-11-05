@@ -60,7 +60,7 @@ void UDAoCBridgeSubsystem::RefreshCharacterLobbyPreview(TSharedPtr<FJsonObject> 
         auto* Sky=NewObject<UStaticMeshComponent>(Backdrop);Backdrop->AddInstanceComponent(Sky);Sky->SetupAttachment(Backdrop->GetRootComponent());Sky->SetStaticMesh(LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Sphere.Sphere")));Sky->SetMaterial(0,SkyMaterial);Sky->SetRelativeScale3D(FVector(1000));Sky->SetCollisionEnabled(ECollisionEnabled::NoCollision);Sky->SetCastShadow(false);Sky->SetVisibleInSceneCaptureOnly(true);Sky->ComponentTags.Add(TEXT("DAoCLobbySky"));Sky->RegisterComponent();
     }
     FString MotionFile=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/Pregame/lobby_motion.json");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyMotion="),MotionFile);if(FPaths::FileExists(MotionFile))CharacterLobbyMotion=FDAoCLobbyMotion::Load(Backdrop,MotionFile);
-    const TMap<FString,int32> Models={{TEXT("cel_m"),1984},{TEXT("cel_f"),310},{TEXT("elf_m"),382},{TEXT("elf_f"),388},{TEXT("fir_m"),352},{TEXT("fir_f"),1983},{TEXT("lur_m"),318},{TEXT("lur_f"),378},{TEXT("syl_m"),700},{TEXT("syl_f"),708}};
+    const TMap<FString,int32> Models={{TEXT("cel_m"),1984},{TEXT("cel_f"),310},{TEXT("elf_m"),382},{TEXT("elf_f"),388},{TEXT("fir_m"),352},{TEXT("fir_f"),1983},{TEXT("lur_m"),318},{TEXT("lur_f"),378},{TEXT("syl_m"),700},{TEXT("syl_f"),708},{TEXT("sha_m"),1075},{TEXT("sha_f"),1087}};
     FString Prefix=PreviewString(Row,TEXT("prefix"));FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyTestPrefix="),Prefix);
     const int32 Model=Models.FindRef(Prefix);auto* Definition=ModelCatalog.Find(FString::FromInt(Model));
     CharacterLobbyPreviewModel=Model;CharacterLobbyPreviewScale=PreviewNumber(Definition?*Definition:nullptr,TEXT("scale"),1);
@@ -137,11 +137,15 @@ bool UDAoCBridgeSubsystem::HandleLobbyWheel(float Steps,FVector2D Point){
 void UDAoCBridgeSubsystem::UpdateLobbyCamera(){
     if(!CharacterLobbyCapture||!CharacterLobbyPreviewActor)return;
     const FVector Origin(0,0,-200000);FVector Center=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,110);
+    // Shar's original figure is taller at this fixed creation camera. Keep its
+    // feet above the lower UI frame without changing the established races.
+    if(CharacterLobbyScreen==TEXT("create")&&(CharacterLobbyPreviewModel==1075||CharacterLobbyPreviewModel==1087))Center.Z-=30;
     const FVector OriginalEye=Origin+FVector(-.727,-4.28,-3.81)*100;
     FVector Offset=OriginalEye-Center;
     if(CharacterLobbyScreen==TEXT("customize")){
         const float Scale=CharacterLobbyPreviewActor->GetActorScale3D().X;Center=CharacterLobbyPreviewActor->GetActorLocation()+FVector(0,0,160*Scale);
         if(auto* Figure=Cast<ASkeletalMeshActor>(CharacterLobbyPreviewActor.Get())){auto* Body=Figure->GetSkeletalMeshComponent();for(const FName Bone:{FName(TEXT("Bip01_Head")),FName(TEXT("Bip01 Head"))})if(Body->GetBoneIndex(Bone)>=0){Center=Body->GetBoneLocation(Bone)+FVector(0,0,4*Scale);break;}}
+        if(CharacterLobbyPreviewModel==1075||CharacterLobbyPreviewModel==1087){if(auto* Figure=Cast<ASkeletalMeshActor>(CharacterLobbyPreviewActor.Get())){auto* Body=Figure->GetSkeletalMeshComponent();const FName Bone(TEXT("Bip01-Head"));if(Body->GetBoneIndex(Bone)>=0)Center=Body->GetBoneLocation(Bone)+FVector(0,0,4*Scale);}}
         // At close range frame the face; pull the pivot down to the body as we
         // zoom out, instead of keeping feet below the bottom of the viewport.
         const FVector Feet=CharacterLobbyPreviewActor->GetActorLocation();

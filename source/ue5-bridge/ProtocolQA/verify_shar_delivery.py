@@ -28,6 +28,14 @@ def verify(lab):
                 else:assert new[name]==value
             assert set(new['figures'])-set(old['figures'])=={'1075','1087'}
             preserved[key]=len(old['figures'])
+        elif key=='lore':
+            for name,value in old.items():
+                if name=='classes':
+                    for ident,record in value.items():assert new[name][ident]==record
+                    assert set(new[name])-set(value) <= {'SHAR-ARMS','SHAR-MAGI','SHAR-STEA'}
+                    assert all(new[name][ident]['available'] for ident in ['SHAR-ARMS','SHAR-MAGI','SHAR-STEA'])
+                else:assert new[name]==value
+            preserved[key]=len(old['classes'])
         else:
             for name,value in old.items():
                 if name!='armour':assert new[name]==value
@@ -55,7 +63,7 @@ def verify(lab):
     report={'passed':True,'installed':False,'assets':len(targets),'preserved_records':preserved,
         'merged_native_checks':result['checks'],'native_real_server':False,
         'native_inputs':inputs,'manifest_sha256':digest(delivery/'manifest.json'),
-        'remaining_activation_gate':'Original Shar starts are outside supported native zone207; normal race options and server settings remain unchanged.'}
+        'remaining_activation_gate':'GM recovery from original starts passed separately. Ordinary other-zone coverage is still outside this package; normal race options and server settings remain unchanged.'}
     (delivery/'verified.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
 

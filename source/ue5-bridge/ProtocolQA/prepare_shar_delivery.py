@@ -47,7 +47,15 @@ def prepare(workspace, lab):
         assert len(helmets[ident]) == 163
         assert ident not in merged['equipment']['armour']['helmets'] or merged['equipment']['armour']['helmets'][ident] == helmets[ident]
         merged['equipment']['armour']['helmets'][ident] = helmets[ident]
-    appearance = read(lab/'appearance_catalog_colour_candidate.json')
+    appearance_path = lab/'appearance_catalog_colour_candidate.json'
+    palette_path = lab/'appearance_swatches_candidate.json'
+    if palette_path.exists():
+        receipt = read(palette_path.with_suffix('.source.json'))
+        assert receipt['passed'] and receipt['source_sha256'] == hashlib.sha256(appearance_path.read_bytes()).hexdigest()
+        assert receipt['candidate_sha256'] == hashlib.sha256(palette_path.read_bytes()).hexdigest()
+        evidence.append({'path':str(palette_path.with_suffix('.source.json')),'sha256':hashlib.sha256(palette_path.with_suffix('.source.json').read_bytes()).hexdigest()})
+        appearance_path = palette_path
+    appearance = read(appearance_path)
     for key in ['figures','textures','original_color_textures']:
         for ident,row in appearance[key].items():
             if key == 'textures' and ident.startswith('fro_'):
@@ -56,7 +64,16 @@ def prepare(workspace, lab):
             merged['appearance'].setdefault(key,{})[ident] = row
     # Preserve approved global materials, skin calibration and unrelated race records.
     assert merged['appearance']['materials'] == before['appearance']['materials']
-    for key in ['models','equipment','appearance']:
+    lore_path = output/'lore.json'
+    if lore_path.exists():
+        original_lore = installed/'ClassicUI/Pregame/lore.json'
+        receipt = read(lore_path.with_suffix('.source.json'))
+        assert receipt['passed'] and receipt['original_lore_sha256'] == hashlib.sha256(original_lore.read_bytes()).hexdigest()
+        assert receipt['candidate_sha256'] == hashlib.sha256(lore_path.read_bytes()).hexdigest()
+        source_paths['lore'] = original_lore
+        merged['lore'] = read(lore_path)
+        evidence.append({'path':str(lore_path.with_suffix('.source.json')),'sha256':hashlib.sha256(lore_path.with_suffix('.source.json').read_bytes()).hexdigest()})
+    for key in merged:
         (output/(key+'.json')).write_text(json.dumps(merged[key],indent=2),encoding='utf-8')
     native = copy.deepcopy(merged['equipment'])
     native['armour']['figures'] = figures
