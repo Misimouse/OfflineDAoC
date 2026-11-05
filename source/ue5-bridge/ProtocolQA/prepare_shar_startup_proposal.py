@@ -12,17 +12,19 @@ SOURCE_BLOB = '4e5333469deb2fa98ca3bb4c54ec4f9093bce414'
 SOURCE_COMMIT = 'b5b29c2ada7695414b94f5fa110eb505a477d007'
 
 
-def prepare(source, database):
+def prepare(source, database, race=18):
+    assert race in [18,21]
+    classes=[51,52,54] if race==18 else [52,53]
     reference = json.loads(verified_source(source, SOURCE_BLOB))
-    rows = [row for row in reference if row['RaceID'] == 18 and row['Region'] == 200
-            and row['ClientRegionID'] == 0 and row['ClassID'] in [51, 52, 54]]
-    assert len(rows) == 3 and {row['ClassID'] for row in rows} == {51, 52, 54}
+    rows = [row for row in reference if row['RaceID'] == race and row['Region'] == 200
+            and row['ClientRegionID'] == 0 and row['ClassID'] in classes]
+    assert len(rows) == len(classes) and {row['ClassID'] for row in rows} == set(classes)
     assert all(row['MinVersion'] == 168 and row['RealmID'] == 0
                and all(row[key] != 0 for key in ['XPos', 'YPos', 'ZPos']) for row in rows)
     with closing(sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True)) as db:
         db.execute('PRAGMA query_only=ON')
         db.row_factory = sqlite3.Row
-        existing = [dict(row) for row in db.execute('SELECT * FROM StartupLocation WHERE RaceID=18')]
+        existing = [dict(row) for row in db.execute('SELECT * FROM StartupLocation WHERE RaceID=?',(race,))]
         ids = {row[0] for row in db.execute('SELECT StartupLoc_ID FROM StartupLocation')}
         next_id = max(int(value) for value in ids) + 1
         assert db.execute('SELECT 1 FROM Zones WHERE RegionID=200 LIMIT 1').fetchone()
@@ -45,15 +47,17 @@ def prepare(source, database):
             'path': 'src/data/StartupLocation.json', 'git_blob': SOURCE_BLOB},
         'original_rows': rows, 'insert_rows': proposed,
         'existing_shar_rows_sha256': hashlib.sha256(json.dumps(existing, sort_keys=True).encode()).hexdigest(),
-        'scope': 'Original region200 starts for Shar Magician, Guardian and Stalker; no Catacombs-region import or invented coordinates.'}
+        'race_id':race,
+        'scope': 'Original region200 starts for '+('Shar Magician, Guardian and Stalker' if race==18 else 'Hibernian Minotaur Guardian and Naturalist')+'; no Catacombs-region import or invented coordinates.'}
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['source', 'database', 'output']:
         parser.add_argument('--' + name, type=Path, required=True)
+    parser.add_argument('--race',type=int,choices=[18,21],default=18)
     args = parser.parse_args()
-    report = prepare(args.source, args.database)
+    report = prepare(args.source, args.database,args.race)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2), encoding='utf-8')
     print(json.dumps({'passed': report['passed'], 'insert_rows': len(report['insert_rows']), 'installed': False}))

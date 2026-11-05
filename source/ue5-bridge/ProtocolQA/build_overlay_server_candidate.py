@@ -8,7 +8,7 @@ import subprocess
 from xml.sax.saxutils import escape
 
 
-def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=False):
+def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=False, minotaur_reference=None):
     server_source,overlay,workspace,output,dotnet=(p.resolve() for p in (server_source,overlay,workspace,output,dotnet))
     assert output.is_relative_to(workspace) and not output.is_relative_to(server_source)
     output.mkdir(parents=True,exist_ok=True)
@@ -19,6 +19,14 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
     edits=[]
     sources={name:overlay/name for name in files}
     variants_report={}
+    assert not (vampiir_creation and minotaur_reference), 'Combined activation needs separate acceptance'
+    if minotaur_reference:
+        from prepare_minotaur_rule_variants import variants
+        manifest=variants(minotaur_reference,server_source,output/'SourceVariants')
+        assert manifest['passed'] and not manifest['mauler_enabled']
+        for name,row in manifest['files'].items():
+            sources[name]=Path(row['path'])
+            variants_report[name]={**row,'scope':'Private Hibernian Minotaur base stats and four source-authorized advanced class eligibility rules.'}
     if vampiir_creation:
         name='GameServer/GlobalConstants.cs';original=server_source/name
         raw=original.read_bytes();anchor=b'// eCharacterClass.Vampiir,'
@@ -55,7 +63,7 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
     report={'passed':True,'installed':False,'source_root':str(server_source),'overlay_root':str(overlay),
         'overlay_base_commit':definition['base_commit'],'overlay_source_sha256':{name:hashlib.sha256((overlay/name).read_bytes()).hexdigest() for name in files},
         'compiled_bridge_overlay_verified':True,'libraries':str(libraries),'binaries_sha256':binaries,
-        'candidate_features':['vampiir_creation'] if vampiir_creation else [],'source_variants':variants_report}
+        'candidate_features':['vampiir_creation'] if vampiir_creation else (['minotaur_creation'] if minotaur_reference else []),'source_variants':variants_report}
     (output/'build_receipt.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
 
@@ -64,5 +72,6 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ['server-source','overlay','workspace','output','dotnet']:parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--vampiir-creation',action='store_true',help='Private source variant only; never changes normal source or settings')
-    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet,args.vampiir_creation)
+    parser.add_argument('--minotaur-reference',type=Path,help='Pinned DOL source; private four-class Minotaur candidate only, excluding Mauler')
+    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet,args.vampiir_creation,args.minotaur_reference)
     print(json.dumps(report))

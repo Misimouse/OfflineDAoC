@@ -8,6 +8,7 @@ parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--vampiir-candidate',action='store_true')
 parser.add_argument('--vampiir-shar',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
+parser.add_argument('--minotaur-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--shar-gm-transfer',action='store_true')
@@ -18,8 +19,8 @@ parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
-candidate_mode=args.bainshee_candidate or args.shar_candidate or args.vampiir_candidate
-assert sum([args.bainshee_candidate,args.shar_candidate,args.vampiir_candidate])<=1
+candidate_mode=args.bainshee_candidate or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate
+assert sum([args.bainshee_candidate,args.shar_candidate,args.vampiir_candidate,args.minotaur_candidate])<=1
 assert candidate_mode==bool(args.server_source),'Candidate creation requires the explicit server source'
 assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
@@ -29,6 +30,7 @@ assert not args.shar_gm_transfer or (args.shar_candidate and args.starter_equipm
 assert not args.candidate_build or candidate_mode
 assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires a sealed build with the canonical bridge overlay'
 assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation requires its sealed private source variant'
+assert not args.minotaur_candidate or args.candidate_build, 'Minotaur creation requires its sealed private source variant'
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
@@ -37,6 +39,7 @@ if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
 if args.shar_gm_transfer:D=ROOT/'Reports/shar_gm_transfer';D.mkdir(exist_ok=True)
 if args.vampiir_candidate:D=ROOT/'Reports/vampiir_creation';D.mkdir(exist_ok=True)
 if args.vampiir_shar:D=ROOT/'Reports/vampiir_shar_creation';D.mkdir(exist_ok=True)
+if args.minotaur_candidate:D=ROOT/'Reports/minotaur_creation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -89,6 +92,16 @@ def send(action,**values):
 
 def save_report():
     (D/'real_protocol.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
+
+def verify_minotaur_saved_appearance(name,look):
+    sliders=look['sliders']+[4,4,4,4]
+    expected={'EyeSize':sliders[1]|(sliders[0]<<4),'LipSize':sliders[2]|(sliders[3]<<4),
+              'EyeColor':look['skin']|(look['eyes']<<4),'HairColor':look['hair_color'],
+              'FaceType':look['face']<<4,'HairStyle':look['hair']<<4}
+    with checked() as db:
+        row=db.execute('SELECT EyeSize,LipSize,EyeColor,HairColor,FaceType,HairStyle FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
+        assert row and dict(row)==expected,('Original Minotaur appearance packet bytes not retained',dict(row) if row else None,expected)
+    return expected
 
 def verify_starter(base,figure):
     armour={51:{21:826,22:381,23:382,25:378,27:379,28:380},
@@ -162,22 +175,23 @@ try:
                     excluded=rules.id_set(races['Value']);excluded.add(18)
                     db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(excluded)),))
                     report['private_race_scope']='Celt/Lurikeen only; Shar temporarily excluded in this disposable probe'
-            if uses_shar:
+            if uses_shar or args.minotaur_candidate:
+                race_id=21 if args.minotaur_candidate else 18
                 prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert prop
-                disabled=rules.id_set(prop['Value']);report['qa_shar_previously_disabled']=18 in disabled;disabled.discard(18)
+                disabled=rules.id_set(prop['Value']);report['qa_shar_previously_disabled']=18 in disabled;disabled.discard(race_id)
                 db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(disabled)),))
                 sys.path.insert(0,str(Path(__file__).resolve().parent))
                 from prepare_shar_startup_proposal import prepare as prepare_shar_starts
-                proposal=prepare_shar_starts(ROOT/'References/DOLPublic_b5b29c2ada76/StartupLocation.source.json',DB)
+                proposal=prepare_shar_starts(ROOT/'References/DOLPublic_b5b29c2ada76/StartupLocation.source.json',DB,race_id)
                 assert proposal['passed'] and not proposal['database_modified']
                 columns={row[1] for row in db.execute('PRAGMA table_info(StartupLocation)')}
                 for row in proposal['insert_rows']:
-                    assert set(row)<=columns and row['RaceID']==18 and row['Region']==200 and row['ClassID'] in [51,52,54]
+                    assert set(row)<=columns and row['RaceID']==race_id and row['Region']==200 and row['ClassID'] in ([52,53] if args.minotaur_candidate else [51,52,54])
                     keys=list(row)
                     db.execute('INSERT INTO StartupLocation ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
                 report['shar_startup_reference']=proposal['reference']
                 report['shar_startup_insert_rows']=proposal['insert_rows']
-    if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate:
+    if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate:
         config_data=json.loads(config_before);config_data['custom_class']=False
         config.write_text(json.dumps(config_data),encoding='utf-8')
     if candidate_mode:
@@ -197,8 +211,8 @@ try:
             for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
                 if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
         rules.GS=server_source/'GameServer'
-        if args.vampiir_candidate:
-            assert 'vampiir_creation' in receipt.get('candidate_features',[])
+        if args.vampiir_candidate or args.minotaur_candidate:
+            assert ('minotaur_creation' if args.minotaur_candidate else 'vampiir_creation') in receipt.get('candidate_features',[])
             variant=receipt['source_variants']['GameServer/GlobalConstants.cs']
             variant_path=Path(variant['path']).resolve();assert variant_path.is_relative_to(candidate_root)
             assert hashlib.sha256(variant_path.read_bytes()).hexdigest()==variant['candidate_sha256']
@@ -206,42 +220,41 @@ try:
             rule_source=candidate_root/'CatalogueSource/GameServer';rule_source.mkdir(parents=True,exist_ok=True)
             shutil.copytree(rules.GS/'playerclasses',rule_source/'playerclasses',dirs_exist_ok=True)
             (rule_source/'Enums').mkdir(exist_ok=True);shutil.copy2(rules.GS/'Enums/eCharacterClass.cs',rule_source/'Enums/eCharacterClass.cs')
-            shutil.copy2(variant_path,rule_source/'GlobalConstants.cs');rules.GS=rule_source
+            shutil.copy2(variant_path,rule_source/'GlobalConstants.cs')
+            if args.minotaur_candidate:
+                for relative,entry in receipt['source_variants'].items():
+                    source=Path(entry['path']).resolve();assert source.is_relative_to(candidate_root)
+                    assert hashlib.sha256(source.read_bytes()).hexdigest()==entry['candidate_sha256']
+                    assert hashlib.sha256((server_source/relative).read_bytes()).hexdigest()==entry['original_sha256']
+                    target=rule_source/Path(relative).relative_to('GameServer');target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,target)
+            rules.GS=rule_source
             report['private_vampiir_source_variant_verified']=True
         rules.DB=DB;rules.OUT=RUN/('vampiir_server_classes.json' if args.vampiir_candidate else ('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json'));rules.main()
         candidate=json.loads(rules.OUT.read_text())
         if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
+        elif args.minotaur_candidate:
+            assert {int(k) for k,v in candidate['classes'].items() if 21 in v['races']}=={43,44,45,46}
+            assert candidate['race_genders']['21']=='male'
         elif args.shar_candidate:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
         else:assert candidate['classes']['58']['races']==([9,12,18] if args.vampiir_shar else [9,12]) and candidate['classes']['58']['stats']==['CON','STR','DEX']
         original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
         text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
         restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
-        if uses_shar:
-            text=original_net.read_text(encoding='utf-8-sig')
-            for old,new in [
-                ('15: ["Sylvan", "syl", 700, 708]}','15: ["Sylvan", "syl", 700, 708], 18: ["Shar", "sha", 1075, 1087]}'),
-                ('"Valkyn": 14, "Sylvan": 15}','"Valkyn": 14, "Sylvan": 15, "Shar": 18}'),
-                ('15: [70, 55, 60, 45, 70, 60, 60, 60]}','15: [70, 55, 60, 45, 70, 60, 60, 60], 18: [60, 50, 80, 50, 60, 60, 60, 60]}')]:
-                if new not in text:
-                    assert text.count(old)==1,('Private Shar transport anchor',old)
-                    text=text.replace(old,new,1)
-            original_net.write_text(text,encoding='utf-8')
+        if uses_shar or args.minotaur_candidate:
+            from minotaur_transport_metadata import apply as apply_expansion_metadata
             canonical_net=(Path(__file__).resolve().parents[2]/'new-client/godot/game/net/server.gd').read_text(encoding='utf-8-sig')
-            for table in ['RACES','RACE_BY_NAME','RACE_STATS']:
-                pattern=r'const '+table+r'\s*:=\s*(\{.*?\})'
-                private_table=re.search(pattern,text,re.S);source_table=re.search(pattern,canonical_net,re.S)
-                assert private_table and source_table, ('Missing transport table',table)
-                assert ast.literal_eval(private_table[1])==ast.literal_eval(source_table[1]), ('QA transport differs from canonical source',table)
+            text=apply_expansion_metadata(original_net.read_text(encoding='utf-8-sig'),canonical_net)
+            original_net.write_text(text,encoding='utf-8')
             report['canonical_transport_metadata_verified']=True
             report['private_transport_sha256']=hashlib.sha256(original_net.read_bytes()).hexdigest()
         report['candidate_only']=True;report['server_build_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
     for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
     if uses_shar:
         p=RUN/'Godot/character_lobby.gd';text=p.read_text(encoding='utf-8-sig')
-        assert '["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]' in text
-        assert '"Sylvan":"syl","Shar":"sha"}' in text
+        assert '"Sylvan","Shar","Minotaur"]' in text
+        assert '"Shar":"sha","Minotaur":"mino"}' in text
         p=RUN/'Godot/character_appearance.gd';text=p.read_text(encoding='utf-8-sig')
-        assert '"syl_m","syl_f","sha_m","sha_f"]' in text
+        assert '"sha_m","sha_f","mino"]' in text
         report['canonical_gateway_shar_support']=True
     p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
     # Observe the original parsed skill lists without changing their contents.
@@ -262,6 +275,19 @@ try:
         extra=json.loads((ROOT/'ExpansionRaceLab/models_outfits_candidate.json').read_text(encoding='utf-8-sig'))
         native.update({ident:extra[ident] for ident in ['1075','1087']})
         target.write_text(json.dumps(native),encoding='utf-8')
+    if args.minotaur_candidate:
+        package=ROOT/'ExpansionRaceLab/MinotaurModularCandidate'
+        tasks+=json.loads((package/'SourceFigures/tasks.json').read_text())
+        target=RUN/'SourceModels/tasks.json';saved=backup/'minotaur_original_tasks.json';shutil.copy2(target,saved);restored_files.append((target,saved));target.write_text(json.dumps(tasks))
+        target=RUN/'models.json';saved=backup/'minotaur_original_models.json';shutil.copy2(target,saved);restored_files.append((target,saved))
+        native=json.loads(target.read_text(encoding='utf-8-sig'));native.update(json.loads((package/'models_expansion_candidate.json').read_text()));target.write_text(json.dumps(native))
+        path=package/'content/characters/races/mino/figure.json'
+        target=RUN/'Godot/character_appearance.gd';text=target.read_text(encoding='utf-8-sig')
+        anchor='var metadata:Dictionary={}'
+        assert text.count(anchor)==1
+        target.write_text(text.replace(anchor,'var metadata:Dictionary={"mino":JSON.parse_string(FileAccess.get_file_as_string("'+path.as_posix()+'"))}'),encoding='utf-8')
+        report['private_original_minotaur_metadata']=str(path)
+        report['private_original_minotaur_metadata_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
     models={t.get('info',{}).get('race'):int(t['id']) for t in tasks if t.get('info',{}).get('race')}
     (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
     log=(D/'server.log').open('w');logs.append(log)
@@ -303,6 +329,9 @@ try:
         report['combined_shar_vampiir_choices_complete']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
     cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else ([('Celt','cel',58,54),('Lurikeen','lur',58,54)] if args.vampiir_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)])
+    if args.minotaur_candidate:
+        choices=[c for c in lobby()['choices'] if c['race']=='Minotaur'];assert len(choices)==4 and all(not c['female'] for c in choices)
+        cases=[('Minotaur','mino',43,52),('Minotaur','mino',44,52),('Minotaur','mino',45,52),('Minotaur','mino',46,53)]
     if args.vampiir_shar:cases.append(('Shar','sha',58,54))
     if args.shar_candidate:cases=[('Shar','sha',42,51),('Shar','sha',43,52),('Shar','sha',44,52),('Shar','sha',45,52),('Shar','sha',50,54)]
     if args.classic_class_batch is not None:
@@ -337,10 +366,13 @@ try:
         report['invalid_choice_recoverable']=True
         if args.eligibility_only:cases=[]
     for race,prefix,advanced,base in cases:
-        for female in ([False] if args.classic_class_batch is not None else ([True] if args.bainshee_candidate else [False,True])):
-            figure=prefix+('_f' if female else '_m');choice=next(c for c in lobby()['choices'] if c['race']==race and c['female']==female and c['class_id']==advanced)
-            meta=json.loads((game/'godot/content/characters/races'/figure/'figure.json').read_text())
+        for female in ([False] if args.classic_class_batch is not None or args.minotaur_candidate else ([True] if args.bainshee_candidate else [False,True])):
+            figure=prefix if args.minotaur_candidate else prefix+('_f' if female else '_m');choice=next(c for c in lobby()['choices'] if c['race']==race and c['female']==female and c['class_id']==advanced)
+            meta=json.loads(((ROOT/'ExpansionRaceLab/MinotaurModularCandidate/content/characters/races' if args.minotaur_candidate else game/'godot/content/characters/races')/figure/'figure.json').read_text())
             look={'size':2,'face':0,'eyes':0,'skin':0,'hair':0,'hair_color':0,'tattoo':0,'sliders':[2 if i%2 else 6 for i in range(len(meta.get('sliders',[])))]}
+            if args.minotaur_candidate:
+                look.update(face=advanced%len(meta['faces']),eyes=advanced%len(meta['eyes']),skin=advanced%len(meta['skin_tones']),hair=advanced%len(meta['hair_styles']),sliders=[advanced%9])
+                look['hair_color']=min(3,len(meta['hair_styles'][look['hair']]['colours'])-1)
             name='Codex'+prefix+('f' if female else 'm')+chr(97+advanced//26)+chr(97+advanced%26)+suffix
             send('character_create',lobby_revision=lobby()['revision'],choice_id=choice['id'],name=name,look=look)
             wait(lambda:any(c['name']==name for c in lobby().get('characters',[])) and not lobby().get('pending'),'Server confirms '+figure,55)
@@ -349,7 +381,8 @@ try:
             with checked() as db:
                 row=db.execute('SELECT Class,Level,Gender,Xpos,Ypos,Zpos,Region,Direction FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
                 assert row and row['Class']==base and row['Level']==1 and bool(row['Gender'])==female
-                if args.shar_candidate or (args.vampiir_shar and race=='Shar'):
+                if args.minotaur_candidate:verify_minotaur_saved_appearance(name,look)
+                if args.shar_candidate or args.minotaur_candidate or (args.vampiir_shar and race=='Shar'):
                     original=next(value for value in proposal['original_rows'] if value['ClassID']==base)
                     assert all(row[key]==original[source] for key,source in [('Xpos','XPos'),('Ypos','YPos'),('Zpos','ZPos'),('Region','Region'),('Direction','Heading')]),('Original DOL Shar start not applied',dict(row),original)
                     # The native bridge currently publishes only Connacht zone207.
@@ -369,7 +402,7 @@ try:
                         # Level advancement is an explicit disposable fixture, not a GM command
                         # or a direct class assignment. The original trainer performs promotion.
                         db.execute('UPDATE DOLCharacters SET Level=5,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells=?,DisabledAbilities=? WHERE Name=? AND AccountName=?',('', '', name,account_name))
-            if args.shar_candidate or (args.vampiir_shar and race=='Shar'):
+            if args.shar_candidate or args.minotaur_candidate or (args.vampiir_shar and race=='Shar'):
                 # Account.Characters caches the just-created object. Reconnect
                 # normally so the fixture relocation is read from the database;
                 # never forge a world-entry packet or alter the server cache.
@@ -416,7 +449,7 @@ try:
             for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
             actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
             assert actual==expected,(figure,expected,actual)
-            if (args.classic_class_batch is not None or args.shar_candidate) and not args.shar_promotion:
+            if (args.classic_class_batch is not None or args.shar_candidate or args.minotaur_candidate) and not args.shar_promotion:
                 base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
                 assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
             if args.starter_equipment_repair and not args.shar_promotion:verify_starter(base,figure)
@@ -424,7 +457,7 @@ try:
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
             if args.shar_gm_transfer:verify_original_bind(name,base)
-            if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate:
+            if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate:
                 send('character_enter',lobby_revision=lobby()['revision'],name=name)
                 wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
@@ -437,14 +470,17 @@ try:
                         assert saved['Class']==advanced and saved['Level']==5
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
-            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate});save_report()
+            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate});save_report()
+            if args.minotaur_candidate:
+                report['cases'][-1].update(original_saved_appearance_bytes=verify_minotaur_saved_appearance(name,look),look=look)
+                save_report()
             if args.shar_promotion:
                 report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()
             if args.shar_gm_transfer:
                 verify_original_bind(name,base)
                 report['cases'][-1].update(original_bind_preserved=True,server_authorized_gm_transfer=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else ((6 if args.vampiir_shar else 4) if args.vampiir_candidate else 10))
+    expected_count=len(cases) if args.classic_class_batch is not None or args.minotaur_candidate else (3 if args.bainshee_candidate else ((6 if args.vampiir_shar else 4) if args.vampiir_candidate else 10))
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())

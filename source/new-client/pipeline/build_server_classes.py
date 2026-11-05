@@ -114,6 +114,24 @@ def class_gender_constraints():
             re.findall(r'eCharacterClass\.(\w+)\s*,\s*eGender\.(Male|Female)', body)}
 
 
+def race_gender_constraints():
+    text = (GS / 'GlobalConstants.cs').read_text(encoding='utf-8', errors='replace')
+    text = re.sub(r'//[^\n]*', '', text)
+    if 'RACE_GENDER_CONSTRAINTS_DICT' not in text:
+        return {}
+    body = text[text.index('RACE_GENDER_CONSTRAINTS_DICT'):]
+    body = body[:body.index('};')]
+    names = {**RACES, 'AlbionMinotaur': RACES['Korazh'],
+             'MidgardMinotaur': RACES['Deifrang'], 'HiberniaMinotaur': RACES['Graoch']}
+    out = {}
+    for name, gender in re.findall(r'eRace\.(\w+)\s*,\s*eGender\.(Male|Female)', body):
+        assert name in names, ('Unknown race gender restriction', name)
+        key = str(names[name])
+        assert key not in out or out[key] == gender.lower(), ('Conflicting race gender restrictions', key)
+        out[key] = gender.lower()
+    return out
+
+
 def main():
     ids = enum_values(GS / 'Enums/eCharacterClass.cs', 'eCharacterClass')
     classes = {c['enum']: c for c in parse_classes().values()}
@@ -123,7 +141,7 @@ def main():
     disabled = id_set(prop.get('disabled_classes'))
     disabled_races = id_set(prop.get('disabled_races'))
     realms = {'Albion': 'alb', 'Midgard': 'mid', 'Hibernia': 'hib'}
-    out = {'realms': {}, 'classes': {}}
+    out = {'realms': {}, 'classes': {}, 'race_genders': race_gender_constraints()}
     for realm, names in starting_classes().items():
         listed = []
         for n in names:

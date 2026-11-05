@@ -6,7 +6,7 @@ func normalise(value:Variant,prefix:String,trusted_saved:=false)->Dictionary:
     if not value is Dictionary:return {"ok":false,"error":"Invalid character appearance."}
     for key in value:
         if not key in KEYS and not trusted_saved:return {"ok":false,"error":"Unknown appearance option."}
-    if not prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f","sha_m","sha_f"]:return {"ok":false,"error":"Appearance is unavailable for this race."}
+    if not prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f","sha_m","sha_f","mino"]:return {"ok":false,"error":"Appearance is unavailable for this race."}
     if not metadata.has(prefix):
         var path:="res://content/characters/races/"+prefix+"/figure.json"
         var parsed:Variant=JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null

@@ -1,6 +1,6 @@
 extends SceneTree
 class FakeServer extends Node:
-    const RACE_BY_NAME={"Celt":9,"Firbolg":10,"Elf":11,"Lurikeen":12,"Sylvan":15,"Shar":18}
+    const RACE_BY_NAME={"Celt":9,"Firbolg":10,"Elf":11,"Lurikeen":12,"Sylvan":15,"Shar":18,"Minotaur":21}
     var playing:=false
     var list_pending:=false
     var characters:Array=[{"name":"Existinghero","slot":0,"race":"Celt","gender":"male","level":1,"class_name":"Naturalist","prefix":"cel_m"}]
@@ -8,12 +8,14 @@ class FakeServer extends Node:
     var classes:Dictionary={"classes":{"39":{"gender":"female"}}}
     var offer_bainshee:=false
     var offer_shar:=false
+    var offer_minotaur:=false
     func character_list_pending()->bool:return list_pending
     func characters_in(_realm:String)->Array:return characters
     func classes_for(_realm:String,race:int,_female:bool)->Array:
         var out:Array=[[53,"Naturalist"]] if race==9 else []
         if offer_bainshee and race in [9,11,12]:out.append([39,"Bainshee"])
         if offer_shar and race==18:out.append_array([[42,"Mentalist"],[43,"Blademaster"],[44,"Heroine" if _female else "Hero"],[45,"Champion"],[50,"Ranger"]])
+        if offer_minotaur and race==21:out.append_array([[43,"Blademaster"],[44,"Hero"],[45,"Champion"],[46,"Warden"]])
         return out
     func name_error(name:String)->String:return "Invalid name." if not RegEx.create_from_string("^[A-Z][a-zA-Z]{2,22}$").search(name) else ""
     func check_name(name:String)->void:calls.append(["check_name",name])
@@ -75,6 +77,21 @@ func run()->void:
             lobby.creation_result(true,"");server.calls.clear()
     server.offer_shar=false;lobby.refresh(server)
     check(not lobby.choices.any(func(c):return c.race=="Shar"),"withdrawn Shar eligibility immediately removes all expansion choices")
+    if "--bridge-minotaur-test" in OS.get_cmdline_user_args():
+        server.offer_minotaur=true;server.classes["race_genders"]={"21":"male"};lobby.refresh(server)
+        var minotaurs:Array=lobby.choices.filter(func(c):return c.race=="Minotaur")
+        check(minotaurs.size()==4 and minotaurs.all(func(c):return not c.female),"original race restriction permits four male Minotaur careers only")
+        check(not lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Minotaur:f:44","name":"Invalidcow"},server,100) and server.calls.is_empty(),"crafted female Minotaur choice sends no request")
+        var minotaur_look:Dictionary={"face":6,"eyes":7,"skin":7,"hair":9,"hair_color":3,"tattoo":0,"size":2,"sliders":[8]}
+        check(lobby.validated_look(minotaur_look,"mino").ok,"original Minotaur metadata permits its full horn and appearance choices")
+        check(not lobby.validated_look({"sliders":[4,4]},"mino").ok,"Minotaur rejects facial sliders absent from its original head")
+        check(not lobby.validated_look({"hair":10},"mino").ok,"Minotaur horn variants remain bounded by original source")
+        check(lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Minotaur:m:44","name":"Hornedhero","look":minotaur_look},server,100),"Minotaur creation starts authoritative name check")
+        lobby.name_result("Hornedhero",0,server,101)
+        var packet:Array=server.creations()[-1] if not server.creations().is_empty() else []
+        check(packet.size()==6 and packet[1]=="Minotaur" and not packet[2] and packet[3]==44 and packet[5]==minotaur_look,"male Minotaur career and original one-slider appearance reach creation API")
+        lobby.creation_result(true,"");server.calls.clear();server.offer_minotaur=false;lobby.refresh(server)
+        check(not lobby.choices.any(func(c):return c.race=="Minotaur"),"withdrawn Minotaur eligibility removes all its choices")
     for prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f"]:
         check(lobby.validated_look({},prefix).ok,"original default appearance exists for "+prefix)
     check(not lobby.validated_look({"sliders":[NAN]},"cel_m").ok,"nonfinite facial features cannot enter a packet")
