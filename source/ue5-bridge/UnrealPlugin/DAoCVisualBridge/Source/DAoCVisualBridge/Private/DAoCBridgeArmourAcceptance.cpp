@@ -146,6 +146,13 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
                 auto FigureParts=Obj(Obj(Obj(Appearance,TEXT("figures")),BaseId),TEXT("parts"));
                 auto HairDefinition=HairStyle<Styles.Num()?Obj(FigureParts,S(Styles[HairStyle]->AsObject(),TEXT("node"))):nullptr;
                 auto Bindings=Obj(HairDefinition,TEXT("facial_morphs"));auto* FacialHair=Part(Actor,TEXT("DAoCBridgeAppearanceHair"));
+                const auto FigureMaterials=Obj(Obj(Obj(Appearance,TEXT("figures")),BaseId),TEXT("materials"));
+                for(const auto& Kind:TArray<FString>{TEXT("skin"),TEXT("hair")}){
+                    FString ExpectedAppearanceMaterial=S(FigureMaterials,*Kind);if(ExpectedAppearanceMaterial.IsEmpty())ExpectedAppearanceMaterial=S(Obj(Appearance,TEXT("materials")),*Kind);
+                    auto* Component=Kind==TEXT("hair")?FacialHair:Part(Actor,TEXT("DAoCBridgeAppearanceHead"));
+                    auto* Dynamic=Component?Cast<UMaterialInstanceDynamic>(Component->GetMaterial(0)):nullptr;
+                    Check(Dynamic&&Dynamic->Parent&&Dynamic->Parent->GetPathName()==ExpectedAppearanceMaterial,TEXT("appearance material isolation ")+BaseId+TEXT(" ")+Kind);
+                }
                 if(Bindings&&FacialHair)for(int32 I=0;I<A(Metadata,TEXT("sliders")).Num();++I){
                     const auto Slider=A(Metadata,TEXT("sliders"))[I]->AsObject();
                     for(const auto& Side:TArray<TPair<FString,float>>{{TEXT("low"),I%2?1.f:0.f},{TEXT("high"),I%2?0.f:1.f}}){

@@ -32,7 +32,10 @@ bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<F
     auto Figure=Obj(Obj(Catalog,TEXT("figures")),FString::FromInt(Model)),Meta=Obj(Figure,TEXT("meta")),Parts=Obj(Figure,TEXT("parts"));
     auto* Parent=Actor->GetSkeletalMeshComponent();auto* Body=Parent->GetSkeletalMeshAsset();auto Definition=Obj(Obj(Armour,TEXT("figures")),Body?Body->GetPathName():TEXT(""));
     if(!Meta||!Parts||!Definition||!Body)return false;
-    auto* HeadMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Obj(Parts,TEXT("head")),TEXT("asset")));auto* Master=LoadObject<UMaterialInterface>(nullptr,*Str(Obj(Catalog,TEXT("materials")),TEXT("skin")));
+    // Expansion figures may retain their validated materials without replacing
+    // the globally calibrated appearance of existing races.
+    auto MaterialPath=[Figure,Catalog](const TCHAR* Kind){const FString Override=Str(Obj(Figure,TEXT("materials")),Kind);return Override.IsEmpty()?Str(Obj(Catalog,TEXT("materials")),Kind):Override;};
+    auto* HeadMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Obj(Parts,TEXT("head")),TEXT("asset")));auto* Master=LoadObject<UMaterialInterface>(nullptr,*MaterialPath(TEXT("skin")));
     if(!HeadMesh||!Master)return false;
     auto Texture=[Catalog](const FString& Name)->UTexture2D*{const FString Path=Str(Obj(Catalog,TEXT("textures")),Name.ToLower());auto* T=Path.IsEmpty()?nullptr:LoadObject<UTexture2D>(nullptr,*Path);if(T)T->SetForceMipLevelsToBeResident(60);return T;};
     auto SourceColour=[Catalog](UMaterialInstanceDynamic* M,const FString& Name,UTexture2D* Enhanced){
@@ -81,7 +84,7 @@ bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<F
     Head->TickAnimation(0,false);Head->RefreshBoneTransforms();Head->ApplyAnimationCurvesToComponent(nullptr,&Head->GetMorphTargetCurves());Head->MarkRenderDynamicDataDirty();
     auto Style=Choice(Meta,TEXT("hair_styles"),Num(Look,TEXT("hair")));auto Hair=Obj(Parts,Str(Style,TEXT("node")));auto Colors=Arr(Style,TEXT("colours"));
     if(Hair&&!Colors.IsEmpty()&&!FullHelmet&&!Hood){
-        auto Color=Colors[FMath::Clamp(Num(Look,TEXT("hair_color")),0,Colors.Num()-1)]->AsObject();auto* HairMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Hair,TEXT("asset")));auto* HairMaster=LoadObject<UMaterialInterface>(nullptr,*Str(Obj(Catalog,TEXT("materials")),TEXT("hair")));auto* T=Texture(Str(Color,TEXT("tex")));
+        auto Color=Colors[FMath::Clamp(Num(Look,TEXT("hair_color")),0,Colors.Num()-1)]->AsObject();auto* HairMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Hair,TEXT("asset")));auto* HairMaster=LoadObject<UMaterialInterface>(nullptr,*MaterialPath(TEXT("hair")));auto* T=Texture(Str(Color,TEXT("tex")));
         if(HairMesh&&HairMaster&&T){auto* C=Attach(HairMesh);C->ComponentTags.Add(TEXT("DAoCBridgeAppearanceHair"));auto* M=UMaterialInstanceDynamic::Create(HairMaster,C);M->SetTextureParameterValue(TEXT("FigureTexture"),T);M->SetVectorParameterValue(TEXT("FigureTint"),Tint(Arr(Color,TEXT("tint")),false));for(int32 I=0;I<C->GetNumMaterials();++I)C->SetMaterial(I,M);// Hair/beard target names differ from head targets. Match their original
         // feature codes through the exported binding, retaining helmet morphs.
         if(auto Bindings=Obj(Hair,TEXT("facial_morphs")))for(int32 I=0;I<Sliders.Num();++I){
