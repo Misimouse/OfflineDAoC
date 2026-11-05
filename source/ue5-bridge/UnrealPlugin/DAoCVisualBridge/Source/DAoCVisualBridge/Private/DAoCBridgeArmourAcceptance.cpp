@@ -172,6 +172,37 @@ bool UDAoCBridgeSubsystem::TickArmourAcceptance(){
                 bool HasHood=false;for(auto V:A(Definition,TEXT("cloaks")))HasHood|=int32(V->AsNumber())==2;
                 if(Cape&&HasHood){Equip(0,Cape,true,false);auto* HoodFace=Part(Actor,TEXT("DAoCBridgeAppearanceHead"));Check(HoodFace&&HoodFace->IsVisible()&&Part(Actor,TEXT("DAoCBridgeAppearanceHair"))==nullptr,TEXT("raised hood keeps chosen face and hides hair ")+BaseId);Equip(0,Cape,false,false);Check(Part(Actor,TEXT("DAoCBridgeAppearanceHair"))!=nullptr,TEXT("lowering hood restores chosen hairstyle ")+BaseId);}
                 Equip(0,0,false,false);UpdateClassicDoll();Report->SetBoolField(TEXT("appearance_world_and_doll_tested"),true);
+
+                // Optional fixtures are copied from real server creation/reentry output.
+                // This branch is absent from normal catalogues and cannot grant equipment.
+                if(auto Starters=Obj(ArmourCatalog,TEXT("starter_loadouts"))){
+                    int32 Tested=0;
+                    for(const auto& Entry:Starters->Values){
+                        const FString StarterKey(*Entry.Key);
+                        if(!StarterKey.EndsWith(TEXT(":sha_")+Definition->GetStringField(TEXT("gender"))))continue;
+                        auto Loadout=Entry.Value->AsObject();InventoryState=MakeShared<FJsonObject>();InventoryState->Values=Loadout->Values;InventoryState->SetBoolField(TEXT("ready"),true);
+                        for(bool Drawn:{false,true}){
+                            if(!PlayerState)PlayerState=MakeShared<FJsonObject>();PlayerState->SetBoolField(TEXT("attack_on"),Drawn);
+                            InventoryState->SetNumberField(TEXT("state_revision"),++Revision);UpdateLocalEquipment();UpdateClassicDoll();
+                            Check(EquipmentMissingModels==0&&EquipmentMissingBones==0,TEXT("starter weapons resolve original models and attachment bones ")+StarterKey);
+                            const auto Items=A(Loadout,TEXT("items"));int32 Weapons=0,ArmourPieces=0;
+                            for(auto Value:Items){auto StarterItem=Value->AsObject();const int32 Slot=StarterItem->GetIntegerField(TEXT("slot")),Model=StarterItem->GetIntegerField(TEXT("model"));
+                                if(Slot>=10&&Slot<=13){++Weapons;auto* Binding=LocalEquipment.Find(Slot);Check(Binding&&Binding->Component.IsValid()&&Binding->Model==Model&&Binding->Drawn==Drawn&&Body->GetBoneIndex(FName(*Binding->Bone))!=INDEX_NONE,TEXT("starter weapon follows passive/drawn binding ")+StarterKey+TEXT("/")+FString::FromInt(Slot));}
+                                if(Slot==21){++ArmourPieces;auto* Helmet=Part(Actor,TEXT("DAoCBridgeHelmet"));auto H=Obj(Hats,FString::FromInt(Model));Check(H&&Helmet&&Helmet->GetSkeletalMeshAsset()->GetPathName()==S(H,TEXT("asset")),TEXT("starter helmet uses original race assembly ")+StarterKey);}
+                                const TMap<int32,FString> Slots={{22,TEXT("gloves")},{23,TEXT("boots")},{25,TEXT("body")},{27,TEXT("legs")},{28,TEXT("arms")}};
+                                if(auto* Name=Slots.Find(Slot)){++ArmourPieces;auto Gender=Obj(Obj(Models,FString::FromInt(Model)),Definition->GetStringField(TEXT("gender")));const auto StarterExpected=A(Gender,**Name);Check(StarterExpected.Num()>=2,TEXT("starter armour has original gender mapping ")+StarterKey+*Name);if(StarterExpected.Num()<2)continue;
+                                    int32 StarterVisible=0;bool StarterCorrect=true;for(auto Section:Sections){auto Sec=Section->AsObject();if(Sec->GetStringField(TEXT("slot"))!=*Name)continue;const int32 StarterIndex=Sec->GetIntegerField(TEXT("index"));if(!Body->IsMaterialSectionShown(StarterIndex,0))continue;++StarterVisible;UTexture* StarterTexture=nullptr;auto* StarterMaterial=Body->GetMaterial(StarterIndex);StarterCorrect&=Sec->GetIntegerField(TEXT("variant"))==int32(StarterExpected[0]->AsNumber())&&StarterMaterial&&StarterMaterial->GetTextureParameterValue(FMaterialParameterInfo(TEXT("ArmorTexture")),StarterTexture)&&StarterTexture&&StarterTexture->GetPathName()==S(Obj(ArmourCatalog,TEXT("textures")),*StarterExpected[1]->AsString());}
+                                    Check(StarterVisible>0&&StarterCorrect,TEXT("starter armour retains exact original section and texture ")+StarterKey+*Name);
+                                }
+                            }
+                            Check(ArmourPieces==6&&LocalEquipment.Num()==Weapons,TEXT("complete starter loadout is visible without stale weapons ")+StarterKey);
+                            auto* StarterPreview=Cast<ASkeletalMeshActor>(ClassicDollActor.Get());bool StarterSame=StarterPreview!=nullptr;if(StarterPreview)for(auto Section:Sections){const int32 StarterIndex=Section->AsObject()->GetIntegerField(TEXT("index"));StarterSame&=Body->IsMaterialSectionShown(StarterIndex,0)==StarterPreview->GetSkeletalMeshComponent()->IsMaterialSectionShown(StarterIndex,0);}Check(StarterSame,TEXT("starter miniature matches world armour ")+StarterKey);
+                        }
+                        ++Tested;
+                    }
+                    Check(Tested==3,TEXT("all three authoritative base-class starter loadouts tested ")+BaseId);Report->SetBoolField(TEXT("original_starter_loadouts_tested"),true);
+                    PlayerState->SetBoolField(TEXT("attack_on"),false);Equip(0,0,false,false);UpdateClassicDoll();Check(LocalEquipment.IsEmpty(),TEXT("unequipping starters removes all weapon components ")+BaseId);
+                }
                 if(BaseId==TEXT("1984")&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeMorphTest"))){
                     auto Staff=MakeShared<FJsonObject>();Staff->SetNumberField(TEXT("slot"),12);Staff->SetNumberField(TEXT("model"),19);InventoryState->SetStringField(TEXT("weapon_set"),TEXT("twohand"));InventoryState->SetArrayField(TEXT("items"),{MakeShared<FJsonValueObject>(Staff)});InventoryState->SetNumberField(TEXT("state_revision"),++Revision);UpdateLocalEquipment();
                     Check(LocalEquipment.Contains(12),TEXT("equipped original staff exists before transformation"));

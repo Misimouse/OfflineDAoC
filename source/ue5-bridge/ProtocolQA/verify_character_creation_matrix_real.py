@@ -6,6 +6,7 @@ import argparse,importlib.util,sys
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
+parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
@@ -15,9 +16,11 @@ assert not (args.bainshee_candidate and args.shar_candidate)
 assert candidate_mode==bool(args.server_source),'Candidate creation requires the explicit server source'
 assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
+assert not args.starter_equipment_repair or args.shar_candidate
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
+if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -67,6 +70,24 @@ def send(action,**values):
 def save_report():
     (D/'real_protocol.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
 
+def verify_starter(base,figure):
+    armour={51:{21:826,22:381,23:382,25:378,27:379,28:380},
+            52:{21:835,22:386,23:387,25:383,27:384,28:385},
+            54:{21:438,22:396,23:397,25:393,27:394,28:395}}[base]
+    weapons={51:{12:19},52:{10:445,11:59},54:{10:454}}[base]
+    expected={**armour,**weapons}
+    def complete():
+        items={int(row['slot']):row for row in snapshot.get('inventory',{}).get('items',[])}
+        return snapshot.get('inventory',{}).get('ready') and all(slot in items and int(items[slot]['model'])==model for slot,model in expected.items())
+    wait(complete,'Original complete starter equipment '+figure)
+    items={int(row['slot']):row for row in snapshot['inventory']['items']}
+    assert all(int(items[slot]['object_type'])=={51:32,52:37,54:33}[base] for slot in armour)
+    fields=['slot','model','name','object_type','item_type','color','emblem','effect','extension','hand','weapon_stance']
+    loadout={'items':[{key:items[slot][key] for key in fields if key in items[slot]} for slot in sorted(expected)],
+             'weapon_set':snapshot['inventory']['weapon_set'],'gear':snapshot['inventory']['gear']}
+    report.setdefault('original_starter_loadouts',{})[str(base)+':'+figure]=loadout
+    return loadout
+
 try:
     for port in [10351,19737]:
         try:
@@ -80,6 +101,15 @@ try:
         # disposable and the entire database is restored in finally.
         db.execute('DELETE FROM DOLCharacters WHERE AccountName=?',(account_name,))
         db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(account_name,))
+        if args.starter_equipment_repair:
+            sys.path.insert(0,str(Path(__file__).resolve().parent))
+            from prepare_hibernia_starter_repair import prepare as prepare_starter_repair
+            repair=prepare_starter_repair(ROOT/'References/DOLPublic_b5b29c2ada76/ItemTemplate.json',DB)
+            assert repair['passed'] and not repair['database_modified'] and len(repair['insert_rows'])==6
+            for row in repair['insert_rows']:
+                keys=list(row)
+                db.execute('INSERT INTO ItemTemplate ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
+            report['starter_repair_reference']=repair['reference'];report['starter_repair_inserted_templates']=[row['Id_nb'] for row in repair['insert_rows']]
         if candidate_mode:
             prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone();assert prop
             pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
@@ -278,6 +308,7 @@ try:
             if args.classic_class_batch is not None or args.shar_candidate:
                 base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
                 assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
+            if args.starter_equipment_repair:verify_starter(base,figure)
             send('chat',text='/quit')
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
@@ -287,6 +318,7 @@ try:
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
                 retained={str(e['name']) for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
                 assert retained==expected,('Existing character spell loss',advanced,expected,retained)
+                if args.starter_equipment_repair:verify_starter(base,figure)
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
             report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate});save_report()
