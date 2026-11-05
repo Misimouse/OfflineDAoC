@@ -7,6 +7,10 @@ var until_ms:=0
 var uncertain:=false
 var revision:=0
 var feedback:=""
+func allows_test_transfer(region:int,zone:int)->bool:
+    # This only permits requesting the original GM command; the server still
+    # authorizes the teleport. A normal account never confirms bridge GM mode.
+    return ready and not combat_test and pending.is_empty() and not uncertain and region==200 and zone>0 and zone!=207
 func reset()->void:
     ready=false;combat_test=false;pending="";uncertain=false;until_ms=0;feedback="";revision+=1
 func request(mode:String,client:Node,now:int)->bool:

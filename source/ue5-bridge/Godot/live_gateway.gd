@@ -382,7 +382,7 @@ func recover_test_region(now:int)->void:
     if not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0:
         status="Outside Connacht: waiting for server recovery"
         return
-    if not gm_mode.ready or gm_mode.uncertain or not gm_mode.pending.is_empty() or gm_mode.combat_test:
+    if not gm_mode.allows_test_transfer(int(server.entry.get("region",0)),int(server.entry.get("zone",0))):
         status="Outside Connacht: waiting for GM protection confirmation"
         return
     if test_return_attempts>=3:

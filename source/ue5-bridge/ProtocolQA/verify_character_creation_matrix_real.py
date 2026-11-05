@@ -8,7 +8,9 @@ parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
+parser.add_argument('--shar-gm-transfer',action='store_true')
 parser.add_argument('--server-source',type=Path)
+parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
@@ -19,11 +21,15 @@ assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
 assert not args.starter_equipment_repair or args.shar_candidate
 assert not args.shar_promotion or (args.shar_candidate and args.starter_equipment_repair)
+assert not args.shar_gm_transfer or (args.shar_candidate and args.starter_equipment_repair and not args.shar_promotion)
+assert not args.candidate_build or candidate_mode
+assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires a sealed build with the canonical bridge overlay'
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
 if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(exist_ok=True)
 if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
+if args.shar_gm_transfer:D=ROOT/'Reports/shar_gm_transfer';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -95,6 +101,12 @@ def verify_starter(base,figure):
     report.setdefault('original_starter_loadouts',{})[str(base)+':'+figure]=loadout
     return loadout
 
+def verify_original_bind(name,base):
+    original=next(value for value in proposal['original_rows'] if value['ClassID']==base)
+    with checked() as db:
+        row=db.execute('SELECT BindXpos,BindYpos,BindZpos,BindRegion,BindHeading FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone()
+        assert row and all(row[key]==original[source] for key,source in [('BindXpos','XPos'),('BindYpos','YPos'),('BindZpos','ZPos'),('BindRegion','Region'),('BindHeading','Heading')]), 'GM test transfer changed original bind'
+
 try:
     for port in [10351,19737]:
         try:
@@ -107,7 +119,7 @@ try:
         # All ten creation slots are needed; this account/database is explicitly
         # disposable and the entire database is restored in finally.
         db.execute('DELETE FROM DOLCharacters WHERE AccountName=?',(account_name,))
-        db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(account_name,))
+        db.execute('UPDATE Account SET PrivLevel=?,Realm=3 WHERE Name=?',(3 if args.shar_gm_transfer else 1,account_name))
         if args.starter_equipment_repair:
             sys.path.insert(0,str(Path(__file__).resolve().parent))
             from prepare_hibernia_starter_repair import prepare as prepare_starter_repair
@@ -155,7 +167,17 @@ try:
         config.write_text(json.dumps(config_data),encoding='utf-8')
     if candidate_mode:
         server_source=args.server_source.resolve();assert (server_source/'GameServer/playerclasses/hibernia/ClassBainshee.cs').exists()
-        build=server_source/'Release';assert (build/'GameServer.dll').exists()
+        build=server_source/'Release'
+        if args.candidate_build:
+            candidate_root=args.candidate_build.resolve();assert candidate_root.is_relative_to(ROOT.resolve())
+            receipt=json.loads((candidate_root/'build_receipt.json').read_text(encoding='utf-8-sig'))
+            assert receipt['passed'] and not receipt['installed'] and receipt['compiled_bridge_overlay_verified']
+            assert Path(receipt['source_root']).resolve()==server_source
+            build=Path(receipt['libraries']).resolve();assert build.is_relative_to(candidate_root)
+            for name,digest in receipt['binaries_sha256'].items():assert hashlib.sha256((build/name).read_bytes()).hexdigest()==digest
+            report['candidate_build_receipt_sha256']=hashlib.sha256((candidate_root/'build_receipt.json').read_bytes()).hexdigest()
+            report['candidate_overlay_verified']=True
+        assert (build/'GameServer.dll').exists()
         for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
             for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
                 if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
@@ -295,9 +317,13 @@ try:
                     starts=db.execute('SELECT * FROM StartupLocation WHERE RaceID=9 AND ClassID=? AND Region=200 AND RealmID=3 AND ClientRegionID=0 AND MinVersion=0',(base,)).fetchall()
                     assert len(starts)==1
                     start=starts[0]
-                    db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=?,Direction=?,BindXpos=?,BindYpos=?,BindZpos=?,BindRegion=?,BindHeading=? WHERE Name=? AND AccountName=?',
-                        (start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],name,account_name))
-                    report['qa_connacht_relocation']={'source_startup_id':start['StartupLoc_ID'],'original_dol_spawn_verified_first':True,'reason':'Native map currently supports zone207 only; fixture relocation is not a replacement startup rule.'}
+                    if not args.shar_gm_transfer:
+                        db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=?,Direction=?,BindXpos=?,BindYpos=?,BindZpos=?,BindRegion=?,BindHeading=? WHERE Name=? AND AccountName=?',
+                            (start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],name,account_name))
+                        report['qa_connacht_relocation']={'source_startup_id':start['StartupLoc_ID'],'original_dol_spawn_verified_first':True,'reason':'Native map currently supports zone207 only; fixture relocation is not a replacement startup rule.'}
+                    else:
+                        assert all(row[key]==original[source] for key,source in [('Xpos','XPos'),('Ypos','YPos'),('Zpos','ZPos')])
+                        report['original_spawn_and_bind_preserved_before_entry']=True
                     if args.shar_promotion:
                         # Level advancement is an explicit disposable fixture, not a GM command
                         # or a direct class assignment. The original trainer performs promotion.
@@ -321,6 +347,13 @@ try:
             send('character_enter',lobby_revision=lobby()['revision'],name=name)
             wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'New character enters '+figure,45)
             wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Chosen figure and look reach world '+figure)
+            if args.shar_gm_transfer:
+                wait(lambda:snapshot.get('player_status',{}).get('gm_mode',{}).get('ready'),'Server confirms GM test transfer permission')
+                assert not snapshot['player_status']['gm_mode']['combat_test']
+                player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+                assert snapshot['zone_id']==207 and len(player['position_m'])==3
+                report['server_authorized_gm_transfer']=True
+                verify_original_bind(name,base)
             if args.shar_promotion:
                 title=trainer_classes[advanced];trainer_name='Codex Shar '+title+' Trainer'
                 player=next(e for e in snapshot['entities'] if e['id']=='player:local')
@@ -349,6 +382,7 @@ try:
             send('chat',text='/quit')
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
+            if args.shar_gm_transfer:verify_original_bind(name,base)
             if args.classic_class_batch is not None or args.shar_candidate:
                 send('character_enter',lobby_revision=lobby()['revision'],name=name)
                 wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
@@ -365,6 +399,9 @@ try:
             report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate});save_report()
             if args.shar_promotion:
                 report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()
+            if args.shar_gm_transfer:
+                verify_original_bind(name,base)
+                report['cases'][-1].update(original_bind_preserved=True,server_authorized_gm_transfer=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
     expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else 10)
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
