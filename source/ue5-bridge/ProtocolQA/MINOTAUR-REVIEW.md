@@ -31,6 +31,25 @@ Remaining limitations:
 - Minotaur helmet assemblies and full equipment coverage remain separate checks.
 - Native screenshots and automated checks do not constitute owner visual approval.
 
+## Original realm and helmet audit
+
+`audit_minotaur_sources.py --client ORIGINAL_CLIENT --official-archive OFFICIAL_GAME_DATA
+--output PRIVATE_REPORT` compares the installed and official catalogue tables
+without modifying either archive. The official catalogue probe does not need
+the item meshes; the installed original client must contain all ten item NIFs.
+
+The original realm identities are Albion monnifs 863 / figure 61, Midgard
+867 / 62 and Hibernia 868 / 63. Their horn choices, cape parts and animation
+sets differ. Shared body part IDs do not authorize substituting one realm's
+complete appearance for another. Only the Hibernian variant is in this review.
+
+Both inspected catalogues contain ten `_min_m` mask/hat items. None is referenced
+by the objects table's twelve Catacombs helmet columns. The three Minotaur
+figures also have no full-helmet slot 9. Consequently this audit does not
+establish playable helmet mappings. Numeric matches in unrelated texture,
+effect or armour columns are different ID namespaces and must not be used as
+helmet mappings. Do not force another race's full helmet onto the Minotaur.
+
 The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,
 textures or morph geometry. Shar and Vampiir native regression cases run against
