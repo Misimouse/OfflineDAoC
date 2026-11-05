@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace, include_promotion=False):
+def verify(workspace, include_promotion=False, include_original_start=False):
     workspace=workspace.resolve()
     lab=workspace/'ExpansionRaceLab'
     creation=workspace/'Reports/minotaur_creation/real_protocol.json'
@@ -50,6 +50,17 @@ def verify(workspace, include_promotion=False):
         result['promotion_cases']=4
         result['evidence'][str(path.relative_to(workspace))]=hashlib.sha256(path.read_bytes()).hexdigest()
         result['pending'].remove('Original trainer promotion')
+    if include_original_start:
+        path=workspace/'Reports/minotaur_original_start/real_protocol.json'
+        start=json.loads(path.read_text())
+        assert start['passed'] and start['real_protocol'] and start['disposable_only']
+        assert all(start[k] for k in ['database_restored','appearance_profile_restored','bridge_config_restored','candidate_files_restored','normal_shutdown','original_start_without_relocation'])
+        assert 'qa_connacht_relocation' not in start and len(start['cases'])==4
+        assert {c['selected_class'] for c in start['cases']}=={43,44,45,46}
+        assert all(c['original_spawn_and_bind_retained'] and c['original_start_zone']==207 and c['existing_character_reentry'] for c in start['cases'])
+        result['original_start_cases']=4
+        result['original_start_zone']=207
+        result['evidence'][str(path.relative_to(workspace))]=hashlib.sha256(path.read_bytes()).hexdigest()
     (lab/'MinotaurServerCandidate/verified_creation.json').write_text(json.dumps(result,indent=2))
     return result
 
@@ -58,5 +69,6 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--include-promotion',action='store_true')
+    parser.add_argument('--include-original-start',action='store_true')
     args=parser.parse_args()
-    print(json.dumps(verify(args.workspace,args.include_promotion)))
+    print(json.dumps(verify(args.workspace,args.include_promotion,args.include_original_start)))

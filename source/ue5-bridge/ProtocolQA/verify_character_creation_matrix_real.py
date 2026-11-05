@@ -12,6 +12,7 @@ parser.add_argument('--minotaur-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--minotaur-promotion',action='store_true')
+parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
 parser.add_argument('--server-source',type=Path)
@@ -22,6 +23,7 @@ args=parser.parse_args()
 promoting=args.shar_promotion or args.minotaur_promotion
 assert not args.shar_promotion or args.shar_candidate
 assert not args.minotaur_promotion or args.minotaur_candidate
+assert not args.minotaur_original_start or (args.minotaur_candidate and not promoting)
 assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
@@ -47,6 +49,7 @@ if args.vampiir_candidate:D=ROOT/'Reports/vampiir_creation';D.mkdir(exist_ok=Tru
 if args.vampiir_shar:D=ROOT/'Reports/vampiir_shar_creation';D.mkdir(exist_ok=True)
 if args.minotaur_candidate:D=ROOT/'Reports/minotaur_creation';D.mkdir(exist_ok=True)
 if args.minotaur_promotion:D=ROOT/'Reports/minotaur_promotion';D.mkdir(exist_ok=True)
+if args.minotaur_original_start:D=ROOT/'Reports/minotaur_original_start';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -399,7 +402,7 @@ try:
                     starts=db.execute('SELECT * FROM StartupLocation WHERE RaceID=9 AND ClassID=? AND Region=200 AND RealmID=3 AND ClientRegionID=0 AND MinVersion=0',(base,)).fetchall()
                     assert len(starts)==1
                     start=starts[0]
-                    if not args.shar_gm_transfer:
+                    if not args.shar_gm_transfer and not args.minotaur_original_start:
                         db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=?,Direction=?,BindXpos=?,BindYpos=?,BindZpos=?,BindRegion=?,BindHeading=? WHERE Name=? AND AccountName=?',
                             (start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],start['XPos'],start['YPos'],start['ZPos'],start['Region'],start['Heading'],name,account_name))
                         report['qa_connacht_relocation']={'source_startup_id':start['StartupLoc_ID'],'original_dol_spawn_verified_first':True,'reason':'Native map currently supports zone207 only; fixture relocation is not a replacement startup rule.'}
@@ -425,10 +428,17 @@ try:
                 wait(lambda:lobby().get('ready') and any(c['name']==name for c in lobby().get('characters',[])),'Fresh login after QA fixture relocation')
                 selected=next(c for c in lobby()['characters'] if c['name']==name)
                 assert selected['prefix']==figure and selected['look']==look
-                report['qa_relocation_loaded_by_fresh_login']=True
+                report['original_start_loaded_by_fresh_login' if args.minotaur_original_start else 'qa_relocation_loaded_by_fresh_login']=True
             send('character_enter',lobby_revision=lobby()['revision'],name=name)
             wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'New character enters '+figure,45)
             wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Chosen figure and look reach world '+figure)
+            if args.minotaur_original_start:
+                assert snapshot['zone_id']==207
+                player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+                expected_pos=[(original['XPos']-35*8192)*.025,original['ZPos']*.025,(original['YPos']-51*8192)*.025]
+                assert all(abs(a-b)<.1 for a,b in zip(player['position_m'],expected_pos)),('Original position changed',player['position_m'],expected_pos)
+                verify_original_bind(name,base)
+                report['original_start_without_relocation']=True
             if args.shar_gm_transfer:
                 wait(lambda:snapshot.get('player_status',{}).get('gm_mode',{}).get('ready'),'Server confirms GM test transfer permission')
                 assert not snapshot['player_status']['gm_mode']['combat_test']
@@ -481,6 +491,9 @@ try:
             report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate});save_report()
             if args.minotaur_candidate:
                 report['cases'][-1].update(original_saved_appearance_bytes=verify_minotaur_saved_appearance(name,look),look=look)
+                if args.minotaur_original_start:
+                    verify_original_bind(name,base)
+                    report['cases'][-1].update(original_spawn_and_bind_retained=True,original_start_zone=207)
                 save_report()
             if promoting:
                 report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()

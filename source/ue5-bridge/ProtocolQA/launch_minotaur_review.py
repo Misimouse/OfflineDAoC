@@ -34,6 +34,8 @@ def main(root, install, engine, smoke=False, smoke_world=False):
     with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True) as db:
         assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0]==config['run_id']
         character=db.execute('SELECT Name FROM DOLCharacters WHERE AccountName=? AND Race=21 ORDER BY Class LIMIT 1',(config['account'],)).fetchone()[0]
+        expected_characters=db.execute('SELECT COUNT(*) FROM DOLCharacters WHERE AccountName=?',(config['account'],)).fetchone()[0]
+        assert expected_characters>=4
     reservations=[]
     try:
         for port in [10361,19747]:
@@ -76,7 +78,7 @@ def main(root, install, engine, smoke=False, smoke_world=False):
                 if (workspace/file).exists():command.append('-DaocBridge'+flag+'='+str(workspace/file))
             if smoke:command+=['-unattended','-nosound','-RenderOffscreen','-DaocBridgeCharacterLobbyLiveProbe='+str(reports/'live_menu.json')]
             if smoke_world:command+=['-unattended','-nosound','-RenderOffscreen','-DaocBridgeAutoTest','-DaocBridgeNavigationProbe','-DaocBridgeCapture='+str(reports/'ArdeeMinotaur.png')]
-            print('Opening isolated Minotaur review. Use the four existing level 5 characters.',flush=True)
+            print('Opening isolated Minotaur review. Existing characters are preserved.',flush=True)
             unreal=subprocess.Popen(command,cwd=project.parent,stdout=unreal_log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
             if smoke_world:
                 def world_ready():
@@ -95,7 +97,7 @@ def main(root, install, engine, smoke=False, smoke_world=False):
             assert unreal.returncode==0
             if smoke:
                 raw=(reports/'live_menu.json').read_bytes();result=json.loads(raw.decode('utf-16' if raw[:2] in [b'\xff\xfe',b'\xfe\xff'] else 'utf-8-sig'))
-                assert result['passed'] and result['characters']==4 and not result['world_entered']
+                assert result['passed'] and result['characters']==expected_characters and not result['world_entered']
                 print('Live private character menu passed.',flush=True)
         finally:
             if unreal and unreal.poll() is None and (smoke or smoke_world):

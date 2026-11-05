@@ -15,8 +15,16 @@ The owner review is exported only after a successful promotion matrix has
 stopped its client and server normally. `--review-output` refuses to overwrite
 an existing review copy. The disposable source fixture is restored afterward.
 The review has four existing level 5 characters with GM account access.
-Creating additional characters is deliberately disabled in this copy until
-their original starting areas are supported by the native map.
+The initial export disables additional creation conservatively. After the
+separate original-start protocol matrix passes, `enable_minotaur_review_creation.py`
+removes only that private guard, with a rollback copy. It preserves all existing
+review characters and never replaces their database.
+
+The original Minotaur coordinates (340874, 467094, 5200 in region 200) are inside
+Connacht zone 207, whose bounds are x=35..43 and y=51..59 in 8192-unit cells.
+The earlier claim that these starts required another native zone was incorrect.
+`--minotaur-original-start` verifies all four careers without fixture relocation,
+including world position, original bind, saved appearance, skills and reentry.
 
 `launch_minotaur_review.py` starts and closes this separate server automatically.
 `--smoke` checks its live character menu; `--smoke-world` checks connection,
