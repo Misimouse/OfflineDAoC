@@ -407,6 +407,35 @@ void UDAoCBridgeSubsystem::WriteReport(){
     FString File;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeReport="),File))return;
     auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("snapshot_last_ms"),SnapshotLastMs);O->SetNumberField(TEXT("snapshot_peak_ms"),SnapshotPeakMs);O->SetNumberField(TEXT("network_frame_ms"),NetworkFrameMs);O->SetNumberField(TEXT("equipment_frame_ms"),EquipmentFrameMs);O->SetNumberField(TEXT("classic_frame_ms"),ClassicFrameMs);O->SetStringField(TEXT("character"),Character);O->SetStringField(TEXT("status"),Status);
     if(PlayerState.IsValid())O->SetObjectField(TEXT("player_status"),PlayerState);O->SetStringField(TEXT("local_animation"),AnimationStates.FindRef(TEXT("player:local")));O->SetBoolField(TEXT("target_in_view"),PlayerSeesTarget());
+    // Opt-in QA reads the meshes actually assigned to render components.
+    // Keep this separate from the requested model ID in the network snapshot.
+    if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeVisualProbe"))){
+        if(ClassicState.IsValid()&&ClassicTab!=TEXT("inventory"))SetClassicTab(TEXT("inventory"));
+        auto Visual=MakeShared<FJsonObject>();
+        Visual->SetNumberField(TEXT("model_id"),EntityModels.FindRef(TEXT("player:local")));
+        const auto LocalActor=Entities.FindRef(TEXT("player:local"));
+        if(auto* Body=Cast<ASkeletalMeshActor>(LocalActor)){
+            auto* Mesh=Body->GetSkeletalMeshComponent()->GetSkeletalMeshAsset();
+            Visual->SetStringField(TEXT("body_asset"),Mesh?Mesh->GetPathName():FString());
+            Visual->SetBoolField(TEXT("body_visible"),Body->GetSkeletalMeshComponent()->IsVisible()&&!Body->IsHidden());
+        }
+        if(auto* Doll=Cast<ASkeletalMeshActor>(ClassicDollActor.Get())){
+            auto* Mesh=Doll->GetSkeletalMeshComponent()->GetSkeletalMeshAsset();
+            Visual->SetStringField(TEXT("portrait_asset"),Mesh?Mesh->GetPathName():FString());
+        }
+        Visual->SetNumberField(TEXT("weapon_components"),LocalEquipment.Num());
+        O->SetObjectField(TEXT("player_visual"),Visual);
+        static int32 ProbeModel=-1,ProbeStage=0;static double ProbeChangedAt=0;static bool ProbeCaptured=false;
+        const int32 CurrentModel=EntityModels.FindRef(TEXT("player:local"));
+        if(CurrentModel>0&&Visual->HasField(TEXT("body_asset"))){
+            if(CurrentModel!=ProbeModel){ProbeModel=CurrentModel;++ProbeStage;ProbeChangedAt=FPlatformTime::Seconds();ProbeCaptured=false;}
+            if(!ProbeCaptured&&FPlatformTime::Seconds()-ProbeChangedAt>1.5){
+                const FString Shot=FPaths::GetPath(File)/FString::Printf(TEXT("visual_stage_%d_%d.png"),ProbeStage,CurrentModel);
+                FScreenshotRequest::RequestScreenshot(Shot,true,false);ProbeCaptured=true;
+            }
+        }
+
+    }
     if(InteractionState.IsValid())O->SetObjectField(TEXT("interaction"),InteractionState);
     if(InventoryState.IsValid())O->SetObjectField(TEXT("inventory"),InventoryState);
     if(ClassicState.IsValid()){O->SetObjectField(TEXT("classic_ui"),ClassicState);O->SetStringField(TEXT("classic_tab"),ClassicTab);O->SetBoolField(TEXT("classic_panel_open"),bClassicOpen);O->SetBoolField(TEXT("classic_ui_visible"),ClassicOverlay.IsValid());}

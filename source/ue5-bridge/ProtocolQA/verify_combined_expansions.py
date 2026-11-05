@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace, include_native_world=False, include_advanced_protocol=False):
+def verify(workspace, include_native_world=False, include_advanced_protocol=False, include_live_forms=False):
     workspace=workspace.resolve()
     candidate=workspace/'ExpansionRaceLab/CombinedExpansionServerCandidate'
     receipt_path=candidate/'build_receipt.json'
@@ -130,6 +130,37 @@ def verify(workspace, include_native_world=False, include_advanced_protocol=Fals
         result['joint_advanced_protocol_cases']=len(groups)
         result['advanced_native_rendering_accepted']=False
         result['pending'][0]='Advanced native transformation rendering and complete expansion data deployment'
+    if include_live_forms:
+        assert include_advanced_protocol and include_native_world
+        forms=[]
+        catalogue=json.loads((workspace/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
+        for race,model in [(9,1883),(11,1885),(12,1884)]:
+            group='class_39_level_5_form_cycle'+('_race_'+str(race) if race!=9 else '')+'_native'
+            folder=workspace/'Reports/combined_expansions/starting_spells'/group
+            path=folder/'real_protocol.json';row=json.loads(path.read_text())
+            assert all(row.get(k) for k in ['passed','real_protocol','disposable_only','combined_expansion_build','complete','database_restored','candidate_server_restored','qa_native_catalogue_restored','normal_shutdown'])
+            assert row['candidate_build_receipt_sha256']==receipt_hash and row['native_observer_exit']==0
+            assert row['checks']['live_native_body_and_portrait_transform'] and row['checks']['live_native_original_body_and_equipment_restored']
+            assert row['race']==race and row['form_model']==model and 25<=row['form_timer_seconds']<=40
+            stages={name:json.loads((folder/('native_'+name+'.json')).read_text())['player_visual'] for name in ['before','transformed','restored']}
+            before,changed,after=(stages[name] for name in ['before','transformed','restored'])
+            assert all(v['body_visible'] and v['body_asset']==v['portrait_asset'] for v in stages.values())
+            assert changed['body_asset']==catalogue[str(model)]['asset'] and changed['weapon_components']==0
+            assert before['body_asset']==after['body_asset'] and before['weapon_components']==after['weapon_components']>0
+            assert changed['body_asset']!=before['body_asset']
+            evidence[group]=digest(path)
+            for name in stages:evidence[group+'_'+name]=digest(folder/('native_'+name+'.json'))
+            assert row['checks']['native_form_inputs_unchanged']
+            assert all(digest(Path(path))==value for path,value in row['native_form_inputs'].items())
+            for index,name in enumerate(['before','transformed','restored'],1):
+                shot=folder/('visual_stage_'+str(index)+'_'+str(stages[name]['model_id'])+'.png')
+                assert shot.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
+                evidence[group+'_'+name+'_capture']=digest(shot)
+            forms.append(race)
+        result['joint_live_native_form_races']=forms
+        result['bainshee_live_native_forms_accepted']=True
+        result['scope']='Joint creation, saved return, native GM entry and three live Bainshee form cycles; no normal activation or complete expansion ability acceptance.'
+        result['pending'][0]='Complete expansion data deployment; other advanced abilities remain separately scoped'
     (candidate/'verified_joint_creation.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     return result
 
@@ -139,4 +170,5 @@ if __name__=='__main__':
     parser.add_argument('--workspace',type=Path,required=True)
     parser.add_argument('--include-native-world',action='store_true')
     parser.add_argument('--include-advanced-protocol',action='store_true')
-    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol)))
+    parser.add_argument('--include-live-forms',action='store_true')
+    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol,args.include_live_forms)))

@@ -10,6 +10,7 @@ parser.add_argument('--career-proposal',type=Path)
 parser.add_argument('--expansion-power',action='store_true')
 parser.add_argument('--vampiir-bolt',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
+parser.add_argument('--native-form-probe',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
@@ -43,6 +44,7 @@ assert args.level is None or class_id in [39,58,62] or args.druid_promotion,'Adv
 assert not args.druid_promotion or (class_id==47 and args.level==5 and not proposal_path and not training_mode and not native_combat_mode),'Druid promotion uses the original level-five Naturalist and trainer'
 level=args.level or (3 if class_id==52 else 1)
 assert level!=6 or class_id==58, 'The level-six boundary fixture is specific to original Vampiir career abilities'
+assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined_expansions)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
@@ -60,6 +62,7 @@ assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bain
 D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] or args.druid_promotion else '')+('_promotion' if args.bainshee_promotion or args.druid_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else '')+('_bolt' if args.vampiir_bolt else ''));D.mkdir(parents=True,exist_ok=True)
 if args.vampiir_promotion:D=ROOT/'Reports/starting_spells'/('class_58_level_5_promotion_race_'+str(args.vampiir_race)+('_female' if args.vampiir_female else '_male'));D.mkdir(parents=True,exist_ok=True)
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions/starting_spells'/D.name;D.mkdir(parents=True,exist_ok=True)
+if args.native_form_probe:D=D.parent/(D.name+'_native');D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -496,6 +499,17 @@ try:
   wait(lambda:snapshot.get('player_status',{}).get('ready') and bool(local_player()),'Bainshee world and vitals ready')
   original=dict(local_player());assert not original.get('morphed')
   worn=[(x['slot'],x.get('model')) for x in inv().get('items',[])]
+  if args.native_form_probe:
+   import importlib.util
+   spec=importlib.util.spec_from_file_location('form_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
+   native_inputs=[ROOT/'ExpansionRaceLab/FormLiveHost/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll']+[ROOT/'ExpansionRaceLab/MinotaurOwnerReview'/name for name in ['models.json','equipment_catalog.json','appearance_catalog.json']]
+   result['native_form_inputs']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in native_inputs}
+   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=100,entity_ids=['player:local'],render=True,native_profile='expansion_forms');sock=relay
+   wait(lambda:bool(relay.read_report().get('player_visual',{}).get('body_asset')) and bool(relay.read_report().get('player_visual',{}).get('portrait_asset')),'Native original body and inventory portrait actually rendered',90)
+   native_before=relay.read_report()['player_visual']
+   assert native_before['body_visible'] and native_before['body_asset']
+   (D/'native_before.json').write_text(json.dumps(relay.read_report(),indent=2),encoding='utf-8')
+
   send('move',position_m=original['position_m'],forward_xz=original['forward_xz'],speed_mps=0);settle(2)
   if snapshot['player_status']['vitals'].get('sitting'):
    send('player_sit',on=False,player_generation=snapshot['player_status']['generation']);wait(lambda:not snapshot['player_status']['vitals'].get('sitting'),'Stand before casting')
@@ -511,6 +525,16 @@ try:
   form_model={9:1883,11:1885,12:1884}[args.bainshee_race]
   wait(lambda:local_player().get('morphed') and local_player().get('model_id')==form_model,'Original offensive CastFinished transforms Bainshee',20)
   changed_at=time.monotonic()
+  if args.native_form_probe:
+   catalogue=json.loads((ROOT/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
+   expected_asset=catalogue[str(form_model)]['asset']
+   wait(lambda:relay.read_report().get('player_visual',{}).get('body_asset')==expected_asset and relay.read_report().get('player_visual',{}).get('portrait_asset')==expected_asset,'Native body and portrait follow real server transformation',12)
+   visual=relay.read_report()['player_visual']
+   assert visual['body_visible'] and visual['weapon_components']==0
+   assert visual.get('portrait_asset')==expected_asset
+   (D/'native_transformed.json').write_text(json.dumps(relay.read_report(),indent=2),encoding='utf-8')
+   result['checks']['live_native_body_and_portrait_transform']=True
+
   assert local_player().get('look',{})==original.get('look',{})
   result['checks']['original_offensive_cast_transforms']=True
   result['form_spell']="Bawler's Bruise";result['form_model']=form_model;result['race']=args.bainshee_race
@@ -520,6 +544,17 @@ try:
   assert local_player().get('look',{})==original.get('look',{})
   assert [(x['slot'],x.get('model')) for x in inv().get('items',[])]==worn
   result['checks']['original_timer_restores_appearance_and_inventory']=True
+  if args.native_form_probe:
+   wait(lambda:relay.read_report().get('player_visual',{}).get('body_asset')==native_before['body_asset'] and relay.read_report().get('player_visual',{}).get('portrait_asset')==native_before['portrait_asset'],'Native body and portrait restore actual original meshes',12)
+   visual=relay.read_report()['player_visual']
+   assert visual['body_visible'] and visual['weapon_components']==native_before['weapon_components']
+   assert visual.get('portrait_asset')==native_before.get('portrait_asset')
+   (D/'native_restored.json').write_text(json.dumps(relay.read_report(),indent=2),encoding='utf-8')
+   result['checks']['live_native_original_body_and_equipment_restored']=True
+   assert all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==value for path,value in result['native_form_inputs'].items())
+   result['checks']['native_form_inputs_unchanged']=True
+   sock=relay.backend;sock.settimeout(.1)
+
   result['combat_damage_tested']=False
  send('chat',text='/quit')
  wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if native_combat_mode or training_mode or args.expansion_power or args.druid_promotion else 45)

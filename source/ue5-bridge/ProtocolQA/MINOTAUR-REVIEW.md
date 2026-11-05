@@ -137,3 +137,31 @@ not a live Unreal transformation rendering claim. `verify_combined_expansions.py
 including restored QA data and clean shutdown. Missing Bainshee promotion gift
 `bainshee_item` is recorded; the pinned public reference contains no matching
 item. Do not manufacture a replacement as part of this acceptance.
+
+Live native form witnesses add `--native-form-probe` to each combined Bainshee
+form-cycle run. The read-only relay uses the separate private `FormLiveHost`,
+current review catalogues, and full original UI snapshots. The opt-in
+`-DaocBridgeVisualProbe` opens the actual inventory and reports the meshes
+assigned to the world and portrait components; it does not change model,
+equipment or spell state. Reports `native_before.json`, `native_transformed.json`
+and `native_restored.json` must show the correct original form asset, zero worn
+weapon components during transformation, and restoration of the actual initial
+body, portrait and equipment count. The original server controls the timer.
+`verify_combined_expansions.py --include-native-world --include-advanced-protocol
+--include-live-forms` requires the three races, matching server build, clean
+native/client/server exits and restored QA fixture. This accepts the Bainshee
+form cycle specifically, not every expansion ability or normal deployment.
+The private observer binary is separate from `SharLobbyHost`; existing creation
+UI evidence continues to pin its original binary.
+
+`prepare_combined_expansion_data.py --workspace PRIVATE_WORKSPACE` exercises
+both spell proposals, Vampiir career associations, six missing original starter
+templates and five original Shar/Minotaur starting records together. It requires
+the joint native acceptance, an offline marked QA database and pinned DOL
+references. Independent startup proposals receive unique surrogate IDs in the
+combined package; original coordinates remain unchanged. All SQL is rolled
+back, then the offline fixture's exact original bytes are restored because
+SQLite rollback alone can retain physical page/header differences. The output
+is a JSON insertion proposal, not activation, inventory grants or a played DB.
+The successful combined dry run adds 254 spells, 253 spell associations, four
+abilities, 19 career associations, six item templates and five startup rows.
