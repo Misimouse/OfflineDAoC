@@ -1,17 +1,19 @@
 extends SceneTree
 class FakeServer extends Node:
-    const RACE_BY_NAME={"Celt":9,"Firbolg":10,"Elf":11,"Lurikeen":12,"Sylvan":15}
+    const RACE_BY_NAME={"Celt":9,"Firbolg":10,"Elf":11,"Lurikeen":12,"Sylvan":15,"Shar":18}
     var playing:=false
     var list_pending:=false
     var characters:Array=[{"name":"Existinghero","slot":0,"race":"Celt","gender":"male","level":1,"class_name":"Naturalist","prefix":"cel_m"}]
     var calls:Array=[]
     var classes:Dictionary={"classes":{"39":{"gender":"female"}}}
     var offer_bainshee:=false
+    var offer_shar:=false
     func character_list_pending()->bool:return list_pending
     func characters_in(_realm:String)->Array:return characters
     func classes_for(_realm:String,race:int,_female:bool)->Array:
         var out:Array=[[53,"Naturalist"]] if race==9 else []
         if offer_bainshee and race in [9,11,12]:out.append([39,"Bainshee"])
+        if offer_shar and race==18:out.append_array([[42,"Mentalist"],[43,"Blademaster"],[44,"Heroine" if _female else "Hero"],[45,"Champion"],[50,"Ranger"]])
         return out
     func name_error(name:String)->String:return "Invalid name." if not RegEx.create_from_string("^[A-Z][a-zA-Z]{2,22}$").search(name) else ""
     func check_name(name:String)->void:calls.append(["check_name",name])
@@ -54,6 +56,25 @@ func run()->void:
     server.classes.classes["39"].gender="unknown";lobby.refresh(server)
     check(not lobby.choices.any(func(c):return int(c.class_id)==39),"invalid gender metadata never enables an unsupported choice")
     server.offer_bainshee=false;lobby.refresh(server)
+    check(not lobby.choices.any(func(c):return c.race=="Shar"),"transport metadata alone cannot enable Shar without server class choices")
+    server.offer_shar=true;lobby.refresh(server)
+    var shar_choices:Array=lobby.choices.filter(func(c):return c.race=="Shar")
+    check(shar_choices.size()==10 and shar_choices.all(func(c):return int(c.class_id) in [42,43,44,45,50]),"Shar exposes exactly the five authorized classes for both sexes")
+    check(not lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Shar:f:46","name":"Deniedshar"},server,0) and server.calls.is_empty(),"crafted Shar Warden cannot bypass server eligibility")
+    if "--bridge-shar-test" in OS.get_cmdline_user_args():
+        for female in [false,true]:
+            var prefix:String="sha_f" if female else "sha_m"
+            var shar_look:Dictionary={"face":1,"eyes":7,"skin":3,"hair":1,"hair_color":2,"tattoo":1,"size":2,"sliders":[1,6,2,7]}
+            check(lobby.validated_look(shar_look,prefix).ok,"original Shar metadata validates a full distinct look for "+prefix)
+            check(not lobby.validated_look({"eyes":8},prefix).ok,"Shar eye index remains bounded by original choices")
+            var name:String="Sharwoman" if female else "Sharman"
+            check(lobby.execute({"action":"character_create","lobby_revision":lobby.revision,"choice_id":"Shar:"+("f" if female else "m")+":42","name":name,"look":shar_look},server,100),"Shar creation starts the original name check")
+            lobby.name_result(name,0,server,101)
+            var packet:Array=server.creations()[-1] if not server.creations().is_empty() else []
+            check(packet.size()==6 and packet[1]=="Shar" and packet[2]==female and packet[3]==42 and packet[5]==shar_look,"Shar sex, class and complete appearance reach the original creation API")
+            lobby.creation_result(true,"");server.calls.clear()
+    server.offer_shar=false;lobby.refresh(server)
+    check(not lobby.choices.any(func(c):return c.race=="Shar"),"withdrawn Shar eligibility immediately removes all expansion choices")
     for prefix in ["cel_m","cel_f","elf_m","elf_f","fir_m","fir_f","lur_m","lur_f","syl_m","syl_f"]:
         check(lobby.validated_look({},prefix).ok,"original default appearance exists for "+prefix)
     check(not lobby.validated_look({"sliders":[NAN]},"cel_m").ok,"nonfinite facial features cannot enter a packet")

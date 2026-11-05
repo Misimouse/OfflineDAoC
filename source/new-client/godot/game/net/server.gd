@@ -52,17 +52,17 @@ const RACES := {1: ["Briton", "bri", 32, 35], 2: ["Avalonian", "ava", 61, 65], 3
 		4: ["Saracen", "sar", 48, 52], 5: ["Norseman", "nor", 503, 507], 6: ["Troll", "tro", 137, 145],
 		7: ["Dwarf", "dwa", 185, 193], 8: ["Kobold", "kob", 169, 177], 9: ["Celt", "cel", 302, 310],
 		10: ["Firbolg", "fir", 286, 294], 11: ["Elf", "elf", 334, 342], 12: ["Lurikeen", "lur", 318, 326],
-		13: ["Inconnu", "inc", 716, 724], 14: ["Valkyn", "val", 773, 781], 15: ["Sylvan", "syl", 700, 708]}
+		13: ["Inconnu", "inc", 716, 724], 14: ["Valkyn", "val", 773, 781], 15: ["Sylvan", "syl", 700, 708], 18: ["Shar", "sha", 1075, 1087]}
 const RACE_BY_NAME := {"Briton": 1, "Avalonian": 2, "Highlander": 3, "Saracen": 4, "Norse": 5, "Norseman": 5,
 		"Troll": 6, "Dwarf": 7, "Kobold": 8, "Celt": 9, "Firbolg": 10, "Elf": 11, "Lurikeen": 12, "Inconnu": 13,
-		"Valkyn": 14, "Sylvan": 15}
+		"Valkyn": 14, "Sylvan": 15, "Shar": 18}
 # GlobalConstants.STARTING_STATS_DICT, in the client's packet order STR DEX CON QUI INT PIE EMP CHA
 const RACE_STATS := {1: [60, 60, 60, 60, 60, 60, 60, 60], 2: [45, 60, 45, 70, 80, 60, 60, 60],
 		3: [70, 50, 70, 50, 60, 60, 60, 60], 4: [50, 80, 50, 60, 60, 60, 60, 60], 5: [70, 50, 70, 50, 60, 60, 60, 60],
 		6: [100, 35, 70, 35, 60, 60, 60, 60], 7: [60, 50, 80, 50, 60, 60, 60, 60], 8: [50, 70, 50, 70, 60, 60, 60, 60],
 		9: [60, 60, 60, 60, 60, 60, 60, 60], 10: [90, 40, 60, 40, 60, 60, 70, 60], 11: [40, 75, 40, 75, 70, 60, 60, 60],
 		12: [40, 80, 40, 80, 60, 60, 60, 60], 13: [50, 70, 60, 50, 70, 60, 60, 60], 14: [55, 65, 45, 75, 60, 60, 60, 60],
-		15: [70, 55, 60, 45, 70, 60, 60, 60]}
+		15: [70, 55, 60, 45, 70, 60, 60, 60], 18: [60, 50, 80, 50, 60, 60, 60, 60]}
 const CUSTOM_CLASS_ID := 63               # the Sluaghbinder (the server's eCharacterClass.Sluaghbinder)
 const STAT_INDEX := {"STR": 0, "DEX": 1, "CON": 2, "QUI": 3, "INT": 4, "PIE": 5, "EMP": 6, "CHR": 7, "CHA": 7}
 # eLoginError (packets\Server\IPacketLib.cs) -> what the player reads

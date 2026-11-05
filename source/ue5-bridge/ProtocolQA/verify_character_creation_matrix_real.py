@@ -1,7 +1,7 @@
 """Create and reenter ten original race/sex figures in a marked disposable database only."""
 from qa_runtime import *
 import hashlib,shutil,socket,sqlite3,subprocess,time,traceback
-import argparse,importlib.util,sys
+import argparse,ast,importlib.util,re,sys
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
@@ -194,21 +194,27 @@ try:
                 ('15: ["Sylvan", "syl", 700, 708]}','15: ["Sylvan", "syl", 700, 708], 18: ["Shar", "sha", 1075, 1087]}'),
                 ('"Valkyn": 14, "Sylvan": 15}','"Valkyn": 14, "Sylvan": 15, "Shar": 18}'),
                 ('15: [70, 55, 60, 45, 70, 60, 60, 60]}','15: [70, 55, 60, 45, 70, 60, 60, 60], 18: [60, 50, 80, 50, 60, 60, 60, 60]}')]:
-                assert text.count(old)==1,('Private Shar transport anchor',old)
-                text=text.replace(old,new,1)
+                if new not in text:
+                    assert text.count(old)==1,('Private Shar transport anchor',old)
+                    text=text.replace(old,new,1)
             original_net.write_text(text,encoding='utf-8')
+            canonical_net=(Path(__file__).resolve().parents[2]/'new-client/godot/game/net/server.gd').read_text(encoding='utf-8-sig')
+            for table in ['RACES','RACE_BY_NAME','RACE_STATS']:
+                pattern=r'const '+table+r'\s*:=\s*(\{.*?\})'
+                private_table=re.search(pattern,text,re.S);source_table=re.search(pattern,canonical_net,re.S)
+                assert private_table and source_table, ('Missing transport table',table)
+                assert ast.literal_eval(private_table[1])==ast.literal_eval(source_table[1]), ('QA transport differs from canonical source',table)
+            report['canonical_transport_metadata_verified']=True
             report['private_transport_sha256']=hashlib.sha256(original_net.read_bytes()).hexdigest()
         report['candidate_only']=True;report['server_build_sha256']=hashlib.sha256((build/'GameServer.dll').read_bytes()).hexdigest()
     for p in SOURCE.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
     if args.shar_candidate:
         p=RUN/'Godot/character_lobby.gd';text=p.read_text(encoding='utf-8-sig')
-        old='["Celt","Firbolg","Elf","Lurikeen","Sylvan"]';assert text.count(old)==1
-        text=text.replace(old,'["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]',1)
-        old='"Sylvan":"syl"}';assert text.count(old)==1
-        p.write_text(text.replace(old,'"Sylvan":"syl","Shar":"sha"}',1),encoding='utf-8')
-        p=RUN/'Godot/character_appearance.gd';text=p.read_text(encoding='utf-8-sig');old='"syl_m","syl_f"]';assert text.count(old)==1
-        p.write_text(text.replace(old,'"syl_m","syl_f","sha_m","sha_f"]',1),encoding='utf-8')
-        report['private_gateway_only']=True
+        assert '["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]' in text
+        assert '"Sylvan":"syl","Shar":"sha"}' in text
+        p=RUN/'Godot/character_appearance.gd';text=p.read_text(encoding='utf-8-sig')
+        assert '"syl_m","syl_f","sha_m","sha_f"]' in text
+        report['canonical_gateway_shar_support']=True
     p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
     # Observe the original parsed skill lists without changing their contents.
     p=RUN/'Godot/live_gateway.gd';text=p.read_text();anchor='var states:Array=[]';assert anchor in text

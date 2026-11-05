@@ -36,7 +36,8 @@ func refresh(server:Node)->void:
         if caption.is_empty():
             caption=String({51:"Magician",52:"Guardian",53:"Naturalist",54:"Stalker",57:"Forester"}.get(int(c.get("class_id",0)),""))
         roster.append({"name":String(c.name),"slot":int(c.slot),"race":String(c.get("race","")),"gender":String(c.get("gender","")),"level":int(c.get("level",1)),"class_name":caption,"prefix":String(c.get("prefix","")),"location":String(c.get("location_text","")),"look":stored_look(c),"overview":c.get("server",{}).duplicate(true)})
-    for race_name in ["Celt","Firbolg","Elf","Lurikeen","Sylvan"]:
+    for race_name in ["Celt","Firbolg","Elf","Lurikeen","Sylvan","Shar"]:
+        if not server.RACE_BY_NAME.has(race_name):continue
         var race_id:int=int(server.RACE_BY_NAME[race_name])
         for female in [false,true]:
             for cls in server.classes_for(realm,race_id,female):
@@ -105,7 +106,7 @@ func execute(value:Dictionary,server:Node,now:int)->bool:
     if error!="":return fail(error)
     for c in roster:
         if String(c.name).nocasecmp_to(name)==0:return fail("You already have a character with that name.")
-    var prefixes:Dictionary={"Celt":"cel","Firbolg":"fir","Elf":"elf","Lurikeen":"lur","Sylvan":"syl"}
+    var prefixes:Dictionary={"Celt":"cel","Firbolg":"fir","Elf":"elf","Lurikeen":"lur","Sylvan":"syl","Shar":"sha"}
     var checked:Dictionary=validated_look(value.get("look",{}),String(prefixes[selected.race])+("_f" if selected.female else "_m"))
     if not checked.ok:return fail(String(checked.error))
     var look:Dictionary=checked.look
