@@ -1,4 +1,4 @@
-"""Remove only the private review creation guard after original-start protocol QA."""
+"""Enable only Minotaur creation in the private review after original-start QA."""
 import argparse
 import hashlib
 import json
@@ -33,21 +33,31 @@ def enable(workspace):
     lobby = root/'Godot/character_lobby.gd'
     assert lobby.resolve().is_relative_to(root)
     block = '    if action=="character_create":return fail("Use the four review characters. New character starting areas are not enabled in this review.")\n'
+    scoped = '    if action=="character_create" and not String(value.get("choice_id","")).begins_with("Minotaur:"):return fail("This review currently supports creating Minotaur characters.")\n'
     text = lobby.read_text(encoding='utf-8-sig')
     receipt = root/'creation_enabled.json'
     if block not in text:
         assert receipt.exists(), 'Unexpected private lobby contents'
         existing = json.loads(receipt.read_text())
         assert existing['lobby_after_sha256'] == hashlib.sha256(lobby.read_bytes()).hexdigest()
-        return existing
-    assert text.count(block) == 1
-    backup = root/'Godot/character_lobby.before_creation_enable.gd.bak'
+        if existing.get('creation_scope')=='minotaur_only':
+            assert scoped in text
+            return existing
+        anchor='    var action:=String(value.get("action",""))\n'
+        assert text.count(anchor)==1
+        updated=text.replace(anchor,anchor+scoped)
+        backup=root/'Godot/character_lobby.before_minotaur_only_scope.gd.bak'
+    else:
+        assert text.count(block)==1
+        updated=text.replace(block,scoped)
+        backup=root/'Godot/character_lobby.before_creation_enable.gd.bak'
     assert not backup.exists(), 'Preserve the existing rollback copy'
     before = lobby.read_bytes()
     backup.write_bytes(before)
-    lobby.write_text(text.replace(block, ''), encoding='utf-8')
+    lobby.write_text(updated, encoding='utf-8')
     result = {'passed': True, 'review_only': True, 'normal_installation_modified': False,
               'review_database_modified': False, 'original_start_zone': 207,
+              'creation_scope': 'minotaur_only',
               'careers_verified': 4, 'protocol_proof_sha256': hashlib.sha256(proof.read_bytes()).hexdigest(),
               'lobby_before_sha256': hashlib.sha256(before).hexdigest(),
               'lobby_after_sha256': hashlib.sha256(lobby.read_bytes()).hexdigest(),

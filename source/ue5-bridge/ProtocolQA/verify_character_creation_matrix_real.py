@@ -15,6 +15,7 @@ parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--minotaur-promotion',action='store_true')
 parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--combined-expansions',action='store_true')
+parser.add_argument('--native-world-probe',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
 parser.add_argument('--server-source',type=Path)
@@ -27,6 +28,7 @@ assert not args.shar_promotion or args.shar_candidate
 assert not args.minotaur_promotion or args.minotaur_candidate
 assert not args.minotaur_original_start or (args.minotaur_candidate and not promoting)
 assert not args.combined_expansions or args.candidate_build
+assert not args.native_world_probe or (args.combined_expansions and (args.minotaur_original_start or args.bainshee_candidate or args.vampiir_candidate))
 assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
@@ -54,10 +56,11 @@ if args.minotaur_candidate:D=ROOT/'Reports/minotaur_creation';D.mkdir(exist_ok=T
 if args.minotaur_promotion:D=ROOT/'Reports/minotaur_promotion';D.mkdir(exist_ok=True)
 if args.minotaur_original_start:D=ROOT/'Reports/minotaur_original_start';D.mkdir(exist_ok=True)
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions'/D.name;D.mkdir(parents=True,exist_ok=True)
+if args.native_world_probe:D=D.parent/(D.name+'_world');D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
-server=client=sock=None;logs=[];session='';buffer=b'';snapshot={};serial=0;backed=False
+server=client=sock=native_process=None;logs=[];session='';buffer=b'';snapshot={};serial=0;backed=False
 store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
 assert store.resolve().is_relative_to(RUN.resolve())
 store_before=store.read_bytes() if store.exists() else None
@@ -153,7 +156,7 @@ try:
         # All ten creation slots are needed; this account/database is explicitly
         # disposable and the entire database is restored in finally.
         db.execute('DELETE FROM DOLCharacters WHERE AccountName=?',(account_name,))
-        db.execute('UPDATE Account SET PrivLevel=?,Realm=3 WHERE Name=?',(3 if args.shar_gm_transfer else 1,account_name))
+        db.execute('UPDATE Account SET PrivLevel=?,Realm=3 WHERE Name=?',(3 if (args.shar_gm_transfer or args.native_world_probe) else 1,account_name))
         if args.starter_equipment_repair:
             sys.path.insert(0,str(Path(__file__).resolve().parent))
             from prepare_hibernia_starter_repair import prepare as prepare_starter_repair
@@ -208,6 +211,7 @@ try:
                 report['shar_startup_insert_rows']=proposal['insert_rows']
     if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate or args.minotaur_candidate or args.combined_expansions:
         config_data=json.loads(config_before);config_data['custom_class']=False
+        if args.native_world_probe and args.minotaur_original_start:config_data['initial_spawn_m']=[1353.85,130.0,1232.55]  # Exact original DOL Minotaur start; no QA transfer.
         config.write_text(json.dumps(config_data),encoding='utf-8')
     if candidate_mode:
         server_source=args.server_source.resolve();assert (server_source/'GameServer/playerclasses/hibernia/ClassBainshee.cs').exists()
@@ -279,6 +283,19 @@ try:
     p=RUN/'Godot/live_gateway.gd';text=p.read_text();anchor='var states:Array=[]';assert anchor in text
     p.write_text(text.replace(anchor,'transport.snapshot_metadata["qa_skill_audit"]={"skills":server.skills,"spell_lines":server.spell_lines}\n        '+anchor),encoding='utf-8')
     p=RUN/'Godot/visual_bridge.gd';text=p.read_text();assert '["character",' in text;p.write_text(text.replace('["character",','["qa_skill_audit","character",'),encoding='utf-8')
+    if args.native_world_probe:
+        # Test-only peer release: StreamPeerTCP may retain CONNECTED after the
+        # observer closes. Explicitly clear it before handing this one-peer
+        # private transport to Unreal; no production command is added.
+        p=RUN/'Godot/visual_bridge.gd';text=p.read_text()
+        anchor='        if not permitted: rejected += 1; continue'
+        assert text.count(anchor)==1
+        p.write_text(text.replace(anchor,'        if action=="qa_native_handoff":permitted=true\n'+anchor),encoding='utf-8')
+        p=RUN/'Godot/live_gateway.gd';text=p.read_text()
+        anchor='    var action:=String(value.get("action",""))\n'
+        assert text.count(anchor)==1
+        text=text.replace(anchor,anchor+'    if action=="qa_native_handoff":\n        transport.peer.disconnect_from_host();transport.peer=null\n        connected_once=false;began=Time.get_ticks_msec();last_peer=began\n        return\n')
+        p.write_text(text,encoding='utf-8')
     (RUN/'SourceModels').mkdir(exist_ok=True);shutil.copy2(ROOT/'SourceModels/tasks.json',RUN/'SourceModels/tasks.json')
     tasks=json.loads((ROOT/'SourceModels/tasks.json').read_text())
     if uses_shar:
@@ -392,8 +409,9 @@ try:
         assert lobby()['feedback']=='Choose a valid race and class.'
         report['invalid_choice_recoverable']=True
         if args.eligibility_only:cases=[]
+    if args.native_world_probe:cases=cases[-1:]  # Focus the native witness; the full four-career matrix has its own seal.
     for race,prefix,advanced,base in cases:
-        for female in ([False] if args.classic_class_batch is not None or args.minotaur_candidate else ([True] if args.bainshee_candidate else [False,True])):
+        for female in ([True] if args.native_world_probe and not args.minotaur_candidate else ([False] if args.classic_class_batch is not None or args.minotaur_candidate else ([True] if args.bainshee_candidate else [False,True]))):
             figure=prefix if args.minotaur_candidate else prefix+('_f' if female else '_m');choice=next(c for c in lobby()['choices'] if c['race']==race and c['female']==female and c['class_id']==advanced)
             meta=json.loads(((ROOT/'ExpansionRaceLab/MinotaurModularCandidate/content/characters/races' if args.minotaur_candidate else game/'godot/content/characters/races')/figure/'figure.json').read_text())
             look={'size':2,'face':0,'eyes':0,'skin':0,'hair':0,'hair_color':0,'tattoo':0,'sliders':[2 if i%2 else 6 for i in range(len(meta.get('sliders',[])))]}
@@ -517,11 +535,36 @@ try:
                 verify_original_bind(name,base)
                 report['cases'][-1].update(original_bind_preserved=True,server_authorized_gm_transfer=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    expected_count=len(cases) if args.classic_class_batch is not None or args.minotaur_candidate else (3 if args.bainshee_candidate else ((6 if args.vampiir_shar else 4) if args.vampiir_candidate else 10))
+    expected_count=len(cases) if args.native_world_probe or args.classic_class_batch is not None or args.minotaur_candidate else (3 if args.bainshee_candidate else ((6 if args.vampiir_shar else 4) if args.vampiir_candidate else 10))
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
+    if args.native_world_probe:
+        send('character_enter',lobby_revision=lobby()['revision'],name=name)
+        wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('zone_id')==207,'Disposable character ready for native handoff')
+        wait(lambda:any(e.get('id')=='player:local' and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Native handoff retains chosen identity')
+        # The bridge supports one peer. Hand it to Unreal only after every
+        # protocol case has finished; its normal automatic logout saves and
+        # closes the disposable gateway before fixture restoration.
+        with checked() as db:
+            bind_columns='BindXpos,BindYpos,BindZpos,BindRegion,BindHeading'
+            handoff_bind=tuple(db.execute('SELECT '+bind_columns+' FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone())
+        send('qa_native_handoff');time.sleep(.5);sock.close();sock=None
+        from probe_combined_native_world import start, observe
+        native_process=start(ROOT,INSTALL,ENGINE,D)
+        report['native_world_probe']=observe(native_process,D,name,client)
+        client.wait(timeout=90);assert client.returncode==0
+        with checked() as db:
+            assert tuple(db.execute('SELECT '+bind_columns+' FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone())==handoff_bind
+        report['native_world_bind_retained']=True
+        report['native_world_model_id']=models[figure]
+        if args.minotaur_original_start:
+            verify_original_bind(name,base)
+            report['native_world_original_bind_retained']=True
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
 finally:
+    if native_process and native_process.poll() is None:
+        native_process.terminate();native_process.wait(timeout=20)
+        report['errors'].append('Disposable native probe required forced stop')
     if sock and session:
         try:send('logout')
         except OSError:pass

@@ -17,8 +17,10 @@ an existing review copy. The disposable source fixture is restored afterward.
 The review has four existing level 5 characters with GM account access.
 The initial export disables additional creation conservatively. After the
 separate original-start protocol matrix passes, `enable_minotaur_review_creation.py`
-removes only that private guard, with a rollback copy. It preserves all existing
-review characters and never replaces their database.
+replaces that guard with a Minotaur-only creation scope, with a rollback copy.
+Other races remain outside this review's creation scope until their native
+entry and starter equipment are integrated. Existing review characters and
+their database are preserved.
 
 The original Minotaur coordinates (340874, 467094, 5200 in region 200) are inside
 Connacht zone 207, whose bounds are x=35..43 and y=51..59 in 8192-unit cells.
@@ -94,6 +96,22 @@ The broader native facial-weight suite still reports the source-empty
 Minotaur horn target limitation; its failure is retained explicitly in the
 joint seal. This is not deployment approval or joint live-world acceptance.
 Mauler remains outside this package.
+
+For the live native witness, add `--native-world-probe` to the combined
+Minotaur original-start matrix. This focuses on one Warden-path creation and
+reentry; the full four-career matrix remains independently sealed. The harness
+then enters that disposable character and closes its protocol observer socket.
+The disposable transport first explicitly releases its observer peer; this
+test-only command is injected into the QA copy, never the production gateway.
+Unreal then takes the bridge's single peer, renders the actual Connacht map,
+records connected/navigation evidence and a screenshot, and logs out normally.
+Only then may the harness restore its disposable fixture. Reports go to a
+separate `minotaur_original_start_world` directory.
+
+`verify_combined_expansions.py --include-native-world` additionally verifies
+this witness, the unchanged original bind, normal shutdown and absence of
+missing local weapon models/bones. It does not mark Bainshee/Vampiir native
+world entry or the Horn Size feature as accepted.
 
 The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,
