@@ -30,6 +30,11 @@ args=parser.parse_args();class_id=args.class_id
 promotion_mode=args.bainshee_promotion or args.vampiir_promotion
 training_mode=args.bainshee_training or args.expansion_training
 native_combat_mode=args.bainshee_combat or args.vampiir_bolt
+joint_vampiir_behavior=(class_id==58 and args.level==50 and bool(args.combined_data)
+                       and bool(args.career_proposal) and (args.expansion_power or args.vampiir_bolt
+                       or (args.expansion_training and args.expansion_self_buff)))
+joint_bainshee_behavior=(class_id==39 and args.level==50 and bool(args.combined_data)
+                        and (args.bainshee_training or args.bainshee_combat or bool(args.bainshee_effect)))
 training_lines={39:['Spectral Guard','Phantasmal Wail','Ethereal Shriek'],58:['Dementia','Shadow Mastery','Vampiiric Embrace'],62:['Aura Manipulation','Magnetism','Power Strikes']}
 trainer_types={39:'BainsheeTrainer',58:'VampiirTrainer',62:'HiberniaMaulerTrainer'}
 training_level=5 if class_id==62 else 4
@@ -51,8 +56,8 @@ assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle r
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
 assert args.server_source is None or promotion_mode or args.combined_expansions
-assert not args.candidate_build or args.vampiir_promotion or (args.combined_expansions and (args.bainshee_promotion or args.bainshee_form_cycle))
-assert not args.combined_expansions or ((promotion_mode or args.bainshee_form_cycle) and args.candidate_build and args.server_source)
+assert not args.candidate_build or args.vampiir_promotion or (args.combined_expansions and (args.bainshee_promotion or args.bainshee_form_cycle or joint_vampiir_behavior or joint_bainshee_behavior))
+assert not args.combined_expansions or ((promotion_mode or args.bainshee_form_cycle or joint_vampiir_behavior or joint_bainshee_behavior) and args.candidate_build and args.server_source)
 assert not args.vampiir_female or args.vampiir_promotion
 assert args.vampiir_race==9 or args.vampiir_promotion
 assert not args.bainshee_effect or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_form_cycle)

@@ -202,3 +202,38 @@ race/class. The optional launcher receipt checks the installed library hashes.
 The normal launcher, normal DB, WORK and existing review characters are separate.
 After installation, the actual native menu smoke passed without world entry;
 character, inventory, quest and task table hashes matched the pre-migration backup.
+
+## Joint class behavior
+
+The creation/promotion gate is followed by original class behavior with the
+**complete preloaded joint data**, rather than independently inserted spell
+subsets. `run_combined_vampiir_behavior.py --workspace <bridge> --install <game>
+--mode power|buff|bolt` uses the existing marked disposable fixture and accepted
+joint server. The power case starts empty and requires real melee damage to
+generate power. The buff case trains with original point costs, checks resource
+consumption/effect state and saved learned spells. The bolt case rejects a target
+marked unseen, supplies the actual native geometry probe result, and requires
+the original instant ability to gain power without inventing health damage.
+
+`run_combined_bainshee_behavior.py` uses the same arguments with modes `training`,
+`combat`, `ward` and `barrier`. Training must survive saved reentry. Combat uses
+normal player privileges, requires movement to interrupt, actual health damage,
+mana consumption and native answers to server sight queries. Protection probes
+require the original released client-effect identities, not fabricated packets.
+Run each case sequentially; all use the same private fixture ports and restore
+their database, configuration and candidate libraries before the next case.
+
+`verify_combined_vampiir_behavior.py` seals the three Vampiir reports.
+`verify_combined_class_behavior.py` additionally seals the four Bainshee reports.
+Both pin the full data payload and joint binary receipt and require a complete
+server/UI spell list, successful normal shutdown and restored private fixture.
+Output is separate from earlier creation/form receipts so new behavior witnesses
+do not retroactively relabel those narrower checks. Spell aesthetics, audio,
+complete class coverage and normal deployment remain separate acceptance.
+
+The joint sealer accepts `--include-class-behavior --include-private-review`
+in addition to its earlier gates. It requires all seven behavior witnesses,
+checks the actual six installed private-review libraries against their receipt,
+and includes the prior live-menu/progress-preservation evidence. Its pending
+status then advances to owner review and normal delivery: the completed private
+review migration must no longer appear as work still waiting to be installed.

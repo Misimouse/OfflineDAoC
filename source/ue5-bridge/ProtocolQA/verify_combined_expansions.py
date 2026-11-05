@@ -5,7 +5,8 @@ import json
 from pathlib import Path
 
 
-def verify(workspace, include_native_world=False, include_advanced_protocol=False, include_live_forms=False, include_preloaded_data=False):
+def verify(workspace, include_native_world=False, include_advanced_protocol=False, include_live_forms=False, include_preloaded_data=False,
+           include_class_behavior=False, include_private_review=False):
     workspace=workspace.resolve()
     candidate=workspace/'ExpansionRaceLab/CombinedExpansionServerCandidate'
     receipt_path=candidate/'build_receipt.json'
@@ -203,6 +204,36 @@ def verify(workspace, include_native_world=False, include_advanced_protocol=Fals
         result['preloaded_joint_data_cases']=counts
         result['preloaded_joint_data_accepted']=True
         result['pending'][0]='Reversible private review integration of the tested joint server and data package'
+    if include_class_behavior:
+        assert include_preloaded_data and include_live_forms
+        from verify_combined_class_behavior import verify as verify_behavior
+        behavior=verify_behavior(workspace)
+        assert behavior['build_receipt_sha256']==receipt_hash
+        result['joint_class_behavior_cases']=behavior['joint_class_behavior_cases']
+        result['rendered_spell_visuals_accepted']=False
+        evidence['joint_class_behavior']=digest(candidate/'verified_class_behavior.json')
+    if include_private_review:
+        assert include_preloaded_data
+        review=workspace/'ExpansionRaceLab/MinotaurOwnerReview'
+        install_path=review/'joint_integration.json'
+        install=json.loads(install_path.read_text())
+        assert all(install.get(k) for k in ['installed','review_only','all_existing_rows_preserved'])
+        assert not any(install[k] for k in ['normal_installation_modified','review_database_replaced','race_class_activation_changed'])
+        assert install['server_build_receipt_sha256']==receipt_hash and install['existing_tables_verified']>=126
+        assert install['creation_scope']=='minotaur_only'
+        assert len(install['installed_files'])==6
+        for name,expected in install['installed_files'].items():
+            path=Path(name).resolve();assert path.is_relative_to(review.resolve()) and digest(path)==expected
+        smoke_path=workspace/'ExpansionRaceLab/CombinedExpansionReviewMigration/verified.json'
+        smoke=json.loads(smoke_path.read_text())
+        assert all(smoke.get(k) for k in ['passed','joint_server_installed','live_native_menu_passed',
+                   'character_inventory_quest_task_tables_unchanged_after_live_menu'])
+        assert len(smoke['tables_verified'])>=12 and not smoke['normal_installation_modified']
+        evidence['private_review_installation']=digest(install_path)
+        evidence['private_review_menu_and_progress']=digest(smoke_path)
+        result['private_review_joint_server_and_data_installed']=True
+        result['private_review_creation_scope']='minotaur_only'
+        result['pending'][0]='Owner review and normal delivery; private review integration is complete'
     (candidate/'verified_joint_creation.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     return result
 
@@ -214,4 +245,6 @@ if __name__=='__main__':
     parser.add_argument('--include-advanced-protocol',action='store_true')
     parser.add_argument('--include-live-forms',action='store_true')
     parser.add_argument('--include-preloaded-data',action='store_true')
-    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol,args.include_live_forms,args.include_preloaded_data)))
+    parser.add_argument('--include-class-behavior',action='store_true')
+    parser.add_argument('--include-private-review',action='store_true')
+    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol,args.include_live_forms,args.include_preloaded_data,args.include_class_behavior,args.include_private_review)))
