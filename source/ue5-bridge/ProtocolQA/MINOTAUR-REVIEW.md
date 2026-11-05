@@ -44,11 +44,24 @@ sets differ. Shared body part IDs do not authorize substituting one realm's
 complete appearance for another. Only the Hibernian variant is in this review.
 
 Both inspected catalogues contain ten `_min_m` mask/hat items. None is referenced
-by the objects table's twelve Catacombs helmet columns. The three Minotaur
-figures also have no full-helmet slot 9. Consequently this audit does not
-establish playable helmet mappings. Numeric matches in unrelated texture,
-effect or armour columns are different ID namespaces and must not be used as
-helmet mappings. Do not force another race's full helmet onto the Minotaur.
+by the objects table's twelve Catacombs helmet columns. The masks instead use
+the original `NoArmor Helm=1` path: column 2 is the item ID and column 12 is
+the specific helmet skin. This establishes thirteen mask appearances from nine
+original NIFs, including four decorated variants. The Yule hat still has no
+confirmed equipment mapping; the pumpkin is an effect path, outside this conversion.
+
+`prepare_minotaur_helmet_sources.py --client ORIGINAL_CLIENT --lab PRIVATE_LAB`
+converts only those explicit mask references. It copies original textures
+without upscaling, preserves variant skins and writes no active catalogue.
+The source audit compares these references against the official catalogue too.
+Geometry checks and native imports are separate from native visual acceptance.
+
+The three figures have no full-helmet slot 9. The official
+[1.125 notes](https://www.darkageofcamelot.com/1125-live-patch-notes/)
+identify the Minotaur-specific masks as the visible helmet exception. Ordinary
+helmet equipment need not display a mesh on this race. Numeric matches in
+unrelated texture, effect or armour columns are different ID namespaces and
+must not become helmet mappings. Do not force another race's helmet onto it.
 
 The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,

@@ -19,7 +19,7 @@ func run()->void:
     DirAccess.make_dir_recursive_absolute(base)
     var factory=load(factory_path)
     var library:Dictionary=JSON.parse_string(FileAccess.get_file_as_string(catalogue_path)).models
-    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087"}
+    var ids:={"cel_m":"1984","cel_f":"310","elf_m":"382","elf_f":"388","fir_m":"352","fir_f":"1983","lur_m":"318","lur_f":"378","syl_m":"700","syl_f":"708","sha_m":"1075","sha_f":"1087","mino":"1419"}
     var results:Array=[]
     for race in races:
         assert(ids.has(race))
@@ -65,8 +65,10 @@ func run()->void:
                 if mesh.skin==null:
                     # Bind the rigid original NIF to its original helmet bone, in the body's reference frame.
                     var skin:Skin=template.skin.duplicate()
-                    var bone:int=sk.find_bone("Bip01 Helmet")
-                    if bone<0:bone=sk.find_bone("Bip01 Head")
+                    var bone:int=-1
+                    for bone_name in ["Bip01 Helmet","Bip01-Helmet","Bip01 Head","Bip01-Head"]:
+                        bone=sk.find_bone(bone_name)
+                        if bone>=0:break
                     assert(bone>=0)
                     var bind:=-1
                     for i in skin.get_bind_count():
@@ -101,6 +103,7 @@ func run()->void:
                     selected.append(rigid)
                 else:selected.append(mesh)
             assert(not selected.is_empty(),"Original helmet has no visible geometry: "+String(race)+"/"+ident)
+            assert(descriptors.any(func(section):return section.helmet),"Export contains hair but no helmet: "+String(race)+"/"+ident)
             for mesh in fig.find_children("*","MeshInstance3D",true,false):
                 if not mesh in selected:mesh.free()
             # The original rigid NIF's now-empty attachment/model nodes otherwise

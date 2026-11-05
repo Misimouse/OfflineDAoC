@@ -3,7 +3,8 @@ import copy,hashlib,json,os,re,traceback
 from pathlib import Path
 import unreal
 
-R=Path(os.environ.get('DAOC_HELMET_WORKSPACE',str(Path(__file__).resolve().parent))).resolve();D=R/'Reports/helmets'
+R=Path(os.environ.get('DAOC_HELMET_WORKSPACE',str(Path(__file__).resolve().parent))).resolve();D=Path(os.environ.get('DAOC_HELMET_REPORT',str(R/'Reports/helmets'))).resolve()
+assert D.is_relative_to(R), 'Keep helmet reports in their workspace'
 if 'DAOC_HELMET_WORKSPACE' in os.environ:
     assert Path(unreal.Paths.project_dir()).resolve()==R/'NativeHost'
     assert (R/'NativeHost/Plugins/DAoCVisualBridge/Content').resolve().is_relative_to(R),'Never import helmets through shared content junctions'

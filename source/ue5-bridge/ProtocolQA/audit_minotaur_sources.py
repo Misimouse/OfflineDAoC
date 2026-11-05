@@ -55,6 +55,11 @@ def inspect(archive):
             value = row[column].strip() if len(row) > column else ''
             if value in references:
                 references[value].append({'object_id': int(row[0]), 'column': column})
+        # The explicitly marked Minotaur mask path uses the classic item
+        # column, not the twelve per-race Catacombs columns.
+        if len(row) > 97 and row[97].strip() == '1' and row[2].strip() in references:
+            references[row[2].strip()].append({'object_id': int(row[0]), 'column': 2,
+                                              'noarmor_helm': True, 'skin_id': int(row[12])})
     helmet_rows = []
     for key, row in helmets.items():
         nif = archive.parent / 'items' / (row[2] + '.nif')
@@ -66,6 +71,8 @@ def inspect(archive):
     assert hashlib.sha256(archive.read_bytes()).hexdigest() == raw_hash
     return {'archive_sha256': raw_hash, 'archive_unchanged': True,
             'realms': realms, 'helmet_items': helmet_rows,
+            'mask_equipment_mapping_resolved': all(references[key] for key, row in helmets.items()
+                                                   if row[2].lower().startswith('mask_')),
             'helmet_equipment_mapping_resolved': all(references.values()),
             'helmet_runtime_accepted': False}
 
