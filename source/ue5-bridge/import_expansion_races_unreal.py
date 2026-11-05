@@ -9,6 +9,8 @@ from pathlib import Path
 import unreal
 
 lab = Path(os.environ['DAOC_EXPANSION_RACE_LAB']).resolve()
+package = Path(os.environ.get('DAOC_EXPANSION_RACE_PACKAGE', str(lab))).resolve()
+assert package.is_relative_to(lab), 'Candidate package must stay inside the private laboratory'
 project = Path(unreal.Paths.project_dir()).resolve()
 assert project == lab / 'NativeHost', 'Expansion imports require the separate private host'
 content = (project / 'Plugins/DAoCVisualBridge/Content').resolve()
@@ -18,8 +20,8 @@ assets = unreal.get_editor_subsystem(unreal.EditorAssetSubsystem)
 tools = unreal.AssetToolsHelpers.get_asset_tools()
 normalize = lambda value: re.sub(r'[^a-z0-9]', '', str(value).lower())
 try:
-    sources = lab / 'SourceFigures'
-    verification = json.loads((lab / 'figure_exports_verified.json').read_text())
+    sources = package / 'SourceFigures'
+    verification = json.loads((package / 'figure_exports_verified.json').read_text())
     assert verification['passed'] and not verification['installed']
     rows = json.loads((sources / 'exported.json').read_text())
     catalogue = {}
@@ -64,10 +66,12 @@ try:
         report['models'][ident] = {'source_sha256': sha, 'mesh': meshes[0].get_path_name(),
                                    'skeleton': skeleton.get_path_name(), 'imported_clips': len(clips),
                                    'source_clips': len(expected), 'creation_accepted': False}
-    assert set(catalogue) == {'1075', '1087', '1419'}
-    (lab / 'models_expansion_candidate.json').write_text(json.dumps(catalogue, indent=2), encoding='utf-8')
+    assert set(catalogue) == set(verification['models'])
+    if package == lab:
+        assert set(catalogue) == {'1075', '1087', '1419'}
+    (package / 'models_expansion_candidate.json').write_text(json.dumps(catalogue, indent=2), encoding='utf-8')
     report['passed'] = True
 except Exception:
     report['errors'].append(traceback.format_exc())
-(lab / 'native_import.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
+(package / 'native_import.json').write_text(json.dumps(report, indent=2), encoding='utf-8')
 assert report['passed'], report['errors']

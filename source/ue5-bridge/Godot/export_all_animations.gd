@@ -56,8 +56,10 @@ func standard(original:Material)->Material:
 	return m
 func run()->void:
 	var base:String=get_script().resource_path.get_base_dir().path_join("../SourceAnimations_v02")
+	var factory_path:="res://game/fig3_figure.gd"
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--output="):base=arg.trim_prefix("--output=")
+		if arg.begins_with("--figure-factory="):factory_path=arg.trim_prefix("--figure-factory=")
 	export_folder=base
 	var tasks=JSON.parse_string(FileAccess.get_file_as_string(base.path_join("tasks.json")))
 	var results:Array=[];var limit:int=tasks.size();var only_ids:PackedStringArray=[]
@@ -70,7 +72,7 @@ func run()->void:
 		var holder:=Node3D.new();root.add_child(holder);holder.name="DAoC_Model_"+task.id
 		var info:Dictionary=task.info;var figure:Node3D
 		if info.get("race",null)!=null:
-			var factory=load("res://game/fig3_figure.gd")
+			var factory=load(factory_path)
 			var f=factory.new();holder.add_child(f);assert(f.load_figure(String(info.race)))
 			f.apply(factory.npc_look("bridge-model-"+task.id,f.meta))
 			var parts:Dictionary={};var tints:Dictionary={}

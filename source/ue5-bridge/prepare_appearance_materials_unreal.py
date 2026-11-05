@@ -4,7 +4,8 @@ from pathlib import Path
 import unreal,sys
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 from appearance_material_unreal import build_appearance_material
-R=Path(os.environ.get('DAOC_BRIDGE_WORKSPACE',Path(__file__).resolve().parent));D=R/'Reports/appearance';root='/DAoCVisualBridge/Appearance_v01';A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();M=unreal.MaterialEditingLibrary
+R=Path(os.environ.get('DAOC_BRIDGE_WORKSPACE',Path(__file__).resolve().parent));D=R/'Reports/appearance';root=os.environ.get('DAOC_APPEARANCE_MATERIAL_LIBRARY','/DAoCVisualBridge/Appearance_v01');A=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);T=unreal.AssetToolsHelpers.get_asset_tools();M=unreal.MaterialEditingLibrary
+assert root.startswith('/DAoCVisualBridge/') and '..' not in root
 report={'passed':False,'installed':False,'textures':{},'errors':[]}
 try:
  guarded=[R/'models.json',R/'equipment_catalog_v01.json'];hashes=[hashlib.sha256(p.read_bytes()).hexdigest() for p in guarded]

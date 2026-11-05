@@ -7,11 +7,11 @@ import struct
 from pathlib import Path
 
 
-def verify(folder, report_path):
+def verify(folder, report_path, expected_models=3):
     folder = folder.resolve()
     tasks = json.loads((folder / 'tasks.json').read_text())
     exported = json.loads((folder / 'exported.json').read_text())
-    assert len(tasks) == len(exported) == 3
+    assert len(tasks) == len(exported) == expected_models
     expected = {str(row['id']): row for row in tasks}
     report = {'passed': False, 'installed': False, 'models': {}}
     for row in exported:
@@ -78,5 +78,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('folder', type=Path)
     parser.add_argument('--report', type=Path, required=True)
+    parser.add_argument('--expected-models', type=int, default=3)
     args = parser.parse_args()
-    print(json.dumps(verify(args.folder, args.report)))
+    print(json.dumps(verify(args.folder, args.report, args.expected_models)))
