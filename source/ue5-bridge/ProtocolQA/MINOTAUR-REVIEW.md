@@ -97,21 +97,27 @@ Minotaur horn target limitation; its failure is retained explicitly in the
 joint seal. This is not deployment approval or joint live-world acceptance.
 Mauler remains outside this package.
 
-For the live native witness, add `--native-world-probe` to the combined
-Minotaur original-start matrix. This focuses on one Warden-path creation and
-reentry; the full four-career matrix remains independently sealed. The harness
+For live native witnesses, add `--native-world-probe` to the combined
+Minotaur original-start, Bainshee or Vampiir-Shar matrix. Each focuses on one
+creation and reentry; the full twenty-three-case matrices remain independently
+sealed. Witness accounts are disposable GMs and must receive server confirmation
+of protection. The Minotaur QA initial spawn matches its original DOL start
+exactly, avoiding an unnecessary GM jump. The harness
 then enters that disposable character and closes its protocol observer socket.
 The disposable transport first explicitly releases its observer peer; this
 test-only command is injected into the QA copy, never the production gateway.
 Unreal then takes the bridge's single peer, renders the actual Connacht map,
 records connected/navigation evidence and a screenshot, and logs out normally.
 Only then may the harness restore its disposable fixture. Reports go to a
-separate `minotaur_original_start_world` directory.
+separate `_world` directories for each matrix. Bainshee and Vampiir witnesses
+are level-one base classes, not proof of their advanced abilities.
 
 `verify_combined_expansions.py --include-native-world` additionally verifies
-this witness, the unchanged original bind, normal shutdown and absence of
-missing local weapon models/bones. It does not mark Bainshee/Vampiir native
-world entry or the Horn Size feature as accepted.
+all three witnesses, confirmed GM protection, unchanged binds, normal shutdown
+and absence of reported missing local weapon models/bones. Original bind
+acceptance applies to Minotaur; the Shar fixture relocation remains explicitly
+recorded. Screenshots require visual review. Advanced abilities, transformations
+and Horn Size are separate acceptance.
 
 The swatch export reuses the original Godot menu's sampling functions in a
 private adapter. Adding color picker controls does not modify rendered materials,
