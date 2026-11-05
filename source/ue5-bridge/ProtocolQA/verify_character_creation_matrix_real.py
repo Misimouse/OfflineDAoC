@@ -5,6 +5,7 @@ import argparse,ast,importlib.util,re,sys
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
+parser.add_argument('--vampiir-candidate',action='store_true')
 parser.add_argument('--shar-candidate',action='store_true')
 parser.add_argument('--starter-equipment-repair',action='store_true')
 parser.add_argument('--shar-promotion',action='store_true')
@@ -14,8 +15,8 @@ parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
 parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
-candidate_mode=args.bainshee_candidate or args.shar_candidate
-assert not (args.bainshee_candidate and args.shar_candidate)
+candidate_mode=args.bainshee_candidate or args.shar_candidate or args.vampiir_candidate
+assert sum([args.bainshee_candidate,args.shar_candidate,args.vampiir_candidate])<=1
 assert candidate_mode==bool(args.server_source),'Candidate creation requires the explicit server source'
 assert args.classic_class_batch is None or not candidate_mode
 assert not args.eligibility_only or args.classic_class_batch==0
@@ -24,12 +25,14 @@ assert not args.shar_promotion or (args.shar_candidate and args.starter_equipmen
 assert not args.shar_gm_transfer or (args.shar_candidate and args.starter_equipment_repair and not args.shar_promotion)
 assert not args.candidate_build or candidate_mode
 assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires a sealed build with the canonical bridge overlay'
+assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation requires its sealed private source variant'
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
 if args.starter_equipment_repair:D=ROOT/'Reports/shar_starter_creation';D.mkdir(exist_ok=True)
 if args.shar_promotion:D=ROOT/'Reports/shar_promotion';D.mkdir(exist_ok=True)
 if args.shar_gm_transfer:D=ROOT/'Reports/shar_gm_transfer';D.mkdir(exist_ok=True)
+if args.vampiir_candidate:D=ROOT/'Reports/vampiir_creation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -144,9 +147,17 @@ try:
             pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
             spec=importlib.util.spec_from_file_location('candidate_class_rules',pipeline)
             rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
-            if args.bainshee_candidate:
-                disabled=rules.id_set(prop['Value']);report['qa_bainshee_previously_disabled']=39 in disabled;disabled.discard(39)
+            if args.bainshee_candidate or args.vampiir_candidate:
+                target_class=58 if args.vampiir_candidate else 39
+                disabled=rules.id_set(prop['Value']);report['qa_class_previously_disabled']=target_class in disabled;disabled.discard(target_class)
                 db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
+                if args.vampiir_candidate:
+                    # First isolate the class path on the two established figures;
+                    # combined Shar/Vampiir admission is a separate acceptance case.
+                    races=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert races
+                    excluded=rules.id_set(races['Value']);excluded.add(18)
+                    db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_races'",(';'.join(str(n) for n in sorted(excluded)),))
+                    report['private_race_scope']='Celt/Lurikeen only; Shar temporarily excluded in this disposable probe'
             else:
                 prop=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_races'").fetchone();assert prop
                 disabled=rules.id_set(prop['Value']);report['qa_shar_previously_disabled']=18 in disabled;disabled.discard(18)
@@ -162,7 +173,7 @@ try:
                     db.execute('INSERT INTO StartupLocation ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])
                 report['shar_startup_reference']=proposal['reference']
                 report['shar_startup_insert_rows']=proposal['insert_rows']
-    if args.classic_class_batch is not None or args.shar_candidate:
+    if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate:
         config_data=json.loads(config_before);config_data['custom_class']=False
         config.write_text(json.dumps(config_data),encoding='utf-8')
     if candidate_mode:
@@ -181,10 +192,23 @@ try:
         for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
             for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
                 if folder==SERVER or (folder/name).exists():replace_private(build/name,folder/name)
-        rules.GS=server_source/'GameServer';rules.DB=DB;rules.OUT=RUN/('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json');rules.main()
+        rules.GS=server_source/'GameServer'
+        if args.vampiir_candidate:
+            assert 'vampiir_creation' in receipt.get('candidate_features',[])
+            variant=receipt['source_variants']['GameServer/GlobalConstants.cs']
+            variant_path=Path(variant['path']).resolve();assert variant_path.is_relative_to(candidate_root)
+            assert hashlib.sha256(variant_path.read_bytes()).hexdigest()==variant['candidate_sha256']
+            assert hashlib.sha256((rules.GS/'GlobalConstants.cs').read_bytes()).hexdigest()==variant['original_sha256']
+            rule_source=candidate_root/'CatalogueSource/GameServer';rule_source.mkdir(parents=True,exist_ok=True)
+            shutil.copytree(rules.GS/'playerclasses',rule_source/'playerclasses',dirs_exist_ok=True)
+            (rule_source/'Enums').mkdir(exist_ok=True);shutil.copy2(rules.GS/'Enums/eCharacterClass.cs',rule_source/'Enums/eCharacterClass.cs')
+            shutil.copy2(variant_path,rule_source/'GlobalConstants.cs');rules.GS=rule_source
+            report['private_vampiir_source_variant_verified']=True
+        rules.DB=DB;rules.OUT=RUN/('vampiir_server_classes.json' if args.vampiir_candidate else ('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json'));rules.main()
         candidate=json.loads(rules.OUT.read_text())
         if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
-        else:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
+        elif args.shar_candidate:assert {int(k) for k,v in candidate['classes'].items() if 18 in v['races']}=={42,43,44,45,50}
+        else:assert candidate['classes']['58']['races']==[9,12] and candidate['classes']['58']['stats']==['CON','STR','DEX']
         original_net=RUN/'LobbyProject/game/net/server.gd';saved_net=backup/'original_server.gd';shutil.copy2(original_net,saved_net)
         text=original_net.read_text(encoding='utf-8-sig');anchor='res://content/rules/server_classes.json';assert anchor in text
         restored_files.append((original_net,saved_net));original_net.write_text(text.replace(anchor,rules.OUT.as_posix()),encoding='utf-8')
@@ -268,7 +292,7 @@ try:
         assert all(sum(c['class_id']==cid and c['female']==female for c in choices)==1 for cid in [42,43,44,45,50] for female in [False,True])
         report['shar_choices_complete']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
-    cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)]
+    cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else ([('Celt','cel',58,54),('Lurikeen','lur',58,54)] if args.vampiir_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)])
     if args.shar_candidate:cases=[('Shar','sha',42,51),('Shar','sha',43,52),('Shar','sha',44,52),('Shar','sha',45,52),('Shar','sha',50,54)]
     if args.classic_class_batch is not None:
         repo=Path(__file__).resolve().parents[3]
@@ -389,7 +413,7 @@ try:
             wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
             if args.shar_gm_transfer:verify_original_bind(name,base)
-            if args.classic_class_batch is not None or args.shar_candidate:
+            if args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate:
                 send('character_enter',lobby_revision=lobby()['revision'],name=name)
                 wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
                 wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
@@ -402,14 +426,14 @@ try:
                         assert saved['Class']==advanced and saved['Level']==5
                 send('chat',text='/quit')
                 wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
-            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate});save_report()
+            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None or args.shar_candidate or args.vampiir_candidate});save_report()
             if args.shar_promotion:
                 report['cases'][-1].update(level=5,original_trainer_promotion=True,advanced_class_retained=True);save_report()
             if args.shar_gm_transfer:
                 verify_original_bind(name,base)
                 report['cases'][-1].update(original_bind_preserved=True,server_authorized_gm_transfer=True);save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else 10)
+    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else (4 if args.vampiir_candidate else 10))
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())

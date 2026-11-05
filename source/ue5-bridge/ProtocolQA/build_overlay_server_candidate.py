@@ -8,7 +8,7 @@ import subprocess
 from xml.sax.saxutils import escape
 
 
-def build(server_source, overlay, workspace, output, dotnet):
+def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=False):
     server_source,overlay,workspace,output,dotnet=(p.resolve() for p in (server_source,overlay,workspace,output,dotnet))
     assert output.is_relative_to(workspace) and not output.is_relative_to(server_source)
     output.mkdir(parents=True,exist_ok=True)
@@ -17,9 +17,20 @@ def build(server_source, overlay, workspace, output, dotnet):
     assert len(files)==3 and 'GameServer/commands/gmcommands/BridgeGmCombatMode.cs' in files
     inputs=output/'compile_inputs.txt';targets=output/'bridge_overlay.targets';libraries=output/'libraries'
     edits=[]
-    for name in files:
-        source=overlay/name
-        assert source.is_file() and source.resolve().is_relative_to(overlay)
+    sources={name:overlay/name for name in files}
+    variants_report={}
+    if vampiir_creation:
+        name='GameServer/GlobalConstants.cs';original=server_source/name
+        raw=original.read_bytes();anchor=b'// eCharacterClass.Vampiir,'
+        assert raw.count(anchor)==1, 'Review changed original Vampiir starting-class rule'
+        candidate=output/'SourceVariants/GlobalConstants.cs';candidate.parent.mkdir(exist_ok=True)
+        candidate.write_bytes(raw.replace(anchor,b'eCharacterClass.Vampiir,',1))
+        sources[name]=candidate
+        variants_report[name]={'original_sha256':hashlib.sha256(raw).hexdigest(),
+            'candidate_sha256':hashlib.sha256(candidate.read_bytes()).hexdigest(),
+            'path':str(candidate),'scope':'Enable the existing Vampiir starting-class rule only in this private build.'}
+    for name,source in sources.items():
+        assert source.is_file() and (source.resolve().is_relative_to(overlay) or source.resolve().is_relative_to(output))
         relative=Path(name).relative_to('GameServer').as_posix()
         original=server_source/name
         variants=[relative,relative.replace('/','\\'),'.\\'+relative.replace('/','\\'),str(original)]
@@ -35,13 +46,16 @@ def build(server_source, overlay, workspace, output, dotnet):
         result=subprocess.run(command,cwd=server_source,env=env,stdout=log,stderr=subprocess.STDOUT,timeout=600,creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode==0, 'Candidate build failed; inspect private build.log'
     compiled={Path(line.strip()).resolve() for line in inputs.read_text(encoding='utf-8-sig').splitlines() if line.strip()}
-    for name in files:
-        assert (overlay/name).resolve() in compiled
+    for name,source in sources.items():
+        assert source.resolve() in compiled
         assert (server_source/name).resolve() not in compiled
+    for name,row in variants_report.items():
+        assert hashlib.sha256((server_source/name).read_bytes()).hexdigest()==row['original_sha256'], 'Normal source changed during private variant build'
     binaries={name:hashlib.sha256((libraries/name).read_bytes()).hexdigest() for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']}
     report={'passed':True,'installed':False,'source_root':str(server_source),'overlay_root':str(overlay),
         'overlay_base_commit':definition['base_commit'],'overlay_source_sha256':{name:hashlib.sha256((overlay/name).read_bytes()).hexdigest() for name in files},
-        'compiled_bridge_overlay_verified':True,'libraries':str(libraries),'binaries_sha256':binaries}
+        'compiled_bridge_overlay_verified':True,'libraries':str(libraries),'binaries_sha256':binaries,
+        'candidate_features':['vampiir_creation'] if vampiir_creation else [],'source_variants':variants_report}
     (output/'build_receipt.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
 
@@ -49,5 +63,6 @@ def build(server_source, overlay, workspace, output, dotnet):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for name in ['server-source','overlay','workspace','output','dotnet']:parser.add_argument('--'+name,type=Path,required=True)
-    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet)
+    parser.add_argument('--vampiir-creation',action='store_true',help='Private source variant only; never changes normal source or settings')
+    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet,args.vampiir_creation)
     print(json.dumps(report))

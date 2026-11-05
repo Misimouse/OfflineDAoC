@@ -4,7 +4,7 @@ from qa_runtime import *
 import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
 parser=argparse.ArgumentParser();parser.add_argument('--class-id',type=int,choices=[51,52,53,54,57,47,39,58,62],required=True)
-parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,50])
+parser.add_argument('--bainshee-proposal',type=Path);parser.add_argument('--level',type=int,choices=[1,5,6,50])
 parser.add_argument('--expansion-proposal',type=Path)
 parser.add_argument('--career-proposal',type=Path)
 parser.add_argument('--expansion-power',action='store_true')
@@ -12,6 +12,10 @@ parser.add_argument('--vampiir-bolt',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
+parser.add_argument('--vampiir-promotion',action='store_true')
+parser.add_argument('--vampiir-race',type=int,choices=[9,12],default=9)
+parser.add_argument('--vampiir-female',action='store_true')
+parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--bainshee-effect',choices=['ward','barrier'])
 parser.add_argument('--bainshee-training',action='store_true')
@@ -20,6 +24,7 @@ parser.add_argument('--expansion-self-buff',action='store_true')
 parser.add_argument('--bainshee-combat',action='store_true')
 parser.add_argument('--druid-promotion',action='store_true')
 args=parser.parse_args();class_id=args.class_id
+promotion_mode=args.bainshee_promotion or args.vampiir_promotion
 training_mode=args.bainshee_training or args.expansion_training
 native_combat_mode=args.bainshee_combat or args.vampiir_bolt
 training_lines={39:['Spectral Guard','Phantasmal Wail','Ethereal Shriek'],58:['Dementia','Shadow Mastery','Vampiiric Embrace'],62:['Aura Manipulation','Magnetism','Power Strikes']}
@@ -36,9 +41,14 @@ assert not args.expansion_proposal or class_id in [58,62]
 assert args.level is None or class_id in [39,58,62] or args.druid_promotion,'Advanced-level data probes require a scoped fixture'
 assert not args.druid_promotion or (class_id==47 and args.level==5 and not proposal_path and not training_mode and not native_combat_mode),'Druid promotion uses the original level-five Naturalist and trainer'
 level=args.level or (3 if class_id==52 else 1)
+assert level!=6 or class_id==58, 'The level-six boundary fixture is specific to original Vampiir career abilities'
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
-assert args.server_source is None or args.bainshee_promotion
+assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
+assert args.server_source is None or promotion_mode
+assert not args.candidate_build or args.vampiir_promotion
+assert not args.vampiir_female or args.vampiir_promotion
+assert args.vampiir_race==9 or args.vampiir_promotion
 assert not args.bainshee_effect or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_form_cycle)
 assert args.bainshee_race==9 or args.bainshee_form_cycle or args.bainshee_promotion
 assert not args.bainshee_training or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle)
@@ -46,6 +56,7 @@ assert not args.expansion_self_buff or args.expansion_training,'Self buff requir
 assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
 D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] or args.druid_promotion else '')+('_promotion' if args.bainshee_promotion or args.druid_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else '')+('_bolt' if args.vampiir_bolt else ''));D.mkdir(parents=True,exist_ok=True)
+if args.vampiir_promotion:D=ROOT/'Reports/starting_spells'/('class_58_level_5_promotion_race_'+str(args.vampiir_race)+('_female' if args.vampiir_female else '_male'));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -128,19 +139,24 @@ try:
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
    update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Druid Trainer','ClassType':'DOL.GS.Trainer.DruidTrainer','Guild':'Druid Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
    result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='druid_item'").fetchone())
-  if args.bainshee_promotion:
-   values.update(Class=51,Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+  if promotion_mode:
+   values.update(Class=54 if args.vampiir_promotion else 51,Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+   if args.vampiir_promotion:
+    model={9:302,12:318}[args.vampiir_race]+(8 if args.vampiir_female else 0)
+    values.update(Race=args.vampiir_race,Gender=int(args.vampiir_female),CreationModel=model,CurrentModel=model)
    disabled=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone()[0]
    # Only the disposable candidate enables this promotion; preserve every other class restriction.
    import importlib.util
    pipeline=args.server_source.resolve().parent/'new-client/pipeline/build_server_classes.py';assert pipeline.exists()
    spec=importlib.util.spec_from_file_location('candidate_class_rules',pipeline)
    rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
-   disabled_ids=rules.id_set(disabled);disabled_ids.discard(39)
+   disabled_ids=rules.id_set(disabled);disabled_ids.discard(class_id)
    db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(map(str,sorted(disabled_ids))),))
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
-   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Bainshee Trainer','ClassType':'DOL.GS.Trainer.BainsheeTrainer','Guild':'Bainshee Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
-   result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='bainshee_item'").fetchone())
+   promotion_title='Vampiir' if args.vampiir_promotion else 'Bainshee'
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex '+promotion_title+' Trainer','ClassType':'DOL.GS.Trainer.'+promotion_title+'Trainer','Guild':promotion_title+' Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
+   if args.bainshee_promotion:result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='bainshee_item'").fetchone())
+   else:result['original_promotion_has_item_gift']=False
   if training_mode:
    values.update(Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
@@ -159,8 +175,15 @@ try:
    update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Vampiir Target','ClassType':'DOL.GS.GameNPC','Guild':'','Model':118,'Level':45,'Realm':0,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos'],'Y':char['Ypos']+400,'Z':char['Zpos']})
   update(db,'DOLCharacters','DOLCharacters_ID',char['DOLCharacters_ID'],values)
  cfg=json.loads(config_bytes);cfg['custom_class']=False;cfg['initial_spawn_m']=[(char['Xpos']-35*8192)*.025,char['Zpos']*.025,(char['Ypos']-51*8192)*.025];config.write_text(json.dumps(cfg),encoding='utf-8')
- if args.bainshee_promotion:
+ if promotion_mode:
   build=args.server_source.resolve()/'Release';assert (build/'GameServer.dll').exists()
+  if args.vampiir_promotion:
+   candidate=args.candidate_build.resolve();assert candidate.is_relative_to(ROOT.resolve())
+   receipt=json.loads((candidate/'build_receipt.json').read_text(encoding='utf-8-sig'))
+   assert receipt['passed'] and receipt['compiled_bridge_overlay_verified'] and 'vampiir_creation' in receipt['candidate_features']
+   assert Path(receipt['source_root']).resolve()==args.server_source.resolve()
+   build=Path(receipt['libraries']).resolve();assert build.is_relative_to(candidate)
+   for name,expected in receipt['binaries_sha256'].items():assert hashlib.sha256((build/name).read_bytes()).hexdigest()==expected
   for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
    for folder in [SERVER,SERVER/'lib',SERVER/'win-x64']:
     dst=folder/name
@@ -227,17 +250,19 @@ try:
   send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
   wait(lambda:not snapshot['classic_ui'].get('pet',{}).get('valid'),'Original release clears owned pet',15)
   result['checks']['promoted_pet_summoned_and_released']=True
- if args.bainshee_promotion:
+ if promotion_mode:
   player=next(e for e in snapshot.get('entities',[]) if e.get('id')=='player:local')
   send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);settle(2)
-  wait(lambda:any(e.get('name')=='Codex Bainshee Trainer' for e in snapshot.get('entities',[])),'Original candidate trainer visible',20)
-  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex Bainshee Trainer')
+  wait(lambda:any(e.get('name')=='Codex '+promotion_title+' Trainer' for e in snapshot.get('entities',[])),'Original candidate trainer visible',20)
+  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex '+promotion_title+' Trainer')
   send('interact',entity_id=npc['id'])
-  wait(lambda:'Bainshee' in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[]),'Original trainer offers promotion keyword',20)
-  talk=snapshot['interaction']['talk'];send('keyword',reply_id=talk['id'],word='Bainshee')
-  wait(lambda:any(e.get('name')=="Bawler's Bruise" for e in snapshot.get('classic_ui',{}).get('entries',[])),'Original trainer promotion updates Bainshee spell list',20)
-  with checked() as db:assert db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==39
-  result['checks']['original_trainer_promotes_magician']=True;settle(1)
+  wait(lambda:promotion_title in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[]),'Original trainer offers promotion keyword',20)
+  talk=snapshot['interaction']['talk'];send('keyword',reply_id=talk['id'],word=promotion_title)
+  def promoted():
+   with checked() as db:return db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==class_id
+  wait(promoted,'Original trainer saves advanced class',20)
+  if args.bainshee_promotion:wait(lambda:any(e.get('name')=="Bawler's Bruise" for e in snapshot.get('classic_ui',{}).get('entries',[])),'Original trainer promotion updates Bainshee spell list',20)
+  result['checks']['original_trainer_promotes_stalker' if args.vampiir_promotion else 'original_trainer_promotes_magician']=True;settle(2)
  if class_id in [39,58,62]:
   candidate=json.loads(proposal_path.read_text())
   startup=(D/'starting_spells_server.log').read_text(encoding='utf-8-sig',errors='replace')
@@ -249,8 +274,17 @@ try:
  result['entries']=[{'name':e.get('name'),'group':e.get('group'),'id':e.get('id')} for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell']
  if args.career_proposal:
   required={58:{152,153,154,155,341},62:{69,68,67}}[class_id]
+  not_yet_granted=set()
+  if args.vampiir_promotion:
+   career=json.loads(args.career_proposal.read_text())
+   ability_ids={row['KeyName']:int(row['InternalID']) for row in career['rows']['Ability']}
+   # The four inherent stat abilities start at level six in the pinned DOL
+   # career. A level-five promotion must not be judged by the level-fifty fixture.
+   not_yet_granted={ability_ids[row['AbilityKey']] for row in career['rows']['SpecXAbility'] if row['AbilityKey'] in ability_ids and int(row['SpecLevel'])>level}
+   required-=not_yet_granted
   received={int(e['id']) for e in snapshot['qa_skill_audit']['skills']}
   assert required<=received,('Missing original career ability IDs',required-received)
+  assert not (not_yet_granted&received),('Career ability granted before its original level',not_yet_granted&received)
   result['career_abilities']=[e for e in snapshot['qa_skill_audit']['skills'] if int(e['id']) in required]
   result['checks']['original_career_abilities_received']=True
  audit=snapshot['qa_skill_audit'];expected={str(x['name']) for x in audit['skills'] if int(x['page']) in [3,4]}
@@ -480,6 +514,16 @@ try:
   wait(lambda:snapshot.get('in_game') and snapshot.get('classic_ui',{}).get('skills_ready') and {e.get('name') for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell'}==expected,'Druid promotion and spells survive saved reentry',45)
   with checked() as db:assert db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==47
   result['checks']['druid_class_and_spells_survive_saved_reentry']=True
+ if args.vampiir_promotion or (class_id==58 and level==6):
+  send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
+  wait(lambda:snapshot.get('in_game') and snapshot.get('classic_ui',{}).get('skills_ready') and {e.get('name') for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell'}==expected,'Vampiir promotion and spells survive saved reentry',45)
+  with checked() as db:
+   saved=db.execute("SELECT Class,Level,Race,Gender FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()
+   assert (saved['Class'],saved['Level'])==(58,level)
+   if args.vampiir_promotion:assert (saved['Race'],saved['Gender'])==(args.vampiir_race,int(args.vampiir_female))
+  if args.career_proposal:
+   assert required<={int(entry['id']) for entry in snapshot['qa_skill_audit']['skills']}
+  result['checks']['vampiir_class_and_spells_survive_saved_reentry']=True
  result['passed']=True
 
 except Exception:
