@@ -6,10 +6,14 @@ import argparse,importlib.util
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bainshee-candidate',action='store_true')
 parser.add_argument('--server-source',type=Path)
+parser.add_argument('--classic-class-batch',type=int,choices=[0,1])
+parser.add_argument('--eligibility-only',action='store_true')
 args=parser.parse_args()
 assert args.bainshee_candidate==bool(args.server_source),'Bainshee creation requires the explicit candidate server source'
+assert args.classic_class_batch is None or not args.bainshee_candidate
+assert not args.eligibility_only or args.classic_class_batch==0
 
-D=ROOT/'Reports'/('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix');D.mkdir(exist_ok=True)
+D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -18,6 +22,7 @@ store=RUN/'appdata/Godot/app_userdata/MMOEngine/server_looks.json'
 assert store.resolve().is_relative_to(RUN.resolve())
 store_before=store.read_bytes() if store.exists() else None
 restored_files=[]
+config=RUN/'bridge_config.json';config_before=config.read_bytes()
 
 def replace_private(src,dst):
     assert dst.resolve().is_relative_to(RUN.resolve())
@@ -77,6 +82,9 @@ try:
             rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
             disabled=rules.id_set(prop['Value']);report['qa_bainshee_previously_disabled']=39 in disabled;disabled.discard(39)
             db.execute("UPDATE ServerProperty SET Value=? WHERE Key='disabled_classes'",(';'.join(str(n) for n in sorted(disabled)),))
+    if args.classic_class_batch is not None:
+        config_data=json.loads(config_before);config_data['custom_class']=False
+        config.write_text(json.dumps(config_data),encoding='utf-8')
     if args.bainshee_candidate:
         server_source=args.server_source.resolve();assert (server_source/'GameServer/playerclasses/hibernia/ClassBainshee.cs').exists()
         build=server_source/'Release';assert (build/'GameServer.dll').exists()
@@ -126,12 +134,43 @@ try:
         report['female_only_choices']=True
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])
     cases=[('Celt','cel',39,51),('Elf','elf',39,51),('Lurikeen','lur',39,51)] if args.bainshee_candidate else [('Celt','cel',47,53),('Firbolg','fir',47,53),('Elf','elf',41,51),('Lurikeen','lur',41,51),('Sylvan','syl',55,57)]
+    if args.classic_class_batch is not None:
+        repo=Path(__file__).resolve().parents[3]
+        pipeline=repo/'source/new-client/pipeline/build_server_classes.py'
+        spec=importlib.util.spec_from_file_location('classic_matrix_rules',pipeline)
+        rules=importlib.util.module_from_spec(spec);spec.loader.exec_module(rules)
+        rules.GS=repo/'source/server/GameServer'
+        enums=rules.enum_values(rules.GS/'Enums/eCharacterClass.cs','eCharacterClass')
+        definitions={enums[c['enum']]:c for c in rules.parse_classes().values()}
+        classic_ids=list(range(40,51))+[55,56]
+        assert {c['class_id'] for c in lobby()['choices']}==set(classic_ids),('Classic fixture must not silently omit or enable a class',sorted({c['class_id'] for c in lobby()['choices']}))
+        race_ids={'Celt':9,'Firbolg':10,'Elf':11,'Lurikeen':12,'Sylvan':15}
+        genders=rules.class_gender_constraints()
+        expected_pairs={(rid,female,cid) for rid in race_ids.values() for female in [False,True] for cid in classic_ids
+                        if rid in definitions[cid]['races'] and (definitions[cid]['enum'] not in genders or female==(genders[definitions[cid]['enum']]=='female'))}
+        actual_pairs={(race_ids[c['race']],bool(c['female']),int(c['class_id'])) for c in lobby()['choices']}
+        assert actual_pairs==expected_pairs,('Race/class eligibility mismatch',sorted(expected_pairs-actual_pairs),sorted(actual_pairs-expected_pairs))
+        report['eligibility']={'source':'original server EligibleRaces and gender constraints','total_combinations':len(race_ids)*2*len(classic_ids),'valid_choices':len(expected_pairs),'invalid_choices_absent':len(race_ids)*2*len(classic_ids)-len(expected_pairs),'complete':True}
+        cases=[]
+        prefixes={'Celt':'cel','Firbolg':'fir','Elf':'elf','Lurikeen':'lur','Sylvan':'syl'}
+        for cid in classic_ids[args.classic_class_batch*7:(args.classic_class_batch+1)*7]:
+            choice=next(c for c in lobby()['choices'] if c['class_id']==cid and not c['female'])
+            base=enums[definitions[cid]['base']]
+            cases.append((choice['race'],prefixes[choice['race']],cid,base))
+        # Rejected creation must leave the menu usable for the valid cases below.
+        revision=lobby()['revision']
+        send('character_create',lobby_revision=revision,choice_id='invalid-race-class',name='Codexinvalid',look={})
+        wait(lambda:lobby()['revision']>revision and not lobby().get('pending'),'Invalid choice rejected without leaving creation')
+        assert lobby()['enabled'] and lobby()['ready'] and not lobby()['characters']
+        assert lobby()['feedback']=='Choose a valid race and class.'
+        report['invalid_choice_recoverable']=True
+        if args.eligibility_only:cases=[]
     for race,prefix,advanced,base in cases:
-        for female in ([True] if args.bainshee_candidate else [False,True]):
+        for female in ([False] if args.classic_class_batch is not None else ([True] if args.bainshee_candidate else [False,True])):
             figure=prefix+('_f' if female else '_m');choice=next(c for c in lobby()['choices'] if c['race']==race and c['female']==female and c['class_id']==advanced)
             meta=json.loads((game/'godot/content/characters/races'/figure/'figure.json').read_text())
             look={'size':2,'face':0,'eyes':0,'skin':0,'hair':0,'hair_color':0,'tattoo':0,'sliders':[2 if i%2 else 6 for i in range(len(meta.get('sliders',[])))]}
-            name='Codex'+prefix+('f' if female else 'm')+suffix
+            name='Codex'+prefix+('f' if female else 'm')+chr(97+advanced//26)+chr(97+advanced%26)+suffix
             send('character_create',lobby_revision=lobby()['revision'],choice_id=choice['id'],name=name,look=look)
             wait(lambda:any(c['name']==name for c in lobby().get('characters',[])) and not lobby().get('pending'),'Server confirms '+figure,55)
             selected=next(c for c in lobby()['characters'] if c['name']==name)
@@ -147,12 +186,23 @@ try:
             for line in audit['spell_lines']:expected.update(str(x['name']) for x in line['spells'])
             actual={str(x['name']) for x in snapshot['classic_ui']['entries'] if x.get('kind')=='spell'}
             assert actual==expected,(figure,expected,actual)
+            if args.classic_class_batch is not None:
+                base_spells={51:{'Gleam Ray','Lesser Powerward'},52:set(),53:{'Minor Revigoration'},54:set(),57:{"Grove's Protection"}}
+                assert actual==base_spells[base],('Unexpected original base-class spells',advanced,base,actual)
             send('chat',text='/quit')
-            wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,55)
+            wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Saved return '+figure,90)
             selected=next(c for c in lobby()['characters'] if c['name']==name);assert selected['look']==look and selected['prefix']==figure
-            report['cases'].append({'figure':figure,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True});save_report()
+            if args.classic_class_batch is not None:
+                send('character_enter',lobby_revision=lobby()['revision'],name=name)
+                wait(lambda:snapshot.get('in_game') and snapshot.get('character')==name and snapshot.get('classic_ui',{}).get('skills_ready') and snapshot.get('player_status',{}).get('ready'),'Existing character reenters '+name,45)
+                wait(lambda:any(e.get('id')=='player:local' and e.get('look')==look and e.get('model_id')==models[figure] for e in snapshot.get('entities',[])),'Existing look restored '+name)
+                retained={str(e['name']) for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
+                assert retained==expected,('Existing character spell loss',advanced,expected,retained)
+                send('chat',text='/quit')
+                wait(lambda:not snapshot.get('in_game') and lobby().get('ready'),'Second saved return '+name,90)
+            report['cases'].append({'figure':figure,'selected_class':advanced,'created':True,'base_class':base,'level':1,'world_model':models[figure],'appearance_retained':True,'spell_list_complete':True,'spells':sorted(actual),'saved_return':True,'existing_character_reentry':args.classic_class_batch is not None});save_report()
             print('CREATION_MATRIX_CASE '+figure+' passed',flush=True)
-    expected_count=3 if args.bainshee_candidate else 10
+    expected_count=len(cases) if args.classic_class_batch is not None else (3 if args.bainshee_candidate else 10)
     assert len(report['cases'])==expected_count and len(lobby()['characters'])==expected_count
     report['passed']=True
 except Exception:report['errors'].append(traceback.format_exc())
@@ -173,6 +223,7 @@ finally:
     if store_before is None:store.unlink(missing_ok=True)
     else:store.write_bytes(store_before)
     report['appearance_profile_restored']=True
+    config.write_bytes(config_before);report['bridge_config_restored']=True
     if backed:
         with checked() as db:
             src=sqlite3.connect(backup/'before.sqlite3.db');src.backup(db);src.close()

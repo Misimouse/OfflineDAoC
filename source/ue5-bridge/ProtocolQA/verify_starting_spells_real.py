@@ -18,6 +18,7 @@ parser.add_argument('--bainshee-training',action='store_true')
 parser.add_argument('--expansion-training',action='store_true')
 parser.add_argument('--expansion-self-buff',action='store_true')
 parser.add_argument('--bainshee-combat',action='store_true')
+parser.add_argument('--druid-promotion',action='store_true')
 args=parser.parse_args();class_id=args.class_id
 training_mode=args.bainshee_training or args.expansion_training
 native_combat_mode=args.bainshee_combat or args.vampiir_bolt
@@ -32,7 +33,8 @@ proposal_path=args.bainshee_proposal or args.expansion_proposal
 assert (class_id in [39,58,62])==bool(proposal_path),'Expansion classes require an explicit isolated data proposal'
 assert not args.bainshee_proposal or class_id==39
 assert not args.expansion_proposal or class_id in [58,62]
-assert args.level is None or class_id in [39,58,62],'Advanced-level data probes are limited to scoped expansion fixtures'
+assert args.level is None or class_id in [39,58,62] or args.druid_promotion,'Advanced-level data probes require a scoped fixture'
+assert not args.druid_promotion or (class_id==47 and args.level==5 and not proposal_path and not training_mode and not native_combat_mode),'Druid promotion uses the original level-five Naturalist and trainer'
 level=args.level or (3 if class_id==52 else 1)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
@@ -43,7 +45,7 @@ assert not args.bainshee_training or (class_id==39 and level==50 and not args.ba
 assert not args.expansion_self_buff or args.expansion_training,'Self buff requires the original training fixture'
 assert not args.expansion_training or (class_id in [58,62] and level==50 and not args.bainshee_training and not args.bainshee_combat)
 assert not args.bainshee_combat or (class_id==39 and level==50 and not args.bainshee_promotion and not args.bainshee_effect and not args.bainshee_form_cycle and not args.bainshee_training)
-D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] else '')+('_promotion' if args.bainshee_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else '')+('_bolt' if args.vampiir_bolt else ''));D.mkdir(parents=True,exist_ok=True)
+D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level)) if class_id in [39,58,62] or args.druid_promotion else '')+('_promotion' if args.bainshee_promotion or args.druid_promotion else '')+('_form_cycle' if args.bainshee_form_cycle else '')+('_race_'+str(args.bainshee_race) if args.bainshee_race!=9 else '')+('_effect_'+args.bainshee_effect if args.bainshee_effect else '')+('_training' if training_mode else '')+('_combat' if args.bainshee_combat else '')+('_self_buff' if args.expansion_self_buff else '')+('_career' if args.career_proposal else '')+('_power' if args.expansion_power else '')+('_bolt' if args.vampiir_bolt else ''));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -116,11 +118,16 @@ try:
    import importlib.util
    spec=importlib.util.spec_from_file_location('expansion_career_data',Path(__file__).with_name('expansion_career_data.py'));career=importlib.util.module_from_spec(spec);spec.loader.exec_module(career)
    result['isolated_career_data']=career.install(db,args.career_proposal,RUN.name,class_id)
-  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat or args.expansion_power or args.vampiir_bolt else 3,'Realm':3})
+  update(db,'Account','Name',char['AccountName'],{'PrivLevel':1 if training_mode or args.bainshee_combat or args.expansion_power or args.vampiir_bolt or args.druid_promotion else 3,'Realm':3})
   values={'Class':class_id,'Level':level,'Experience':0,'SerializedSpecs':''}
   if class_id==39:
    creation_model={9:310,11:342,12:326}[args.bainshee_race]
    values.update(Gender=1,Race=args.bainshee_race,CreationModel=creation_model,CurrentModel=creation_model)
+  if args.druid_promotion:
+   values.update(Class=53,Race=9,Gender=0,CreationModel=1984,CurrentModel=1984,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
+   npc=db.execute("SELECT Mob_ID FROM Mob WHERE Name IN ('Codex Magic Target','Codex Pet Training Dummy')").fetchone();assert npc
+   update(db,'Mob','Mob_ID',npc['Mob_ID'],{'Name':'Codex Druid Trainer','ClassType':'DOL.GS.Trainer.DruidTrainer','Guild':'Druid Trainer','Model':342,'Level':50,'Realm':3,'Flags':0,'AggroLevel':0,'Speed':0,'X':char['Xpos']+80,'Y':char['Ypos']+40,'Z':char['Zpos']})
+   result['promotion_gift_template_present']=bool(db.execute("SELECT 1 FROM ItemTemplate WHERE Id_nb='druid_item'").fetchone())
   if args.bainshee_promotion:
    values.update(Class=51,Health=200,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='')
    disabled=db.execute("SELECT Value FROM ServerProperty WHERE Key='disabled_classes'").fetchone()[0]
@@ -191,6 +198,35 @@ try:
   except OSError:time.sleep(.2)
  else:raise RuntimeError('Private spell bridge unavailable')
  wait(lambda:snapshot.get('classic_ui',{}).get('skills_ready'),'Starting spell lists');settle(5)
+ if args.druid_promotion:
+  wait(lambda:snapshot.get('player_status',{}).get('ready'),'Naturalist vitals ready')
+  if snapshot['player_status']['vitals'].get('sitting'):
+   send('player_sit',on=False,player_generation=snapshot['player_status']['generation'])
+   wait(lambda:not snapshot['player_status']['vitals'].get('sitting'),'Naturalist stands before training')
+  before={e.get('name') for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'}
+  assert not any(str(name).startswith('Call ') for name in before),'Naturalist must not receive a Druid pet before promotion'
+  player=next(e for e in snapshot['entities'] if e['id']=='player:local')
+  send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);settle(2)
+  wait(lambda:any(e.get('name')=='Codex Druid Trainer' for e in snapshot['entities']),'Original Druid trainer visible',20)
+  npc=next(e for e in snapshot['entities'] if e.get('name')=='Codex Druid Trainer')
+  send('interact',entity_id=npc['id'])
+  wait(lambda:'Druid' in snapshot.get('interaction',{}).get('talk',{}).get('keywords',[]),'Original trainer offers Druid promotion',20)
+  talk=snapshot['interaction']['talk'];send('keyword',reply_id=talk['id'],word='Druid')
+  wait(lambda:any(e.get('name')=='Call Minor Nature Spirit' for e in snapshot['classic_ui']['entries'] if e.get('kind')=='spell'),'Promotion grants original Druid pet spell',20)
+  with checked() as db:assert db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==47
+  result['checks']['original_naturalist_promoted_by_trainer']=True
+  send('target_self');settle(.5)
+  entry=next(e for e in snapshot['classic_ui']['entries'] if e.get('name')=='Call Minor Nature Spirit' and e.get('kind')=='spell')
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  wait(lambda:snapshot['classic_ui'].get('pet',{}).get('valid'),'Promoted Druid summons original owned pet',25)
+  pet=dict(snapshot['classic_ui']['pet'])
+  wait(lambda:any(e['id']=='npc:'+str(pet['oid']) for e in snapshot['entities']),'Server pet exists in entity stream')
+  entity=next(e for e in snapshot['entities'] if e['id']=='npc:'+str(pet['oid']))
+  result['druid_pet']={'oid':pet['oid'],'name':entity.get('name'),'model_id':entity.get('model_id'),'rendered_visual_acceptance':False}
+  entry=next(e for e in snapshot['classic_ui']['entries'] if e['id']=='petcmd:release')
+  send('ui_use',entry_id=entry['id'],entry_token=entry['token'])
+  wait(lambda:not snapshot['classic_ui'].get('pet',{}).get('valid'),'Original release clears owned pet',15)
+  result['checks']['promoted_pet_summoned_and_released']=True
  if args.bainshee_promotion:
   player=next(e for e in snapshot.get('entities',[]) if e.get('id')=='player:local')
   send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0);settle(2)
@@ -427,7 +463,7 @@ try:
   result['checks']['original_timer_restores_appearance_and_inventory']=True
   result['combat_damage_tested']=False
  send('chat',text='/quit')
- wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if native_combat_mode or training_mode or args.expansion_power else 45)
+ wait(lambda:not snapshot.get('in_game') and snapshot.get('character_lobby',{}).get('ready'),'Return to current creation rules',100 if native_combat_mode or training_mode or args.expansion_power or args.druid_promotion else 45)
  lobby=snapshot['character_lobby'];assert all(int(c['class_id'])!=63 for c in lobby['choices'])
  result['custom_disabled_choice_hidden']=True
  row=next(c for c in lobby['characters'] if c['name']=='Codexdruid')
@@ -439,6 +475,11 @@ try:
   send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
   wait(lambda:snapshot.get('classic_ui',{}).get('skills_ready') and learned<={e.get('name') for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell'},'Trained spells survive saved reentry',40)
   result['checks']['trained_spells_survive_saved_reentry']=True
+ if args.druid_promotion:
+  send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
+  wait(lambda:snapshot.get('in_game') and snapshot.get('classic_ui',{}).get('skills_ready') and {e.get('name') for e in snapshot.get('classic_ui',{}).get('entries',[]) if e.get('kind')=='spell'}==expected,'Druid promotion and spells survive saved reentry',45)
+  with checked() as db:assert db.execute("SELECT Class FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]==47
+  result['checks']['druid_class_and_spells_survive_saved_reentry']=True
  result['passed']=True
 
 except Exception:
