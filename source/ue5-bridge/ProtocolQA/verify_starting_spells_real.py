@@ -18,6 +18,7 @@ parser.add_argument('--vampiir-race',type=int,choices=[9,12,18],default=9)
 parser.add_argument('--vampiir-female',action='store_true')
 parser.add_argument('--candidate-build',type=Path)
 parser.add_argument('--combined-expansions',action='store_true')
+parser.add_argument('--combined-data',type=Path)
 parser.add_argument('--server-source',type=Path)
 parser.add_argument('--bainshee-effect',choices=['ward','barrier'])
 parser.add_argument('--bainshee-training',action='store_true')
@@ -44,6 +45,7 @@ assert args.level is None or class_id in [39,58,62] or args.druid_promotion,'Adv
 assert not args.druid_promotion or (class_id==47 and args.level==5 and not proposal_path and not training_mode and not native_combat_mode),'Druid promotion uses the original level-five Naturalist and trainer'
 level=args.level or (3 if class_id==52 else 1)
 assert level!=6 or class_id==58, 'The level-six boundary fixture is specific to original Vampiir career abilities'
+assert not args.combined_data or args.combined_expansions
 assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined_expansions)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
@@ -63,6 +65,7 @@ D=ROOT/'Reports/starting_spells'/('class_'+str(class_id)+(('_level_'+str(level))
 if args.vampiir_promotion:D=ROOT/'Reports/starting_spells'/('class_58_level_5_promotion_race_'+str(args.vampiir_race)+('_female' if args.vampiir_female else '_male'));D.mkdir(parents=True,exist_ok=True)
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions/starting_spells'/D.name;D.mkdir(parents=True,exist_ok=True)
 if args.native_form_probe:D=D.parent/(D.name+'_native');D.mkdir(parents=True,exist_ok=True)
+if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -130,8 +133,13 @@ try:
  with checked() as db:
   dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
   char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
-  if class_id in [39,58,62]:install_probe_data(db)
-  if args.career_proposal:
+  if args.combined_data:
+   import sys
+   sys.path.insert(0,str(Path(__file__).resolve().parent))
+   from prepare_combined_expansion_data import apply_marked
+   result['preloaded_combined_data']=apply_marked(db,args.combined_data,RUN.name,ROOT)
+  elif class_id in [39,58,62]:install_probe_data(db)
+  if args.career_proposal and not args.combined_data:
    import importlib.util
    spec=importlib.util.spec_from_file_location('expansion_career_data',Path(__file__).with_name('expansion_career_data.py'));career=importlib.util.module_from_spec(spec);spec.loader.exec_module(career)
    result['isolated_career_data']=career.install(db,args.career_proposal,RUN.name,class_id)

@@ -17,6 +17,44 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def apply_marked(db, proposal_path, run_id, workspace):
+    """Stage this proposal only inside a harness that restores its marked DB."""
+    workspace, proposal_path = workspace.resolve(), proposal_path.resolve()
+    assert proposal_path == workspace/'Reports/combined_expansions/data_integration/proposal.json'
+    database_path = next(row[2] for row in db.execute('PRAGMA database_list') if row[1] == 'main')
+    assert not database_path or Path(database_path).resolve().is_relative_to(workspace/'ProtocolQA')
+    assert db.execute('SELECT RunId FROM CodexQaIsolationMarker').fetchone()[0] == run_id
+    proposal = json.loads(proposal_path.read_text())
+    assert proposal['passed'] and proposal['proposal_only'] and not proposal['installed']
+    assert proposal['database_restored_byte_for_byte'] and not proposal['activation_included']
+    assert proposal['source_commit'] == 'b5b29c2ada7695414b94f5fa110eb505a477d007'
+    for path, expected in proposal['inputs'].items():
+        path = Path(path).resolve()
+        assert path.is_relative_to(workspace) and digest(path) == expected
+    rows = proposal['rows']
+    assert set(rows) == {'Spell', 'LineXSpell', 'Ability', 'SpecXAbility', 'ItemTemplate', 'StartupLocation'}
+    assert proposal['added_rows'] == {table: len(values) for table, values in rows.items()}
+    db.execute('SAVEPOINT preloaded_expansion_data')
+    try:
+        for table, values in rows.items():
+            allowed = {row[1] for row in db.execute('PRAGMA table_info('+table+')')}
+            for row in values:
+                assert row and set(row) <= allowed
+                columns = list(row)
+                # INSERT deliberately rejects any identity collision; existing
+                # spells, associations and items can never be replaced here.
+                db.execute('INSERT INTO '+table+' ('+','.join('"'+k+'"' for k in columns)+') VALUES ('+
+                           ','.join('?' for _ in columns)+')', [row[k] for k in columns])
+        assert db.execute('PRAGMA quick_check').fetchone()[0] == 'ok'
+    except Exception:
+        db.execute('ROLLBACK TO preloaded_expansion_data')
+        db.execute('RELEASE preloaded_expansion_data')
+        raise
+    db.execute('RELEASE preloaded_expansion_data')
+    return {'proposal_sha256': digest(proposal_path), 'data_rows_sha256': hashlib.sha256(json.dumps(rows,sort_keys=True,separators=(',',':')).encode()).hexdigest(), 'marked_qa_only': True,
+            'added_rows': proposal['added_rows'], 'activation_included': False}
+
+
 def prepare(workspace):
     workspace = workspace.resolve()
     prepared = json.loads((workspace/'Reports/protocol_qa/prepared.json').read_text())
@@ -90,7 +128,7 @@ def prepare(workspace):
     result = {'passed': True, 'proposal_only': True, 'installed': False,
               'database_restored_byte_for_byte': True, 'normal_database_modified': False,
               'activation_included': False, 'source_commit': 'b5b29c2ada7695414b94f5fa110eb505a477d007',
-              'inputs': {str(path): digest(path) for path in [seal, *proposals.values(), career]},
+              'inputs': {str(path): digest(path) for path in [workspace/'ExpansionRaceLab/CombinedExpansionServerCandidate/build_receipt.json', *proposals.values(), career]},
               'added_rows': added, 'rows': rows, 'spell_and_career_application': applied,
               'startup_references': [proposal['reference'] for proposal in starts],
               'limitations': ['No race/class activation or inventory grants',

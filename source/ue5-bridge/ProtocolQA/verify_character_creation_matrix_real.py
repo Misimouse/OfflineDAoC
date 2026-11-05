@@ -15,6 +15,7 @@ parser.add_argument('--shar-promotion',action='store_true')
 parser.add_argument('--minotaur-promotion',action='store_true')
 parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--combined-expansions',action='store_true')
+parser.add_argument('--combined-data',type=Path)
 parser.add_argument('--native-world-probe',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
@@ -28,6 +29,7 @@ assert not args.shar_promotion or args.shar_candidate
 assert not args.minotaur_promotion or args.minotaur_candidate
 assert not args.minotaur_original_start or (args.minotaur_candidate and not promoting)
 assert not args.combined_expansions or args.candidate_build
+assert not args.combined_data or args.combined_expansions
 assert not args.native_world_probe or (args.combined_expansions and (args.minotaur_original_start or args.bainshee_candidate or args.vampiir_candidate))
 assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
@@ -57,6 +59,7 @@ if args.minotaur_promotion:D=ROOT/'Reports/minotaur_promotion';D.mkdir(exist_ok=
 if args.minotaur_original_start:D=ROOT/'Reports/minotaur_original_start';D.mkdir(exist_ok=True)
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions'/D.name;D.mkdir(parents=True,exist_ok=True)
 if args.native_world_probe:D=D.parent/(D.name+'_world');D.mkdir(exist_ok=True)
+if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -151,6 +154,9 @@ try:
         except (ConnectionRefusedError,socket.timeout):pass
     with checked() as db:
         dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
+        if args.combined_data:
+            from prepare_combined_expansion_data import apply_marked
+            report['preloaded_combined_data']=apply_marked(db,args.combined_data,RUN.name,ROOT)
         account_row=db.execute("SELECT a.Name FROM Account a JOIN DOLCharacters c ON c.AccountName=a.Name WHERE c.Name='Codexdruid'").fetchone();assert account_row
         account_name=account_row['Name']
         # All ten creation slots are needed; this account/database is explicitly
@@ -161,7 +167,7 @@ try:
             sys.path.insert(0,str(Path(__file__).resolve().parent))
             from prepare_hibernia_starter_repair import prepare as prepare_starter_repair
             repair=prepare_starter_repair(ROOT/'References/DOLPublic_b5b29c2ada76/ItemTemplate.json',DB)
-            assert repair['passed'] and not repair['database_modified'] and len(repair['insert_rows'])==6
+            assert repair['passed'] and not repair['database_modified'] and len(repair['insert_rows'])==(0 if args.combined_data else 6)
             for row in repair['insert_rows']:
                 keys=list(row)
                 db.execute('INSERT INTO ItemTemplate ('+','.join('"'+key+'"' for key in keys)+') VALUES ('+','.join('?' for key in keys)+')',[row[key] for key in keys])

@@ -165,3 +165,27 @@ SQLite rollback alone can retain physical page/header differences. The output
 is a JSON insertion proposal, not activation, inventory grants or a played DB.
 The successful combined dry run adds 254 spells, 253 spell associations, four
 abilities, 19 career associations, six item templates and five startup rows.
+
+To test the complete package rather than individual class inserts, pass
+`--combined-data PRIVATE_WORKSPACE/Reports/combined_expansions/data_integration/proposal.json`
+to the combined creation or starting-spell harness. This writes separate
+`_preloaded` evidence, applies only INSERT statements to a marked database under
+`ProtocolQA`, and retains the harness's normal full-fixture restoration. The
+package's source inputs are immutable build/proposal receipts, avoiding a
+self-reference to the evolving joint acceptance summary. Every case records
+the complete data-row payload hash.
+
+`verify_combined_data_rollback.py` uses in-memory copies of an explicitly marked
+QA backup to verify wrong-marker rejection, rollback after a late startup-ID
+collision, and duplicate-package rejection. A separate tiny temporary database
+also proves that a matching marker outside `ProtocolQA` cannot authorize writes.
+The source backup stays unchanged. `--include-preloaded-data` on the joint sealer
+requires those four checks, four Minotaur creations, ten Shar promotions, the
+Bainshee and Shar Vampiir promotions, and a live native Bainshee cycle, all using
+the same complete payload and combined server.
+
+`prepare_review_expansion_delta.py` is read-only. It compares that accepted
+package with the existing private review by semantic identities, preserves
+matching rows, reports conflicts and reallocates only numeric association/startup
+surrogate IDs. It produces a separate data delta; it never replaces the review
+DB, writes progress records, enables races/classes or changes launcher binaries.

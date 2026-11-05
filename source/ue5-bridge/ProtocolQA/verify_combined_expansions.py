@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 
-def verify(workspace, include_native_world=False, include_advanced_protocol=False, include_live_forms=False):
+def verify(workspace, include_native_world=False, include_advanced_protocol=False, include_live_forms=False, include_preloaded_data=False):
     workspace=workspace.resolve()
     candidate=workspace/'ExpansionRaceLab/CombinedExpansionServerCandidate'
     receipt_path=candidate/'build_receipt.json'
@@ -161,6 +161,48 @@ def verify(workspace, include_native_world=False, include_advanced_protocol=Fals
         result['bainshee_live_native_forms_accepted']=True
         result['scope']='Joint creation, saved return, native GM entry and three live Bainshee form cycles; no normal activation or complete expansion ability acceptance.'
         result['pending'][0]='Complete expansion data deployment; other advanced abilities remain separately scoped'
+    if include_preloaded_data:
+        assert include_live_forms
+        folder=workspace/'Reports/combined_expansions/data_integration'
+        package_path=folder/'proposal.json';package=json.loads(package_path.read_text())
+        assert package['passed'] and package['proposal_only'] and not package['installed'] and not package['activation_included']
+        assert package['database_restored_byte_for_byte'] and not package['normal_database_modified']
+        assert package['added_rows']=={'Spell':254,'LineXSpell':253,'Ability':4,'SpecXAbility':19,'ItemTemplate':6,'StartupLocation':5}
+        assert all(digest(Path(path))==value for path,value in package['inputs'].items())
+        payload_hash=hashlib.sha256(json.dumps(package['rows'],sort_keys=True,separators=(',',':')).encode()).hexdigest()
+        rollback_path=folder/'rollback_checks.json';rollback=json.loads(rollback_path.read_text())
+        assert rollback['passed'] and rollback['in_memory_only'] and rollback['source_backup_unchanged']
+        assert len(rollback['checks'])==4 and rollback['proposal_sha256']==digest(package_path)
+        evidence['preloaded_data_proposal']=digest(package_path);evidence['preloaded_rollback_checks']=digest(rollback_path)
+        counts=0
+        groups={
+            'minotaur_original_start_preloaded':(4,{43,44,45,46}),
+            'shar_promotion_preloaded':(10,{42,43,44,45,50})}
+        for group,(count,classes) in groups.items():
+            path=workspace/'Reports/combined_expansions'/group/'real_protocol.json';row=json.loads(path.read_text())
+            assert all(row.get(k) for k in ['passed','combined_expansion_build','database_restored','appearance_profile_restored','bridge_config_restored','candidate_files_restored','normal_shutdown'])
+            assert row['candidate_build_receipt_sha256']==receipt_hash
+            assert len(row['cases'])==count and {c['selected_class'] for c in row['cases']}==classes
+            assert all(c['created'] and c['existing_character_reentry'] and c['spell_list_complete'] for c in row['cases'])
+            assert row['preloaded_combined_data']['data_rows_sha256']==payload_hash
+            if group.startswith('minotaur'):assert row['original_start_without_relocation'] and all(c['original_spawn_and_bind_retained'] for c in row['cases'])
+            else:assert all(c['original_trainer_promotion'] and c['advanced_class_retained'] for c in row['cases'])
+            evidence[group]=digest(path);counts+=count
+        for group,key in [('class_39_level_5_promotion_preloaded','bainshee_class_and_spells_survive_saved_reentry'),
+                          ('class_58_level_5_promotion_race_18_female_preloaded','vampiir_class_and_spells_survive_saved_reentry'),
+                          ('class_39_level_5_form_cycle_native_preloaded','live_native_original_body_and_equipment_restored')]:
+            path=workspace/'Reports/combined_expansions/starting_spells'/group/'real_protocol.json';row=json.loads(path.read_text())
+            assert all(row.get(k) for k in ['passed','complete','combined_expansion_build','database_restored','candidate_server_restored','normal_shutdown'])
+            assert row['candidate_build_receipt_sha256']==receipt_hash
+            assert row['preloaded_combined_data']['data_rows_sha256']==payload_hash
+            assert row['checks'][key] and set(row['expected_spells'])==set(row['visible_spells'])
+            if 'native' in group:
+                assert row['native_observer_exit']==0 and row['checks']['live_native_body_and_portrait_transform']
+                assert row['checks']['native_form_inputs_unchanged'] and all(digest(Path(path))==value for path,value in row['native_form_inputs'].items())
+            evidence[group]=digest(path);counts+=1
+        result['preloaded_joint_data_cases']=counts
+        result['preloaded_joint_data_accepted']=True
+        result['pending'][0]='Reversible private review integration of the tested joint server and data package'
     (candidate/'verified_joint_creation.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     return result
 
@@ -171,4 +213,5 @@ if __name__=='__main__':
     parser.add_argument('--include-native-world',action='store_true')
     parser.add_argument('--include-advanced-protocol',action='store_true')
     parser.add_argument('--include-live-forms',action='store_true')
-    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol,args.include_live_forms)))
+    parser.add_argument('--include-preloaded-data',action='store_true')
+    args=parser.parse_args();print(json.dumps(verify(args.workspace,args.include_native_world,args.include_advanced_protocol,args.include_live_forms,args.include_preloaded_data)))
