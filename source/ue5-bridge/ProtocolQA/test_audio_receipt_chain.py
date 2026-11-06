@@ -65,6 +65,24 @@ def verify(workspace):
         mode['native_sha256']=digest(binary);put(mode_path,mode)
         trigger.write_text('tampered trigger');rejected();trigger.write_text('synthetic trigger');checks+=1
         wave.write_bytes(b'changed original with successor');rejected();checks+=1
+        wave.write_bytes(before)
+        plugin=w/'Client/Plugins/DAoCVisualBridge'
+        selection_rows=[]
+        for relative in ['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+            'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeInteraction.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeInteractionAcceptance.cpp']:
+            target=plugin/relative;target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists():target.write_bytes(b'old synthetic source')
+            previous=digest(target);target.write_bytes(b'new synthetic selection '+relative.encode())
+            selection_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        selection_path=w/'TargetSelectionLab/installed.json'
+        selection={'installed':True,'phase':'complete','database_modified':False,'predecessor_receipt_sha256':digest(mode_path),
+            'native_before_sha256':mode['native_sha256'],'native_after_sha256':digest(binary),'files':selection_rows}
+        put(selection_path,selection);assert verify_files(w)['target_selection_installed'];checks+=1
+        selection['predecessor_receipt_sha256']='0'*64;put(selection_path,selection);rejected();checks+=1
+        selection['predecessor_receipt_sha256']=digest(mode_path)
+        selection['files'][0]['before_sha256']='0'*64;put(selection_path,selection);rejected();checks+=1
+        selection['files'][0]['before_sha256']=selection['native_before_sha256'];put(selection_path,selection)
+        binary.write_bytes(b'tampered installed selection');rejected();checks+=1
     return {'passed':True,'checks':checks,'synthetic_only':True,'normal_installation_modified':False}
 
 

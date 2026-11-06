@@ -28,6 +28,22 @@ def verify_files(workspace):
     mode=json.loads(mode_path.read_text()) if mode_path.exists() else None
     if mode and not mode.get('installed'):mode=None
     mode_replacements={}
+    selection_path=workspace/'TargetSelectionLab/installed.json'
+    selection=json.loads(selection_path.read_text()) if selection_path.exists() else None
+    if selection and not selection.get('installed'):selection=None
+    selection_replacements={}
+    if selection:
+        assert mode and combat and selection['phase']=='complete' and not selection['database_modified']
+        assert selection['predecessor_receipt_sha256']==digest(mode_path)
+        assert selection['native_before_sha256']==mode['native_sha256']==combat['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+        expected={str(plugin/p) for p in ['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+            'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeInteraction.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeInteractionAcceptance.cpp']}
+        selection_replacements={row['target']:row for row in selection['files']}
+        assert len(selection['files'])==len(selection_replacements)==5 and set(selection_replacements)==expected
+        binary=selection_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==selection['native_before_sha256'] and binary['after_sha256']==selection['native_after_sha256']
+        for row in selection['files']:assert digest(Path(row['target']))==row['after_sha256']
     if mode:
         assert combat and mode['phase']=='complete' and not mode['database_modified']
         assert mode['predecessor_receipt_sha256']==digest(combat_path)
@@ -50,13 +66,16 @@ def verify_files(workspace):
         assert replacements[native_target]['before_sha256']==combat['native_before_sha256']
         assert replacements[native_target]['after_sha256']==combat['native_after_sha256']
         for row in combat['files']:
-            latest=mode_replacements.get(row['target'])
+            latest=selection_replacements.get(row['target']) or mode_replacements.get(row['target'])
             if latest:assert latest['before_sha256']==row['after_sha256']
             assert digest(Path(row['target']))==(latest['after_sha256'] if latest else row['after_sha256'])
         for row in audio['files']:
             changed=replacements.get(row['target'])
             if changed:assert changed['before_sha256']==row['after_sha256']
-            assert digest(Path(row['target']))==(changed['after_sha256'] if changed else row['after_sha256'])
+            expected=changed['after_sha256'] if changed else row['after_sha256']
+            latest=selection_replacements.get(row['target'])
+            if latest:assert latest['before_sha256']==expected;expected=latest['after_sha256']
+            assert digest(Path(row['target']))==expected
     replaced=0
     for row in original['files']:
         path=Path(row['target'])
@@ -78,4 +97,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'verified_files':len(original['files'])}

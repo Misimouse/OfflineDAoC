@@ -410,6 +410,7 @@ private:
     void SelectEntity(const FString& Id,bool Interact=false);
     FString CurrentTarget() const;
     FString TargetAtCursor(bool Cycle=false,FVector2D ScreenOverride=FVector2D(-1,-1)) const;
+    FBox EntitySelectionBounds(const AActor* Actor) const;
     bool CanSelect(const FString& Id,FVector& Aim) const;
     bool TickInteractionAcceptance();
     bool bAutoInteractionTest=false;

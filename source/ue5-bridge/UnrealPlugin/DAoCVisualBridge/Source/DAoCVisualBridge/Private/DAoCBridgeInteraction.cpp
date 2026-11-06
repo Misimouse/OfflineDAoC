@@ -6,6 +6,8 @@
 #include "GameFramework/PlayerController.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkinnedMeshComponent.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBorder.h"
@@ -35,11 +37,24 @@ bool UDAoCBridgeSubsystem::CanSelect(const FString& Id,FVector& Aim) const{
     bool Targetable=true;(*Row)->TryGetBoolField(TEXT("targetable"),Targetable);if(!Targetable||(*A)->IsHidden())return false;
     const float Range=Quality==TEXT("accessible")?6000:Quality==TEXT("balanced")?9000:Quality==TEXT("high")?12500:15000;
     if(FVector::DistSquared(PlayerPosition,(*A)->GetActorLocation())>FMath::Square(Range))return false;
-    auto* Root=Cast<UPrimitiveComponent>((*A)->GetRootComponent());
-    Aim=Root?Root->Bounds.Origin:(*A)->GetActorLocation()+FVector(0,0,90);
+    const FBox Body=EntitySelectionBounds(*A);
+    Aim=Body.IsValid?Body.GetCenter():(*A)->GetActorLocation()+FVector(0,0,90);
     auto* PC=GetWorld()->GetFirstPlayerController();if(!PC||!PC->PlayerCameraManager)return false;
     FCollisionQueryParams Q(SCENE_QUERY_STAT(BridgeTargetSight),true);Q.AddIgnoredActor(*A);if(PlayerPawn)Q.AddIgnoredActor(PlayerPawn);
     FHitResult Hit;return !GetWorld()->LineTraceSingleByChannel(Hit,PC->PlayerCameraManager->GetCameraLocation(),Aim,ECC_Camera,Q);
+}
+FBox UDAoCBridgeSubsystem::EntitySelectionBounds(const AActor* Actor) const{
+    FBox Body(ForceInit);if(!IsValid(Actor))return Body;
+    // Picking follows the rendered body, independently of its movement capsule.
+    // Weapons, particles and nameplates must not enlarge the selectable body.
+    TInlineComponentArray<UPrimitiveComponent*> Components;Actor->GetComponents(Components);
+    for(auto* Component:Components){
+        if(!Component->IsRegistered()||!Component->IsVisible()||Component->bHiddenInGame||Component->ComponentHasTag(TEXT("DAoCBridgeEquipment")))continue;
+        if(!Cast<UStaticMeshComponent>(Component)&&!Cast<USkinnedMeshComponent>(Component))continue;
+        const FBox Box=Component->CalcBounds(Component->GetComponentTransform()).GetBox();
+        if(Box.IsValid&&!Box.GetCenter().ContainsNaN()&&!Box.GetExtent().ContainsNaN()&&!Box.GetExtent().IsNearlyZero())Body+=Box;
+    }
+    return Body;
 }
 FString UDAoCBridgeSubsystem::TargetAtCursor(bool Cycle,FVector2D ScreenOverride) const{
     auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return FString();
@@ -48,11 +63,18 @@ FString UDAoCBridgeSubsystem::TargetAtCursor(bool Cycle,FVector2D ScreenOverride
     for(const auto& Pair:Entities){
         FVector Aim;if(!CanSelect(Pair.Key,Aim))continue;
         if(Cycle){const auto* Row=EntityRows.Find(Pair.Key);const int32 Realm=Row?int32(Num(*Row,TEXT("realm"),-1)):-1;const bool Enemy=Pair.Key!=TEXT("player:local")&&(Realm==0||Realm==1||Realm==2);if(!Enemy||FVector::DistSquared(PlayerPosition,Pair.Value->GetActorLocation())>FMath::Square(6000.f))continue;Candidates.Add({Pair.Key,float(FVector::DistSquared(PlayerPosition,Pair.Value->GetActorLocation()))});continue;}
-        FVector2D Screen;
-        if(!PC->ProjectWorldLocationToScreen(Aim,Screen)||Screen.X<0||Screen.Y<0||Screen.X>Width||Screen.Y>Height)continue;
-        FVector2D Top,Bottom;float Radius=24;
-        if(auto* Root=Cast<UPrimitiveComponent>(Pair.Value->GetRootComponent()))if(PC->ProjectWorldLocationToScreen(Aim+FVector(0,0,Root->Bounds.BoxExtent.Z),Top)&&PC->ProjectWorldLocationToScreen(Aim-FVector(0,0,Root->Bounds.BoxExtent.Z),Bottom))Radius=FMath::Clamp(float((Top-Bottom).Size()*.55),16.f,90.f);
-        const float Dist=FVector2D::Distance(Screen,FVector2D(X,Y));if(Cycle||Dist<=Radius)Candidates.Add({Pair.Key,Cycle?float(FVector::DistSquared(PlayerPosition,Pair.Value->GetActorLocation())):Dist/Radius});
+        const FBox Body=EntitySelectionBounds(Pair.Value.Get());if(!Body.IsValid)continue;
+        FBox2D Projected(ForceInit);bool InFront=true;
+        for(int32 Corner=0;Corner<8;++Corner){
+            const FVector Point((Corner&1)?Body.Max.X:Body.Min.X,(Corner&2)?Body.Max.Y:Body.Min.Y,(Corner&4)?Body.Max.Z:Body.Min.Z);
+            FVector2D Pixel;if(!PC->ProjectWorldLocationToScreen(Point,Pixel)){InFront=false;break;}Projected+=Pixel;
+        }
+        if(!InFront||!Projected.bIsValid)continue;
+        const FVector2D Centre=Projected.GetCenter(),Extent=Projected.GetExtent();
+        const FVector2D PickExtent(FMath::Max(8.,Extent.X+4.),FMath::Max(8.,Extent.Y+4.));
+        const FVector2D Delta=FVector2D(X,Y)-Centre;
+        if(FMath::Abs(Delta.X)<=PickExtent.X&&FMath::Abs(Delta.Y)<=PickExtent.Y)
+            Candidates.Add({Pair.Key,float(FMath::Square(Delta.X/PickExtent.X)+FMath::Square(Delta.Y/PickExtent.Y))});
     }
     Candidates.Sort([](const FCandidate& A,const FCandidate& B){return A.Score==B.Score?A.Id<B.Id:A.Score<B.Score;});
     if(Candidates.IsEmpty())return FString();if(!Cycle)return Candidates[0].Id;

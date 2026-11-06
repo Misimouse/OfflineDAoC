@@ -7,6 +7,11 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Engine/StaticMeshActor.h"
+#include "Engine/StaticMesh.h"
+#include "Components/StaticMeshComponent.h"
 
 void UDAoCBridgeSubsystem::UpdateInteractionTest(float Elapsed){
     if(Elapsed>14&&!(InteractionTestSteps&1)){
@@ -40,7 +45,28 @@ bool UDAoCBridgeSubsystem::TickInteractionAcceptance(){
             Check(InteractionRevision==State->GetIntegerField(TEXT("revision")),TEXT("UI revision"));
             Check(InteractionOverlay.IsValid()&&InteractionPanel.IsValid(),TEXT("viewport widgets created"));
         }
-        ClearEntities();Check(CurrentTarget().IsEmpty()&&!InteractionOverlay.IsValid(),TEXT("disconnect removes stale UI"));
+        auto* Actor=GetWorld()->SpawnActor<AStaticMeshActor>();auto* Root=Actor->GetStaticMeshComponent();
+        auto* Cube=LoadObject<UStaticMesh>(nullptr,TEXT("/Engine/BasicShapes/Cube.Cube"));Root->SetMobility(EComponentMobility::Movable);Root->SetStaticMesh(Cube);Root->SetCollisionEnabled(ECollisionEnabled::NoCollision);Actor->SetActorLocation(FVector(0,0,50));
+        auto AddPart=[&](FVector Position,FVector Scale,bool Visible,bool Equipment){auto* Part=NewObject<UStaticMeshComponent>(Actor);Actor->AddInstanceComponent(Part);Part->SetStaticMesh(Cube);Part->SetupAttachment(Root);Part->SetRelativeLocation(Position);Part->SetRelativeScale3D(Scale);Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);Part->SetVisibility(Visible);if(Equipment)Part->ComponentTags.Add(TEXT("DAoCBridgeEquipment"));Part->RegisterComponent();return Part;};
+        AddPart(FVector(0,0,150),FVector(.5,.5,4),true,false);
+        AddPart(FVector(0,0,1000),FVector(20),false,false);
+        AddPart(FVector(1000,0,0),FVector(20),true,true);
+        const FBox Bounds=EntitySelectionBounds(Actor);
+        Check(Bounds.IsValid&&FMath::IsNearlyEqual(Bounds.Max.Z,400.,.1),TEXT("selection includes full visible body above the original root"));
+        Check(Bounds.IsValid&&Bounds.Max.X<51&&Bounds.Max.Z<401,TEXT("hidden meshes and equipped weapons do not enlarge picking"));
+        Check(Root->GetCollisionEnabled()==ECollisionEnabled::NoCollision&&Root->GetComponentScale()==FVector::OneVector,TEXT("picking never changes movement collision or actor scale"));
+        Entities.Add(TEXT("npc:pick-test"),Actor);auto Row=MakeShared<FJsonObject>();Row->SetNumberField(TEXT("health"),1);Row->SetNumberField(TEXT("realm"),0);EntityRows.Add(TEXT("npc:pick-test"),Row);PlayerPosition=FVector::ZeroVector;
+        auto* PC=GetWorld()->GetFirstPlayerController();auto* TestCamera=GetWorld()->SpawnActor<ACameraActor>(FVector(0,-600,150),FRotator(0,90,0));
+        if(PC&&PC->PlayerCameraManager){
+            PC->SetViewTarget(TestCamera);PC->PlayerCameraManager->UpdateCamera(0);
+            auto Pick=[&](FVector Point){FVector2D Pixel;return PC->ProjectWorldLocationToScreen(Point,Pixel)?TargetAtCursor(false,Pixel):FString();};
+            Check(Pick(FVector(0,0,350))==TEXT("npc:pick-test"),TEXT("click selects upper visible body beyond the old fixed-radius circle"));
+            Check(Pick(FVector(0,0,20))==TEXT("npc:pick-test"),TEXT("click still selects the lower visible body"));
+            Check(Pick(FVector(150,0,200)).IsEmpty(),TEXT("click outside the visible body does not use a giant circular target"));
+            Row->SetBoolField(TEXT("targetable"),false);Check(Pick(FVector(0,0,350)).IsEmpty(),TEXT("untargetable state still rejects a body click"));
+            Row->SetBoolField(TEXT("targetable"),true);Row->SetNumberField(TEXT("health"),0);Check(Pick(FVector(0,0,350)).IsEmpty(),TEXT("dead state still rejects a body click"));
+        }else Check(false,TEXT("projection acceptance has a player controller and camera"));
+        ClearEntities();TestCamera->Destroy();Check(CurrentTarget().IsEmpty()&&!InteractionOverlay.IsValid(),TEXT("disconnect removes stale UI"));
         Check(Socket==nullptr,TEXT("offline test has no bridge socket"));
     }
     auto Report=MakeShared<FJsonObject>();Report->SetNumberField(TEXT("checks"),Checks);Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetArrayField(TEXT("failures"),Failures);Report->SetBoolField(TEXT("real_server"),false);
