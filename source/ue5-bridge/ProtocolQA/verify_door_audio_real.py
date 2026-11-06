@@ -22,11 +22,13 @@ parser.add_argument('--footsteps',action='store_true')
 parser.add_argument('--server-sounds',action='store_true')
 parser.add_argument('--water-motion',action='store_true')
 parser.add_argument('--water-regression',action='store_true')
+parser.add_argument('--target-tracking',action='store_true')
 parser.add_argument('--keys-candidate',action='store_true')
 parser.add_argument('--movement-keys',action='store_true')
 parser.add_argument('--jump-landing',action='store_true')
 parser.add_argument('--jump-candidate',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
+assert not args.target_tracking or (args.native and not any([args.crossing,args.water_motion,args.water_regression,args.server_sounds,args.footsteps,args.jump_landing,args.jump_candidate,args.movement_keys,args.keys_candidate]))
 assert not args.keys_candidate or (args.native and (args.water_motion or args.water_regression))
 assert not args.movement_keys or (args.native and not any([args.crossing,args.water_motion,args.water_regression,args.server_sounds,args.footsteps,args.jump_landing,args.jump_candidate]))
 assert not args.jump_candidate or (args.native and (args.water_motion or args.water_regression))
@@ -39,7 +41,7 @@ assert not args.footsteps or (args.native and args.crossing)
 os.environ['DAOC_INSTALL']=str(args.install.resolve());sys.path.insert(0,str(workspace/'ProtocolQA'))
 from qa_runtime import ROOT,RUN,SERVER,DB,env,dotnet,ENGINE
 assert ROOT.resolve()==workspace and DB.is_relative_to(RUN) and RUN.is_relative_to(workspace/'ProtocolQA')
-output=workspace/('Reports/movement_keys_real_protocol' if args.movement_keys else 'Reports/jump_landing_real_protocol' if args.jump_landing else 'Reports/water_door_regression' if args.water_regression else 'Reports/water_movement_real_protocol' if args.water_motion else 'Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
+output=workspace/('Reports/target_tracking_real_protocol' if args.target_tracking else 'Reports/movement_keys_real_protocol' if args.movement_keys else 'Reports/jump_landing_real_protocol' if args.jump_landing else 'Reports/water_door_regression' if args.water_regression else 'Reports/water_movement_real_protocol' if args.water_motion else 'Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
 result={'passed':False,'disposable_only':True,'checks':{},'errors':[]};server=client=peer=relay=None;logs=[];backed=False
 session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[];sound_trace=[]
 config=RUN/'bridge_config.json';config_before=config.read_bytes()
@@ -66,9 +68,9 @@ def pump():
         if value.get('type')=='hello':session=value['session']
         if value.get('type')=='snapshot':
             snapshot=value
-            if (args.crossing or args.water_motion or args.jump_landing or args.movement_keys) and relay:
+            if (args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking) and relay:
                 current=relay.read_report()
-                if (current.get('door_auto_test') or args.water_motion or args.jump_landing or args.movement_keys) and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
+                if (current.get('door_auto_test') or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking) and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
             for event in value.get('server_sound_audio',[]):
                 if not any(row['seq']==event['seq'] for row in sound_trace):sound_trace.append(event)
             for event in value.get('combat_audio',[]):
@@ -98,6 +100,14 @@ try:
         # Fixture only. This does not relocate or change an owner character.
         start=[1470.4,118.3,1091.2] if args.water_motion else [1375.4,130,1250.6]
         db.execute("UPDATE DOLCharacters SET Class=53,Level=5,Region=200,Xpos=?,Ypos=?,Zpos=?,Health=200,DeathTime=0,HasGravestone=0 WHERE Name='Codexdruid'",(round(start[0]*40)+35*8192,round(start[2]*40)+51*8192,round(start[1]*40)))
+        if args.target_tracking:
+            witness=dict(db.execute("SELECT * FROM Mob WHERE ClassType='DOL.GS.GameTrainingDummy' AND Region=200 LIMIT 1").fetchone());assert witness
+            witness.update(Mob_ID='codex_target_tracking_'+hashlib.sha256(RUN.name.encode()).hexdigest()[:12],Name='Codex Tracking Witness',ClassType='DOL.GS.GameNPC',Region=200,
+                X=round(1375.4*40)+35*8192,Y=round(1243.6*40)+51*8192,Z=round(130.114*40),Model=1984,Size=50,Realm=3,Level=5,Flags=16,Speed=0,RoamingRange=0,AggroLevel=0,AggroRange=0,
+                Guild='',TranslationId='',Suffix='',Brain='',PathID='',OwnerID='',PackageID='',NPCTemplateID=0,EquipmentTemplateID='',ItemsListTemplateID='',HouseNumber=0)
+            names=list(witness);db.execute('INSERT INTO Mob ('+','.join('"'+n+'"' for n in names)+') VALUES ('+','.join('?' for _ in names)+')',[witness[n] for n in names])
+            outdoor=dict(witness, Mob_ID=witness['Mob_ID']+'_outdoor',Name='Codex Outdoor Witness',Y=round(1257.6*40)+51*8192)
+            db.execute('INSERT INTO Mob ('+','.join('"'+n+'"' for n in names)+') VALUES ('+','.join('?' for _ in names)+')',[outdoor[n] for n in names])
         db.commit()
     cfg=json.loads(config_before);cfg['initial_spawn_m']=start;config.write_text(json.dumps(cfg),encoding='utf-8')
     for p in source.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
@@ -127,9 +137,15 @@ try:
         import importlib.util
         relay_source=repo/'source/ue5-bridge/pet_sight_relay.py'
         spec=importlib.util.spec_from_file_location('door_native_relay',relay_source);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile=('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
+        ids=['player:local']
+        if args.target_tracking:
+            wait(lambda:any(row.get('name')=='Codex Tracking Witness' for row in snapshot['entities']),'Private tracking witness spawns')
+            witness_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Tracking Witness');ids.append(witness_id)
+            wait(lambda:any(row.get('name')=='Codex Outdoor Witness' for row in snapshot['entities']),'Private outdoor witness spawns')
+            outdoor_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Outdoor Witness');ids.append(outdoor_id)
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=90 if args.target_tracking else 60,entity_ids=ids,render=True,native_profile='target_tracking' if args.target_tracking else ('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
-        if args.crossing or args.water_motion or args.jump_landing or args.movement_keys:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
+        if args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
     door=207033603
     if args.crossing:
@@ -148,7 +164,7 @@ try:
         assert sum(row['event']=='open' for row in trace)>=2 and sum(row['event']=='close' for row in trace)>=2
         result['checks']['native_closed_collision_crossing_return']=True
         result['crossing']={'plane_m':plane,'closed_outside_samples':len(outside),'closed_inside_samples':len(inside),'samples':len(motion)}
-    if not args.crossing and not args.water_motion and not args.jump_landing and not args.movement_keys:
+    if not args.crossing and not args.water_motion and not args.jump_landing and not args.movement_keys and not args.target_tracking:
         # Manual packet checks are separate from the native movement itinerary.
         send('door',door_id=door,open=False)
         wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Closed baseline acknowledged')
@@ -164,6 +180,47 @@ try:
         assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
         result['checks']['real_close_acknowledged_and_anchored']=True
         settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
+    if args.target_tracking:
+        send('chat',text='/follow');settle(.5)
+        assert any('You must select a target to follow!' in row.get('text','') for row in snapshot.get('chat',{}).get('entries',[]))
+        send('target_self');send('chat',text='/stick');settle(.5)
+        assert any("You can't stick yourself!" in row.get('text','') for row in snapshot.get('chat',{}).get('entries',[]))
+        send('target',entity_id=witness_id);settle(.5)
+        send('door',door_id=door,open=False)
+        wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Original server acknowledges closed fixture door',15)
+        wait(lambda:any(row['id']==door and not row['open'] and row['alpha']<.05 for row in relay.read_report().get('doors',[])),'Native closed leaf collider ready',10)
+        origin=relay.read_report()['position_m']
+        send('chat',text='/face')
+        wait(lambda:relay.read_report().get('target_tracking',{}).get('active') and relay.read_report()['target_tracking']['mode']=='face','Native faces the original selected target')
+        settle(1);face_position=relay.read_report()['position_m'];assert sum((a-b)**2 for a,b in zip(origin,face_position))<.04
+        facing=relay.movement_forwarded[-1]['forward_xz'];assert abs(facing[0])<.05 and facing[1]<-.99,facing
+        result['checks']['actual_face_keeps_position']=True
+        send('chat',text='/follow')
+        wait(lambda:relay.read_report().get('target_tracking',{}).get('mode')=='follow','Native follow starts')
+        settle(3);blocked=relay.read_report()
+        catalog=json.loads((workspace/'collision_catalog.json').read_text());fixture=next(f for m in catalog['models'].values() for f in m.get('door_fixtures',[]) if door in f['groups'].values());plane=fixture['position_m'][2]
+        assert blocked['position_m'][2]>plane+.05 and blocked['target_tracking']['active'],blocked['position_m']
+        result['checks']['follow_respects_closed_real_door']=True
+        # Tracking is direct movement, not pathfinding. Opening a swinging leaf while
+        # pushing into it can legitimately displace the capsule against a jamb.
+        # Keep the obstacle check separate from gap tests on unobstructed ground.
+        send('target',entity_id=outdoor_id);settle(.5);send('chat',text='/follow')
+        wait(lambda:relay.read_report().get('target_tracking',{}).get('target_entity_id')==outdoor_id,'Tracking switches to the newly selected outdoor target')
+        def gap():
+            pos=relay.read_report().get('position_m',[0,0,0]);return ((pos[0]-1375.4)**2+(pos[2]-1257.6)**2)**.5
+        wait(lambda:gap()<=3.1 and relay.read_report().get('water_movement',{}).get('speed_mps',1)<.05,'Follow stops at original three metre gap',20)
+        follow_gap=gap();assert 2.6<follow_gap<=3.1;result['checks']['actual_follow_switches_target_and_stops']=True
+        send('chat',text='/stick');wait(lambda:relay.read_report().get('target_tracking',{}).get('mode')=='stick','Native stick starts')
+        wait(lambda:gap()<=1.5 and relay.read_report().get('water_movement',{}).get('speed_mps',1)<.05,'Stick stops at original 1.4 metre gap',15)
+        stick_gap=gap();assert 1.0<stick_gap<=1.5;result['checks']['actual_stick_stops_at_close_gap']=True
+        send('chat',text='/face');wait(lambda:relay.read_report().get('target_tracking',{}).get('mode')=='face','Face works after switching tracking modes')
+        # Delete only the unique fixture selected above, inside the marked private server.
+        assert outdoor['Name']=='Codex Outdoor Witness' and outdoor['Mob_ID'].startswith('codex_target_tracking_')
+        send('chat',text='/mob remove')
+        wait(lambda:not any(row['id']==outdoor_id for row in snapshot.get('entities',[])),'Private witness is removed by its original server')
+        wait(lambda:not relay.read_report().get('target_tracking',{}).get('active',True),'Native clears tracking after despawn',10)
+        result['checks']['actual_target_despawn_cancels_tracking']=True
+        result['tracking_gaps_m']={'follow':follow_gap,'stick':stick_gap};result['native_move_commands']=relay.movement_forwarded
     if args.movement_keys:
         wait(lambda:motion and motion[-1].get('test_elapsed',0)>21,'Native runs automatically, walks, backpedals and stops',35)
         windows=[('run',9,11,4.775),('walk',13,14.9,1.67125),('back',16,17.9,3.10375)]
@@ -238,7 +295,7 @@ try:
             steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
             result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=not (args.jump_landing or args.movement_keys)
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('TargetTrackingLab/native_build.json' if args.target_tracking else 'MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
     if args.movement_keys or args.keys_candidate:
         catalog=workspace/'MovementKeysLab/movement.json';result['native_inputs'][str(catalog)]=digest(catalog)

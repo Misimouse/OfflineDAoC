@@ -10,7 +10,7 @@ from prepare_combined_expansion_data import digest
 
 def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -61,6 +61,7 @@ if __name__=='__main__':
     parser.add_argument('--water-movement-candidate',action='store_true')
     parser.add_argument('--jump-landing-candidate',action='store_true')
     parser.add_argument('--movement-keys-candidate',action='store_true')
+    parser.add_argument('--target-tracking-candidate',action='store_true')
     args=parser.parse_args()
-    assert sum([args.combat_candidate,args.target_selection_candidate,args.options_audio_candidate,args.door_audio_candidate,args.footstep_audio_candidate,args.server_sound_audio_candidate,args.water_movement_candidate,args.jump_landing_candidate,args.movement_keys_candidate])<=1
-    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve(),'MovementKeysLab' if args.movement_keys_candidate else 'JumpLandingLab' if args.jump_landing_candidate else 'WaterMovementLab' if args.water_movement_candidate else 'ServerSoundAudioLab' if args.server_sound_audio_candidate else 'FootstepAudioLab' if args.footstep_audio_candidate else 'DoorAudioLab' if args.door_audio_candidate else 'OptionsAudioLab' if args.options_audio_candidate else 'TargetSelectionLab' if args.target_selection_candidate else 'CombatAudioLab' if args.combat_candidate else 'SpellAudioLab')))
+    assert sum([args.combat_candidate,args.target_selection_candidate,args.options_audio_candidate,args.door_audio_candidate,args.footstep_audio_candidate,args.server_sound_audio_candidate,args.water_movement_candidate,args.jump_landing_candidate,args.movement_keys_candidate,args.target_tracking_candidate])<=1
+    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve(),'TargetTrackingLab' if args.target_tracking_candidate else 'MovementKeysLab' if args.movement_keys_candidate else 'JumpLandingLab' if args.jump_landing_candidate else 'WaterMovementLab' if args.water_movement_candidate else 'ServerSoundAudioLab' if args.server_sound_audio_candidate else 'FootstepAudioLab' if args.footstep_audio_candidate else 'DoorAudioLab' if args.door_audio_candidate else 'OptionsAudioLab' if args.options_audio_candidate else 'TargetSelectionLab' if args.target_selection_candidate else 'CombatAudioLab' if args.combat_candidate else 'SpellAudioLab')))

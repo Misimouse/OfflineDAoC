@@ -11,6 +11,7 @@ class FBridgeSpellVisuals;
 class FBridgeSpellAudio;
 class FBridgeWaterData;
 struct FBridgeMovementKeys;
+struct FBridgeTargetTracking;
 class FDAoCLobbyMotion;
 class FJsonValue;
 class AStaticMeshActor;
@@ -70,6 +71,15 @@ private:
     bool TickJumpLandingAcceptance();
     bool TickMovementKeysAcceptance();
     TSharedPtr<FBridgeMovementKeys> MovementKeys;
+    TSharedPtr<FBridgeTargetTracking> TargetTracking;
+    bool TickTargetTrackingAcceptance();
+    void RequestTargetTracking(const FString& Mode);
+    void ApplyTargetTracking(const TSharedPtr<FJsonObject>& Snapshot);
+    bool UpdateTargetTracking(bool Enabled,bool Manual,FVector& Desired);
+    void StopTargetTracking(bool Notify);
+    void TrackingFeedback(const FString& Result);
+    TSharedPtr<FJsonObject> TargetTrackingReport()const;
+
     int32 MovementKeysTestPhase=0;
     TSharedPtr<FBridgeWaterData> WaterData;
     bool bLocalSwimming=false;

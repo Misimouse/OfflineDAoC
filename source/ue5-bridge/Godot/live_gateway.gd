@@ -17,6 +17,7 @@ var weapon_mode_audio:RefCounted
 var door_audio:RefCounted
 var server_sound:RefCounted
 var movement_flags:RefCounted
+var target_tracking:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -93,6 +94,7 @@ func _ready()->void:
     door_audio=load(folder.path_join("door_audio_state.gd")).new()
     server_sound=load(folder.path_join("server_sound_state.gd")).new()
     movement_flags=load(folder.path_join("movement_flags_state.gd")).new()
+    target_tracking=load(folder.path_join("target_tracking_state.gd")).new()
     var server_sound_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalServerSoundAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-server-sound-catalog="):server_sound_path=arg.trim_prefix("--bridge-server-sound-catalog=")
@@ -206,6 +208,7 @@ func enter_character(chosen:Dictionary)->void:
 
 func apply_entry(entry:Dictionary)->void:
     movement_flags.reset()
+    target_tracking.reset()
     entry_revision+=1
     if int(entry.get("zone",-1))!=207 and adapter!=null:adapter.clear_world()
     if int(entry.get("zone",-1))==207:
@@ -316,6 +319,11 @@ func command(value:Dictionary)->void:
     if action in ["group_target","group_invite","group_remove","group_leave"]:
         sync_party(Time.get_ticks_msec());party.request(value,server,server.client,interaction,adapter.entities,Time.get_ticks_msec());return
     if action=="los_reply":line_of_sight.reply(value,server.client,Time.get_ticks_msec());return
+    if action=="tracking_request":
+        request_tracking(String(value.get("mode","")));return
+    if action=="tracking_feedback":
+        if target_tracking.consume(value):emit_tracking_feedback()
+        return
     if action=="move":
         if int(server.entry.get("zone",-1))!=207:return
         var p=value.get("position_m",[]);var f=value.get("forward_xz",[])
@@ -384,6 +392,7 @@ func dispatch_chat(text:String)->bool:
     if classic_ui.create_macro(text):
         classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec());local_chat(classic_ui.feedback);return true
     var parts:=text.split(" ",false);var word:=String(parts[0]).to_lower()
+    if word in ["/face","/follow","/stick"]:return request_tracking(word.trim_prefix("/"))
     if word=="/loc":
         var zone_name:=String(server.entry.get("zone_name","Connacht" if int(server.entry.get("zone",0))==207 else str(server.entry.get("zone",0))))
         local_chat("%s: loc=%d,%d,%d dir=%d" % [zone_name,roundi(position.x*40),roundi(position.z*40),roundi(position.y*40),int(heading*360.0/4096.0)%360],"system");return true
@@ -397,6 +406,13 @@ func dispatch_chat(text:String)->bool:
         trainer.sync(server,server.client,Time.get_ticks_msec());return trainer.request({"action":"trainer_refresh"},server.client,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
     server.command(text);return true
 
+func emit_tracking_feedback()->void:
+    var text:String=target_tracking.take_feedback()
+    if not text.is_empty():local_chat(text,"system")
+func request_tracking(mode:String)->bool:
+    var ready:bool=int(server.entry.get("zone",-1))==207 and player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving
+    var accepted:bool=target_tracking.request(mode,interaction.selected_id,adapter.entities,position,ready,Time.get_ticks_msec())
+    emit_tracking_feedback();return accepted
 func request_logout(exit_application:bool=true)->void:
     if leaving:return
     if player_state.attack_on or player_state.attack_uncertain or bool(player_state.pending.get("on",false)):server.client.call("Attack",false)
@@ -408,6 +424,7 @@ func return_to_character_menu(data:Dictionary)->void:
     # Invoked only after the original server confirms Quit (saved session).
     world_event("quit",data)
     movement_flags.reset()
+    target_tracking.reset()
     adapter.clear_world()
     entered=false;leaving=false;home_jump_requested=false;local_model_id=0
     test_return_attempts=0;test_return_at=-10000;door_states.clear()
@@ -506,6 +523,9 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["combat_audio"]=combat_audio.snapshot(now)
         transport.snapshot_metadata["server_sound_audio"]=server_sound.snapshot(now)
+        target_tracking.maintain(adapter.entities,player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving,now)
+        emit_tracking_feedback()
+        transport.snapshot_metadata["target_tracking"]=target_tracking.snapshot(now)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["exchange"]=exchange.snapshot()

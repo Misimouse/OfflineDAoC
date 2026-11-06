@@ -4,6 +4,7 @@
 #include "HAL/FileManager.h"
 #include "DAoCBridgeCharacter.h"
 #include "DAoCBridgeMovementKeys.h"
+#include "DAoCBridgeTargetTracking.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
 #include "IPAddress.h"
@@ -145,7 +146,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -253,7 +254,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
         if(Id==TEXT("player:local")&&Kind==TEXT("player")){
             double Revision=-1;Row->TryGetNumberField(TEXT("position_revision"),Revision);
             const bool Corrected=FMath::IsFinite(Revision)&&Revision>=0&&int64(Revision)!=LocalPositionRevision;
-            if(!bLocalAvailable||Corrected||(Position-PlayerPosition).Size()>1000){PlayerPosition=Position;bHavePlayer=true;if(IsValid(PlayerPawn)){PlayerPawn->TeleportFeet(Position);PreviousFeet=Position;if(IsValid(Camera)){Camera->GetCameraComponent()->bConstrainAspectRatio=false;Camera->AttachToComponent(PlayerPawn->CameraArm,FAttachmentTransformRules::SnapToTargetNotIncludingScale,USpringArmComponent::SocketName);if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(Camera);}}}
+            if(!bLocalAvailable||Corrected||(Position-PlayerPosition).Size()>1000){PlayerPosition=Position;bHavePlayer=true;if(IsValid(PlayerPawn)){StopTargetTracking(true);PlayerPawn->TeleportFeet(Position);PreviousFeet=Position;if(IsValid(Camera)){Camera->GetCameraComponent()->bConstrainAspectRatio=false;Camera->AttachToComponent(PlayerPawn->CameraArm,FAttachmentTransformRules::SnapToTargetNotIncludingScale,USpringArmComponent::SocketName);if(auto* PC=GetWorld()->GetFirstPlayerController())PC->SetViewTarget(Camera);}}}
             bLocalAvailable=true;if(Corrected)LocalPositionRevision=int64(Revision);
             if(PlayerStartedAt==0){PlayerStartedAt=FPlatformTime::Seconds();StartPosition=PlayerPosition;}
             /* Local visuals are updated below; never treat remote players as the local pawn. */
@@ -281,6 +282,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     TArray<FString> Gone;for(auto& Pair:Entities)if(!Seen.Contains(Pair.Key))Gone.Add(Pair.Key);
     for(auto& Id:Gone){if(IsValid(Entities[Id]))Entities[Id]->Destroy();Entities.Remove(Id);EntityModels.Remove(Id);RemoteMotion.Remove(Id);EntityRows.Remove(Id);NameplateVisibility.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);}
     if(!Seen.Contains(TEXT("player:local")))bLocalAvailable=false;
+    ApplyTargetTracking(M);
     ApplySpellVisuals(M);
     ApplySpellAudio(M);
     AnswerLineOfSightQueries(M);
@@ -339,7 +341,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         }
         FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Mode);
     }
-    auto* Viewport=GetWorld()->GetGameViewport();const bool Focused=Viewport&&Viewport->Viewport&&Viewport->Viewport->HasFocus();
+    auto* Viewport=GetWorld()->GetGameViewport();const bool Focused=(Viewport&&Viewport->Viewport&&Viewport->Viewport->HasFocus())||FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoTargetTrackingTest"));
     if(bOptionsOpen&&PC->WasInputKeyJustPressed(EKeys::Escape)){CloseOptions();return;}
     const bool Typing=ExchangeTyping()||bOptionsOpen;const bool Dead=PlayerIsDead();const bool FacingLocked=!PlayerCanMove();
     if(!Focused||Dead||bChatOpen||Typing){bMouseLookToggle=false;bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
@@ -361,7 +363,8 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     if(!Dead)PC->SetControlRotation(FRotator(CameraPitch,CameraYaw,0));
     UpdateWaterMovement(!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty());
     if(!MovementKeys){MovementKeys=MakeShared<FBridgeMovementKeys>();FString Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/MovementKeys_v01/movement.json");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeMovementKeysCatalog="),Path);MovementKeys->Load(Path);}
-    const bool InputAvailable=Focused&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!Dead&&!FacingLocked&&!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2;
+    const bool TrackingEnabled=Focused&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!Dead&&!FacingLocked&&!bChatOpen&&!Typing;
+    const bool InputAvailable=TrackingEnabled&&FPlatformTime::Seconds()-ChatClosedAt>.2;
     FBridgeMovementKeys::FFrame Keys;
     if(!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoMovementKeysTest")))Keys=MovementKeys->Advance(InputAvailable,PC->WasInputKeyJustPressed(EKeys::NumLock),PC->WasInputKeyJustPressed(EKeys::ScrollLock),
         PC->WasInputKeyJustPressed(EKeys::W),PC->WasInputKeyJustPressed(EKeys::S),PC->IsInputKeyDown(EKeys::W),PC->IsInputKeyDown(EKeys::S),PC->IsInputKeyDown(EKeys::A),PC->IsInputKeyDown(EKeys::D),
@@ -375,6 +378,8 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     PlayerPawn->GetCharacterMovement()->MaxWalkSpeed=ServerRunSpeed*Keys.SpeedFactor;
     FVector Desired=FVector::ZeroVector;
     if(bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2){
+        if(InputAvailable&&PC->WasInputKeyJustPressed(EKeys::F))RequestTargetTracking((PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift))?TEXT("follow"):TEXT("face"));
+        if(InputAvailable&&(PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift))&&PC->WasInputKeyJustPressed(EKeys::V))RequestTargetTracking(TEXT("stick"));
         float Fwd=Keys.Forward;
         float Right=Keys.Right;
         FRotator Flat(0,CameraYaw,0);Desired=(Flat.Vector()*Fwd+FRotationMatrix(Flat).GetUnitAxis(EAxis::Y)*Right).GetClampedToMaxSize(1);
@@ -386,7 +391,9 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoWaterTest"))){const double T=FPlatformTime::Seconds()-PlayerStartedAt;Desired=T>=8&&T<12?FVector(1,0,0):T>=16&&T<28&&PlayerPosition.X>StartPosition.X+15?FVector(-1,0,0):FVector::ZeroVector;}
         if(bAutoDoorTest)UpdateDoorTest(float(FPlatformTime::Seconds()-PlayerStartedAt),Desired);
         if(!PlayerCanMove()||ServerRunSpeed<=0){Desired=FVector::ZeroVector;PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
-        if(!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
+        const bool ManualTrackInput=PC->IsInputKeyDown(EKeys::W)||PC->IsInputKeyDown(EKeys::S)||PC->IsInputKeyDown(EKeys::A)||PC->IsInputKeyDown(EKeys::D)||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock);
+        const bool Tracking=UpdateTargetTracking(TrackingEnabled,ManualTrackInput,Desired);
+        if(!Tracking&&!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
         if(Focused&&!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PC->WasInputKeyJustPressed(EKeys::SpaceBar)&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoJumpTest"))){
             const double T=FPlatformTime::Seconds()-PlayerStartedAt;
@@ -408,6 +415,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         }
         if(PC->WasInputKeyJustPressed(EKeys::Escape)&&!CloseClassicPanel()&&!CloseInventory()&&!CloseInteraction())OpenOptions();
     }else{PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
+    if(!TrackingEnabled)StopTargetTracking(true);
     UpdateWaterMovement(!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty(),Desired.IsNearlyZero());
     PlayerPosition=PlayerPawn->FeetPosition();TravelledMetres+=FVector::Dist2D(PreviousFeet,PlayerPosition)/100;PreviousFeet=PlayerPosition;
     PeakMovementSpeed=FMath::Max(PeakMovementSpeed,PlayerPawn->GetVelocity().Size2D()/100);
@@ -481,6 +489,7 @@ void UDAoCBridgeSubsystem::WriteReport(){
     O->SetObjectField(TEXT("spell_audio"),SpellAudioReport());O->SetObjectField(TEXT("footsteps"),FootstepReport());
     O->SetNumberField(TEXT("travelled_metres"),TravelledMetres);O->SetNumberField(TEXT("camera_yaw"),CameraYaw);O->SetNumberField(TEXT("camera_pitch"),CameraPitch);
     O->SetBoolField(TEXT("mouse_captured"),bMouseLook);O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);
+    O->SetObjectField(TEXT("target_tracking"),TargetTrackingReport());
     if(MovementKeys){auto Keys=MakeShared<FJsonObject>();Keys->SetBoolField(TEXT("run_lock"),MovementKeys->RunLock);Keys->SetBoolField(TEXT("walk_toggle"),MovementKeys->WalkToggle);Keys->SetNumberField(TEXT("test_phase"),MovementKeysTestPhase);if(PlayerPawn)Keys->SetNumberField(TEXT("ground_speed_limit_mps"),PlayerPawn->GetCharacterMovement()->MaxWalkSpeed/100);O->SetObjectField(TEXT("movement_keys"),Keys);}
     if(PlayerPawn){O->SetNumberField(TEXT("landing_count"),PlayerPawn->LandingCount);O->SetNumberField(TEXT("last_landing_speed_mps"),PlayerPawn->LastLandingSpeedMps);}
     O->SetBoolField(TEXT("character_grounded"),IsValid(PlayerPawn)&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround());
@@ -591,6 +600,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    if(TickTargetTrackingAcceptance())return;
     if(TickMovementKeysAcceptance())return;
     if(TickJumpLandingAcceptance())return;
     TickCharacterLobbyMotion();

@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -227,6 +227,23 @@ def verify(workspace):
         key_receipt['files'][0]['before_sha256']=previous_native;put(key_path,key_receipt)
         saved=key_target.read_bytes();key_target.write_bytes(b'bad movement stride');rejected();checks+=1;key_target.write_bytes(saved)
         wave.write_bytes(b'bad old combat after movement keys');rejected();checks+=1;wave.write_bytes(before)
+        previous_native=digest(binary);track_root=w/'TargetTrackingLab';track_resources=track_root/'resources.json';put(track_resources,{'passed':True})
+        track_rows=[];track_targets=[plugin/p for p in TARGET_TRACKING_NATIVE_TARGETS]+[w/'Godot'/n for n in ['live_gateway.gd','visual_bridge.gd','target_tracking_state.gd']]
+        new_names=['DAoCBridgeTargetTracking.h','DAoCBridgeTargetTracking.cpp','DAoCBridgeTargetTrackingAcceptance.cpp','target_tracking_state.gd']
+        for target in track_targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in new_names:target.write_bytes(b'old tracking predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new tracking '+str(target).encode())
+            track_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        track_path=track_root/'installed.json';track={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(key_path),'resources_receipt_sha256':digest(track_resources),
+            'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':track_rows}
+        put(track_path,track);assert verify_files(w)['target_tracking_installed'];checks+=1
+        track['predecessor_receipt_sha256']='0'*64;put(track_path,track);rejected();checks+=1
+        track['predecessor_receipt_sha256']=digest(key_path);track['files'][0]['before_sha256']='0'*64;put(track_path,track);rejected();checks+=1
+        track['files'][0]['before_sha256']=previous_native;put(track_path,track)
+        state_target=w/'Godot/target_tracking_state.gd';saved=state_target.read_bytes();state_target.write_bytes(b'bad tracking state');rejected();checks+=1;state_target.write_bytes(saved)
+        wave.write_bytes(b'bad old combat after tracking');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
