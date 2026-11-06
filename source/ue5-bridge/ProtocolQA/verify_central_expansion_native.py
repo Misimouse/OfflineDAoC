@@ -8,19 +8,21 @@ import shutil
 import subprocess
 
 
-def verify(workspace, engine, installed=False, audio_candidate=False):
+def verify(workspace, engine, installed=False, audio_candidate=False, combat_audio_candidate=False):
     lab = workspace/'ExpansionRaceLab'
     delivery = lab/'CentralDelivery'
     output = delivery/('NativeInstalledAcceptance' if installed else 'NativeAcceptance')
     output.mkdir(exist_ok=True)
     project = lab/'CentralDeliveryHost/CentralDeliveryHost.uproject'
     catalogs = {name: delivery/(name+'.json') for name in ['models', 'equipment', 'appearance', 'tasks', 'lore']}
-    if audio_candidate:
+    assert not(audio_candidate and combat_audio_candidate)
+    if audio_candidate or combat_audio_candidate:
         assert not installed, 'Use the separate audio candidate host without overwriting installed proof hosts'
-        build = json.loads((workspace/'SpellAudioLab/native_build.json').read_text())
+        audio_lab=workspace/('CombatAudioLab' if combat_audio_candidate else 'SpellAudioLab')
+        build = json.loads((audio_lab/'native_build.json').read_text())
         assert build['passed'] and not build['normal_binary_modified']
         project = Path(build['project'])
-        output = workspace/'SpellAudioLab/CharacterRegression'
+        output = audio_lab/'CharacterRegression'
         output.mkdir(exist_ok=True)
         manifest = json.loads((delivery/'manifest.json').read_text())
         catalogs = {name: Path(row['target']) for name, row in manifest['catalogs'].items()}
@@ -116,6 +118,7 @@ def verify(workspace, engine, installed=False, audio_candidate=False):
     result = {'passed': True, 'normal_installation_modified': False, 'inputs': hashes,
               'installed_client_resources_only': installed,
               'audio_candidate': audio_candidate,
+              'combat_audio_candidate': combat_audio_candidate,
               'native_appearance_checks': appearance['checks'], 'full_appearance_passed': False,
               'known_source_geometry_failure': known, 'material_isolation_passed': True,
               'partial_override_inherits_central_hair': True, 'lobby': screens,
@@ -130,5 +133,6 @@ if __name__ == '__main__':
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--installed', action='store_true')
     parser.add_argument('--audio-candidate', action='store_true')
+    parser.add_argument('--combat-audio-candidate', action='store_true')
     args = parser.parse_args()
-    verify(args.workspace.resolve(), args.engine.resolve(), args.installed, args.audio_candidate)
+    verify(args.workspace.resolve(), args.engine.resolve(), args.installed, args.audio_candidate, args.combat_audio_candidate)

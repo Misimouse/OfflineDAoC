@@ -12,6 +12,7 @@ var vault:RefCounted
 var exchange:RefCounted
 var player_state:RefCounted
 var combat_visual:RefCounted
+var combat_audio:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -83,6 +84,13 @@ func _ready()->void:
     exchange=load(folder.path_join("exchange_state.gd")).new()
     player_state=load(folder.path_join("player_combat_state.gd")).new()
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
+    combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
+    var combat_audio_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalCombatAudio_v01/sounds.json")
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--bridge-combat-audio-catalog="):combat_audio_path=arg.trim_prefix("--bridge-combat-audio-catalog=")
+    if FileAccess.file_exists(combat_audio_path):
+        var audio_index:Variant=JSON.parse_string(FileAccess.get_file_as_string(combat_audio_path))
+        if audio_index is Dictionary:combat_audio.configure(audio_index.get("combat_model_sets",{}),audio_index.get("combat_weapon_models",{}))
     gm_mode=load(folder.path_join("gm_test_mode.gd")).new()
     release_state=load(folder.path_join("player_release.gd")).new()
     concentration=load(folder.path_join("concentration_state.gd")).new()
@@ -185,6 +193,14 @@ func apply_entry(entry:Dictionary)->void:
 
 func world_event(kind:String,data:Dictionary)->void:
     player_models.consume(kind,data)
+    if kind in ["you","region_changed","quit","npc","player","revive","death","remove","combat"]:
+        # Preserve pre-packet health for the original light/medium pain rule.
+        var audio_rows:Dictionary=adapter.entities.duplicate()
+        var audio_form:Dictionary=player_models.snapshot()
+        var audio_health:float=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
+        audio_rows["player:local"]={"model_id":audio_form.model_id,"position_m":[position.x,position.y,position.z],
+            "health":audio_health,"health_known":player_state.ready,"state":"dead" if player_state.ready and audio_health<=0 else "idle"}
+        combat_audio.consume(kind,data,int(server.me_oid),adapter.oid_to_id,audio_rows,Time.get_ticks_msec())
     exchange.observe(kind,data)
     if kind in ["you","region_changed","quit"]:line_of_sight.reset()
     if kind=="los":
@@ -457,6 +473,7 @@ func _process(_delta:float)->void:
         for id in door_states:states.append({"id":id,"open":door_states[id]})
         if chat_state!=null:transport.snapshot_metadata["chat"]=chat_state.snapshot()
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
+        transport.snapshot_metadata["combat_audio"]=combat_audio.snapshot(now)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["exchange"]=exchange.snapshot()
@@ -550,6 +567,7 @@ func write_report()->void:
     report["test_region_return"]={"attempts":test_return_attempts,"last_at_ms":test_return_at,"entry_revision":entry_revision}
     report["inventory"]={"slots":inventory.items.size(),"revision":inventory.state_revision,"requests":inventory.requests,"rejected":inventory.rejected,"pending":not inventory.pending.is_empty(),"feedback":inventory.feedback}
     report["combat_visual"]={"packets":combat_visual.packets,"emitted":combat_visual.emitted,"suppressed_ranged":combat_visual.suppressed_ranged}
+    report["combat_audio"]={"emitted":combat_audio.sequence,"retained":combat_audio.events.size(),"model_sets":combat_audio.model_sets.size(),"weapon_models":combat_audio.weapon_models.size(),"recent":combat_audio.snapshot(Time.get_ticks_msec())}
     report["character_lobby"]=character_lobby.snapshot()
     report["exchange"]=exchange.snapshot()
     report["player_status"]=player_state.snapshot();report["player_status_events"]=player_state.status_events;report["attack_mode_events"]=player_state.mode_events;report["combat_events"]=player_state.combat_events;report["player_state_requests"]=player_state.requests;report["player_state_rejected"]=player_state.rejected

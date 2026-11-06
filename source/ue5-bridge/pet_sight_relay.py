@@ -8,6 +8,7 @@ class NativeSightRelay:
   assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=180
   folder.mkdir(parents=True,exist_ok=True)
   self.native_profile=native_profile
+  self.audio_forwarded=[]
   self.entity_ids=set(entity_ids) if entity_ids is not None else None
   self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=folder/'live_native_current.json';self.report.unlink(missing_ok=True)
   self.listener=socket.socket();self.listener.bind(('127.0.0.1',0));self.listener.listen(1);self.listener.settimeout(100);port=self.listener.getsockname()[1]
@@ -16,7 +17,7 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio'] and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
@@ -32,24 +33,31 @@ class NativeSightRelay:
    if native_profile=='spell_audio':
     host=root/'SpellAudioLab/NativeHost/SpellAudioHost.uproject'
     assert host.exists()
+   if native_profile=='combat_audio':
+    host=root/'CombatAudioLab/NativeHost/SpellAudioHost.uproject'
+    assert host.exists()
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
    appearance=review/'appearance_catalog.json'
-   if native_profile in ['central_expansion_forms','spell_audio']:
+   if native_profile in ['central_expansion_forms','spell_audio','combat_audio']:
     plugin=root/'Client/Plugins/DAoCVisualBridge'
     replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
     appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
-   if native_profile=='spell_audio':
+   if native_profile in ['spell_audio','combat_audio']:
     cmd.remove('-nosound')
     cmd.append('-AudioMixer')
+   if native_profile=='spell_audio':
     cmd.append('-DaocBridgeSoundCatalog='+str(root/'SpellAudioLab/OriginalAudio_v01/sounds.json'))
+   if native_profile=='combat_audio':
+    cmd.append('-DaocBridgeCombatSoundCatalog='+str(root/'CombatAudioLab/OriginalCombatAudio_v01/sounds.json'))
    for i,value in enumerate(cmd):
     for flag,path in replacements.items():
      if value.startswith(flag):cmd[i]=flag+str(path)
    cmd.extend(['-DaocBridgeVisualProbe','-DaocBridgeLobbyAppearance='+str(appearance)])
   self.process=subprocess.Popen(cmd,cwd=root,stdout=self.log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW);self.ue,_=self.listener.accept();self.ue.settimeout(10);self.ue.sendall((json.dumps(dict(type='hello',protocol='daoc-visual-bridge',version=1,session=session))+'\n'+json.dumps(self.native_snapshot(snapshot))+'\n').encode());self.ue.setblocking(False);self.ue.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,65536);self.pending=b'';self.latest=b''
  def native_snapshot(self,value):
+  if value.get('combat_audio') and len(self.audio_forwarded)<32:self.audio_forwarded.append({'snapshot_seq':value.get('seq'),'events':value['combat_audio']})
   if self.entity_ids is None:return value
   native=dict(value);native['entities']=[e for e in value.get('entities',[]) if e['id'] in self.entity_ids]
   # Limit the observer to the tested actors; the real backend/player still

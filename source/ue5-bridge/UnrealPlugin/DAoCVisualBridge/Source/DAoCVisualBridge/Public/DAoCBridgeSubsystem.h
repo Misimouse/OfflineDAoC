@@ -61,6 +61,7 @@ private:
     void TickSpellAudio();
     void ClearSpellAudio();
     bool TickSpellAudioAcceptance();
+    bool TickCombatAudioAcceptance();
     TSharedPtr<FJsonObject> SpellAudioReport() const;
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;

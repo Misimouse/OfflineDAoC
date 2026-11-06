@@ -13,6 +13,7 @@ parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--native-form-probe',action='store_true')
 parser.add_argument('--central-installed-native',action='store_true')
 parser.add_argument('--audio-native-candidate',action='store_true')
+parser.add_argument('--combat-audio-native-candidate',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
@@ -56,6 +57,7 @@ assert not args.combined_data or args.combined_expansions
 assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined_expansions)
 assert not args.central_installed_native or args.native_form_probe
 assert not args.audio_native_candidate or (args.native_form_probe and not args.central_installed_native)
+assert not args.combat_audio_native_candidate or (class_id==58 and args.expansion_power and args.combined_expansions and not args.native_form_probe)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
@@ -77,6 +79,7 @@ if args.native_form_probe:D=D.parent/(D.name+'_native');D.mkdir(parents=True,exi
 if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(parents=True,exist_ok=True)
 if args.central_installed_native:D=ROOT/'Reports/central_bainshee_forms'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
 if args.audio_native_candidate:D=ROOT/'Reports/spell_audio_real_protocol'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
+if args.combat_audio_native_candidate:D=ROOT/'Reports/combat_audio_real_protocol';D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -86,6 +89,7 @@ native_catalog=RUN/'models.json'
 native_catalog_before=native_catalog.read_bytes() if args.bainshee_form_cycle and native_catalog.exists() else None
 candidate_files=[]
 effect_trace=[]
+combat_audio_trace=[]
 relay=None
 combat_motion_speed=0
 combat_move_at=0
@@ -121,6 +125,9 @@ def pump():
   if v.get('type')=='hello':session=v['session']
   if v.get('type')=='snapshot':
    snapshot=v
+   if args.combat_audio_native_candidate:
+    for event in v.get('combat_audio',[]):
+     if not any(old.get('seq')==event.get('seq') for old in combat_audio_trace):combat_audio_trace.append(event)
    if args.bainshee_effect or args.expansion_self_buff or args.vampiir_bolt:
     for event in v.get('spell_visuals',[]):
      if (args.expansion_self_buff or args.vampiir_bolt or event.get('effect_id') in [13515,13516,3332,3334]) and not any(old.get('seq')==event.get('seq') for old in effect_trace):effect_trace.append(event)
@@ -261,7 +268,9 @@ try:
  ce=dict(env,DOTNET_ROOT=str(sdk),DOTNET_ROOT_X64=str(sdk),PATH=str(sdk)+os.pathsep+env['PATH'])
  (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
  log=(D/'starting_spells_client.log').open('w',encoding='utf-8');logs.append(log)
- client=subprocess.Popen([str(game/'tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character=Codexdruid'],cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
+ client_command=[str(game/'tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character=Codexdruid']
+ if args.combat_audio_native_candidate:client_command.append('--bridge-combat-audio-catalog='+str(ROOT/'CombatAudioLab/OriginalCombatAudio_v01/sounds.json'))
+ client=subprocess.Popen(client_command,cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
  end=time.monotonic()+50
  while time.monotonic()<end:
   try:sock=socket.create_connection(('127.0.0.1',19737),timeout=.3);sock.settimeout(.1);break
@@ -378,6 +387,17 @@ try:
  if args.expansion_power:
   wait(lambda:snapshot.get('player_status',{}).get('ready') and any(e.get('name')=='Codex Power Target' for e in snapshot.get('entities',[])),'Normal power fixture ready')
   target=next(e for e in snapshot['entities'] if e.get('name')=='Codex Power Target');power_target=target['id']
+  if args.combat_audio_native_candidate:
+   import importlib.util
+   spec=importlib.util.spec_from_file_location('combat_audio_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
+   inputs=[ROOT/'CombatAudioLab/NativeHost/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',ROOT/'CombatAudioLab/OriginalCombatAudio_v01/sounds.json',SOURCE/'live_gateway.gd',SOURCE/'visual_bridge.gd',SOURCE/'combat_audio_state.gd']
+   result['native_audio_inputs']={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
+   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=130,entity_ids=['player:local',power_target],render=True,native_profile='combat_audio');sock=relay
+   wait(lambda:relay.read_report().get('spell_audio',{}).get('combat_ready'),'Private native combat audio catalog ready',90)
+   # UE startup can leave old snapshots buffered at the headless observer.
+   # Drain them while the ordinary target is still peaceful, before attacking.
+   settle(5)
+   wait(lambda:relay.read_report().get('connected') and relay.read_report().get('sequence',0)>=snapshot.get('seq',0)-40,'Native combat witness catches current server snapshots',30)
   def face_power_target():
    player=next(e for e in snapshot['entities'] if e['id']=='player:local')
    send('move',position_m=player['position_m'],forward_xz=[0,1],speed_mps=0,target_in_view=True,target_entity_id=power_target)
@@ -411,6 +431,17 @@ try:
   settle(15)
   assert vitals()['health']>0,'Power fixture must disengage alive'
   result['combat_power']['walked_out_of_melee_before_quit']=True
+  if args.combat_audio_native_candidate:
+   # Disengage first even if an audio assertion fails; never leave the fixture
+   # fighting while trying its normal seated logout.
+   audio=relay.read_report().get('spell_audio',{})
+   result['combat_audio_wire_trace']=combat_audio_trace
+   result['native_combat_audio']=audio
+   assert audio.get('combat_ready') and audio.get('combat_events_seen',0)>0 and audio.get('played_clips',0)>0 and audio.get('pcm_consumed_bytes',0)>0
+   assert audio.get('invalid_resources',-1)==0 and audio.get('unresolved_references',-1)==0,audio
+   result['checks']['original_real_combat_audio_consumed_by_engine']=True
+   assert all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==sha for p,sha in result['native_audio_inputs'].items())
+   sock=relay.backend;sock.settimeout(.1)
  if training_mode:
   player=next(e for e in snapshot['entities'] if e['id']=='player:local')
   send('move',position_m=player['position_m'],forward_xz=player['forward_xz'],speed_mps=0)
@@ -618,7 +649,8 @@ try:
  result['passed']=True
 
 except Exception:
- if relay is not None:result['native_observer_diagnostics']={'answers':relay.answers,'probes':relay.probes,'questions':relay.questions}
+ if args.combat_audio_native_candidate:result['combat_audio_wire_trace']=combat_audio_trace
+ if relay is not None:result['native_observer_diagnostics']={'answers':relay.answers,'probes':relay.probes,'questions':relay.questions,'audio_forwarded':relay.audio_forwarded}
  result['errors'].append(traceback.format_exc());(D/'starting_spells_failed.json').write_text(json.dumps(snapshot),encoding='utf-8')
 finally:
  if sock and session:

@@ -8,9 +8,10 @@ import subprocess
 from prepare_combined_expansion_data import digest
 
 
-def build(workspace, engine):
+def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    root=workspace/'SpellAudioLab'
+    assert lab_name in ['SpellAudioLab','CombatAudioLab']
+    root=workspace/lab_name
     host=root/'NativeHost'
     plugin=host/'Plugins/DAoCVisualBridge'
     plugin.mkdir(parents=True,exist_ok=True)
@@ -50,5 +51,6 @@ def build(workspace, engine):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     for key in ['workspace','engine']:parser.add_argument('--'+key,type=Path,required=True)
+    parser.add_argument('--combat-candidate',action='store_true')
     args=parser.parse_args()
-    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve())))
+    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve(),'CombatAudioLab' if args.combat_candidate else 'SpellAudioLab')))
