@@ -16,6 +16,7 @@ parser.add_argument('--minotaur-promotion',action='store_true')
 parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--combined-expansions',action='store_true')
 parser.add_argument('--combined-data',type=Path)
+parser.add_argument('--central-minotaur-activation',type=Path)
 parser.add_argument('--native-world-probe',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
@@ -46,6 +47,13 @@ assert not args.candidate_build or candidate_mode
 assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires a sealed build with the canonical bridge overlay'
 assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation requires its sealed private source variant'
 assert not args.minotaur_candidate or args.candidate_build, 'Minotaur creation requires its sealed private source variant'
+central_plan=None
+if args.central_minotaur_activation:
+    assert args.minotaur_candidate and args.minotaur_original_start and not args.combined_expansions and not promoting
+    assert args.central_minotaur_activation.resolve()==(ROOT/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/plan.json').resolve()
+    central_plan=json.loads(args.central_minotaur_activation.read_text())
+    assert central_plan['passed'] and not central_plan['installed'] and not central_plan['normal_database_modified']
+    assert hashlib.sha256((args.candidate_build/'build_receipt.json').read_bytes()).hexdigest()==central_plan['candidate_receipt_sha256']
 
 D=ROOT/'Reports'/('classic_creation_eligibility' if args.eligibility_only else ('classic_class_creation_'+str(args.classic_class_batch) if args.classic_class_batch is not None else ('bainshee_creation' if args.bainshee_candidate else 'character_creation_matrix')));D.mkdir(exist_ok=True)
 if args.shar_candidate:D=ROOT/'Reports/shar_creation';D.mkdir(exist_ok=True)
@@ -60,6 +68,7 @@ if args.minotaur_original_start:D=ROOT/'Reports/minotaur_original_start';D.mkdir
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions'/D.name;D.mkdir(parents=True,exist_ok=True)
 if args.native_world_probe:D=D.parent/(D.name+'_world');D.mkdir(exist_ok=True)
 if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(exist_ok=True)
+if central_plan:D=ROOT/'Reports/central_minotaur_activation';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -154,6 +163,11 @@ try:
         except (ConnectionRefusedError,socket.timeout):pass
     with checked() as db:
         dest=sqlite3.connect(backup/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
+        if central_plan:
+            for key,value in central_plan['properties_before'].items():
+                changed=db.execute('UPDATE ServerProperty SET Value=? WHERE Key=?',(value,key))
+                assert changed.rowcount==1
+            report['central_activation_plan_sha256']=hashlib.sha256(args.central_minotaur_activation.read_bytes()).hexdigest()
         if args.combined_data:
             from prepare_combined_expansion_data import apply_marked
             report['preloaded_combined_data']=apply_marked(db,args.combined_data,RUN.name,ROOT)
@@ -259,6 +273,7 @@ try:
             report['private_vampiir_source_variant_verified']=True
         rules.DB=DB;rules.OUT=RUN/('vampiir_server_classes.json' if args.vampiir_candidate else ('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json'));rules.main()
         candidate=json.loads(rules.OUT.read_text())
+        if central_plan:assert candidate==central_plan['rules'], 'QA profile must equal the prepared central activation policy'
         if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
         elif args.minotaur_candidate:
             assert {int(k) for k,v in candidate['classes'].items() if 21 in v['races']}=={43,44,45,46}

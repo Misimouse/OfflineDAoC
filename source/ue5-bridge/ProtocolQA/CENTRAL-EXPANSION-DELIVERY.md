@@ -79,3 +79,57 @@ Backup: `<bridge>/Backups/CentralExpansionClient_20261106-002505-012857`.
 `Sources/rollback.json` lists the synchronized source backups. Preserve later
 edits when reverting: verify installed receipt hashes before restoring a file or
 removing a newly added asset. No recursive cleanup of resource roots is needed.
+
+## Restricted central Minotaur activation
+
+The central activation is a separate delivery from the six-table expansion
+proposal. `prepare_central_minotaur_activation.py` takes a fresh logical snapshot
+of the installed database and prepares only the two original Minotaur starts
+(Guardian/Naturalist, Connacht zone 207). It removes race 21 alone from
+`disabled_races`. Every existing classic eligibility choice and all other
+restrictions remain unchanged: races 16–20 and classes 39/58/62 stay disabled.
+The original four male Minotaur careers are Blademaster, Hero, Champion and
+Warden. No world population or quest package is imported.
+
+The rules catalog is generated from the accepted joint server source profile.
+`verify_character_creation_matrix_real.py --central-minotaur-activation <plan>`
+repeats all four creation/saved-reentry cases in the disposable fixture and
+requires its eligibility catalog to equal the prepared central catalog exactly.
+The normal database and player characters are not used for this protocol test.
+
+`complete_minotaur_godot_resources.py` inventories external glTF dependencies;
+the transport model needs eight original texture files, seven previously
+absent. The installer verifies these alongside the original modular figure,
+four bridge scripts, the narrowly patched race transport metadata, rules and
+nine server library copies. It never copies the unrelated dirty network source
+wholesale or replaces existing original textures with different content.
+
+`install_central_minotaur_activation.py --apply` refuses stale logical database
+state, changed target files, running UE processes and occupied normal server
+or bridge ports. SQLite backup, an immediate transaction and full row hashes
+protect player progress. Only the two inserted startup identities are excluded
+from the preservation comparison; the complete ServerProperty rows must differ
+in exactly the intended Value field. On pre-commit failure its own file changes
+and transaction are rolled back. Played backups and logs must never enter Git.
+
+Installed receipt: `<bridge>/ExpansionRaceLab/CentralDelivery/MinotaurActivation/installed.json`.
+Backup: `<bridge>/Backups/CentralMinotaurActivation_20261106-015451-954381`.
+Delivery completed with 25 verified file targets and all previous rows in 125
+tables preserved. The other expansion class-data package remains uninstalled.
+
+`verify_central_character_menu.py` separately starts the normal server and the
+normal launcher's existing menu probe. It does not enter/create a character,
+uses the launcher's credential provider without printing credentials, requests
+normal logout and writes `exit` to its own server process. Its live evidence
+belongs under `<bridge>/Reports/central_character_menu`, separately from the
+disposable four-career proof and owner acceptance.
+
+The installed live menu check passed on 2026-11-06: six existing characters,
+76 eligibility choices, no world entry, and normal server/client shutdown.
+Its actual rendered selection screen was inspected separately; this is not
+owner approval of character appearance or proof of live Minotaur world entry.
+
+If a closed launcher leaves a server orphan, do not weaken the occupied-port
+guard. Its stdin may no longer have an owner. In the observed case, the owner
+explicitly authorized termination after a verified SQLite backup. Keep that
+exception separate from the routine installer and normal shutdown path.
