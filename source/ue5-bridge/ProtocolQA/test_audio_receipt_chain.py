@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -210,6 +210,23 @@ def verify(workspace):
         jump['files'][0]['before_sha256']=previous_native;put(jump_path,jump)
         saved=targets[-1].read_bytes();targets[-1].write_bytes(b'bad old water after jump');rejected();checks+=1;targets[-1].write_bytes(saved)
         wave.write_bytes(b'bad old combat after jump');rejected();checks+=1;wave.write_bytes(before)
+        previous_native=digest(binary);key_root=w/'MovementKeysLab';key_catalog=key_root/'movement.json';put(key_catalog,{'version':1,'models':{}})
+        key_resources=key_root/'resources.json';put(key_resources,{'catalog':str(key_catalog),'catalog_sha256':digest(key_catalog)})
+        key_rows=[];key_target=plugin/'Content/MovementKeys_v01/movement.json'
+        for target in [plugin/p for p in MOVEMENT_KEYS_NATIVE_TARGETS]+[key_target]:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in ['DAoCBridgeMovementKeys.h','DAoCBridgeMovementKeysAcceptance.cpp','movement.json']:target.write_bytes(b'old movement keys predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(key_catalog.read_bytes() if target==key_target else b'new keys '+str(target).encode())
+            key_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        key_path=key_root/'installed.json';key_receipt={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(jump_path),'resources_receipt_sha256':digest(key_resources),
+            'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':key_rows}
+        put(key_path,key_receipt);assert verify_files(w)['movement_keys_installed'];checks+=1
+        key_receipt['predecessor_receipt_sha256']='0'*64;put(key_path,key_receipt);rejected();checks+=1
+        key_receipt['predecessor_receipt_sha256']=digest(jump_path);key_receipt['files'][0]['before_sha256']='0'*64;put(key_path,key_receipt);rejected();checks+=1
+        key_receipt['files'][0]['before_sha256']=previous_native;put(key_path,key_receipt)
+        saved=key_target.read_bytes();key_target.write_bytes(b'bad movement stride');rejected();checks+=1;key_target.write_bytes(saved)
+        wave.write_bytes(b'bad old combat after movement keys');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

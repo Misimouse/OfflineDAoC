@@ -1,4 +1,6 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeCharacter.h"
+#include "DAoCBridgeMovementKeys.h"
 #include "Dom/JsonObject.h"
 #include "Animation/SkeletalMeshActor.h"
 #include "Animation/AnimSequenceBase.h"
@@ -28,7 +30,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
     const bool Dead=Local?(Ready?PoseNum(Vitals,TEXT("health_pct"))<=0:Pose.Dead):Requested==TEXT("dead");
     const bool Sitting=Ready&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
-    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump");
+    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump")||Requested==TEXT("walk_back");
     auto Clip=[&](const FString& Key)->UAnimSequenceBase*{FString Path;return (*Entry)->TryGetStringField(Key,Path)?LoadObject<UAnimSequenceBase>(nullptr,*Path):nullptr;};
     if(Dead){
         if(!Pose.Dead){
@@ -90,6 +92,8 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     }
     if(Key==TEXT("jump"))Loop=false;
     if(!(*Entry)->HasField(Key)&&!Dead&&!Sitting&&Pose.Transition.IsEmpty())Key=Moving&&(*Entry)->HasField(TEXT("walk"))?TEXT("walk"):TEXT("idle");
+    const float PlayRate=Local&&Key==TEXT("walk_back")&&MovementKeys&&PlayerPawn?MovementKeys->BackwardRate((*Row)->GetIntegerField(TEXT("model_id")),PlayerPawn->GetVelocity().Size2D()/100):1.f;
+    Mesh->SetPlayRate(Reverse?-PlayRate:PlayRate);
     const FString StateKey=Reverse?TEXT("sit_down_reverse"):Key;
     const bool NewAction=Action&&Pose.PlayedActionSeq!=Pose.ActiveActionSeq;
     const bool NewCast=SpellPose&&Pose.PlayedCastSeq!=SpellSeq;
@@ -106,7 +110,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
         return;
     }
     if(auto* Animation=Clip(Key)){
-        Mesh->PlayAnimation(Animation,Loop);Mesh->SetPlayRate(Reverse?-1.f:1.f);if(Reverse)Mesh->SetPosition(Animation->GetPlayLength(),false);
+        Mesh->PlayAnimation(Animation,Loop);Mesh->SetPlayRate(Reverse?-PlayRate:PlayRate);if(Reverse)Mesh->SetPosition(Animation->GetPlayLength(),false);
         if(Dead)Mesh->SetPosition(FMath::Clamp(float(Now-Pose.DiedAt),0.f,Animation->GetPlayLength()),false);
         if(Action){Mesh->SetPosition(FMath::Clamp(float(Now-Pose.ActionStartedAt),0.f,Animation->GetPlayLength()),false);Pose.PlayedActionSeq=Pose.ActiveActionSeq;}
         if(SpellPose){Mesh->SetPosition(float(SpellAt),false);Pose.PlayedCastSeq=SpellSeq;}

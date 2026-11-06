@@ -37,6 +37,12 @@ JUMP_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binarie
     'Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeJumpLandingAcceptance.cpp']
 
 
+MOVEMENT_KEYS_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeMovementKeys.h',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeMovementKeysAcceptance.cpp']
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -98,6 +104,29 @@ def verify_files(workspace):
     jump=json.loads(jump_path.read_text()) if jump_path.exists() else None
     if jump and not jump.get('installed'):jump=None
     jump_replacements={}
+    keys_path=workspace/'MovementKeysLab/installed.json'
+    keys=json.loads(keys_path.read_text()) if keys_path.exists() else None
+    if keys and not keys.get('installed'):keys=None
+    keys_replacements={}
+    if keys:
+        assert jump and keys['phase']=='complete' and not keys['database_modified']
+        assert keys['predecessor_receipt_sha256']==digest(jump_path) and keys['native_before_sha256']==jump['native_after_sha256']
+        resource_path=workspace/'MovementKeysLab/resources.json';assert keys['resources_receipt_sha256']==digest(resource_path)
+        resource=json.loads(resource_path.read_text());assert Path(resource['catalog'])==workspace/'MovementKeysLab/movement.json'
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';catalog=str(plugin/'Content/MovementKeys_v01/movement.json')
+        keys_replacements={row['target']:row for row in keys['files']}
+        assert len(keys['files'])==len(keys_replacements)==len(MOVEMENT_KEYS_NATIVE_TARGETS)+1
+        assert set(keys_replacements)=={str(plugin/p) for p in MOVEMENT_KEYS_NATIVE_TARGETS}|{catalog}
+        assert keys_replacements[catalog]['after_sha256']==resource['catalog_sha256']
+        for row in keys['files']:
+            assert (row['before_sha256'] is None)==(Path(row['target']).name in ['movement.json','DAoCBridgeMovementKeys.h','DAoCBridgeMovementKeysAcceptance.cpp'])
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=keys_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==keys['native_before_sha256'] and binary['after_sha256']==keys['native_after_sha256']
+    def latest_keys(row,expected):
+        changed=keys_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if jump:
         assert water and jump['phase']=='complete' and not jump['database_modified']
         assert jump['predecessor_receipt_sha256']==digest(water_path) and jump['native_before_sha256']==water['native_after_sha256']
@@ -107,13 +136,13 @@ def verify_files(workspace):
         assert set(jump_replacements)=={str(plugin/p) for p in JUMP_NATIVE_TARGETS}
         for row in jump['files']:
             assert (row['before_sha256'] is None)==(Path(row['target']).name=='DAoCBridgeJumpLandingAcceptance.cpp')
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_keys(row,row['after_sha256'])
         binary=jump_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==jump['native_before_sha256'] and binary['after_sha256']==jump['native_after_sha256']
     def latest_jump(row,expected):
         changed=jump_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_keys(row,expected)
     if water:
         assert server and water['phase']=='complete' and not water['database_modified']
         assert water['predecessor_receipt_sha256']==digest(server_path) and water['native_before_sha256']==server['native_after_sha256']
@@ -288,4 +317,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'verified_files':len(original['files'])}

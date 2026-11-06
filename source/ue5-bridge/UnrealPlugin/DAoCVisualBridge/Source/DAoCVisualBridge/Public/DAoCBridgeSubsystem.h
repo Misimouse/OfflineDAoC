@@ -10,6 +10,7 @@ class FJsonObject;
 class FBridgeSpellVisuals;
 class FBridgeSpellAudio;
 class FBridgeWaterData;
+struct FBridgeMovementKeys;
 class FDAoCLobbyMotion;
 class FJsonValue;
 class AStaticMeshActor;
@@ -67,6 +68,9 @@ private:
     bool TickServerSoundAcceptance();
     bool TickWaterAcceptance();
     bool TickJumpLandingAcceptance();
+    bool TickMovementKeysAcceptance();
+    TSharedPtr<FBridgeMovementKeys> MovementKeys;
+    int32 MovementKeysTestPhase=0;
     TSharedPtr<FBridgeWaterData> WaterData;
     bool bLocalSwimming=false;
     FString LocalGroundSurface=TEXT("dirt");
