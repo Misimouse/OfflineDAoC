@@ -33,8 +33,8 @@ class FBridgeSpellAudio {
     struct FPending {J Row;FString Owner,Phase;double At=0;FString Root;FVector Position=FVector::ZeroVector;bool Anchored=false;};
     struct FVoice {TWeakObjectPtr<UAudioComponent> Component;TWeakObjectPtr<USoundWaveProcedural> Wave;FString Owner,Phase;double Until=0;int32 Remaining=0;bool Anchored=false;float BaseGain=1.f;};
     UDAoCBridgeSubsystem* S;
-    J Index,Effects,CombatIndex;
-    FString Folder,CombatFolder,Session,LastName,LastFile;
+    J Index,Effects,CombatIndex,DoorIndex;
+    FString Folder,CombatFolder,DoorFolder,Session,LastName,LastFile;
     FVector Anchor=FVector::ZeroVector;
     bool Anchored=false;
     TMap<FString,FPCM> Cache;
@@ -142,8 +142,11 @@ public:
         FString CombatPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalCombatAudio_v01/sounds.json");
         FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatSoundCatalog="),CombatPath);
         CombatFolder=FPaths::GetPath(CombatPath);CombatIndex=SpellAudioData::Read(CombatPath);
+        FString DoorPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalDoorAudio_v01/sounds.json");
+        FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeDoorSoundCatalog="),DoorPath);
+        DoorFolder=FPaths::GetPath(DoorPath);DoorIndex=SpellAudioData::Read(DoorPath);
         Effects=SpellAudioData::Read(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/SpellVisuals_v01/catalog.json"));
-        FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsAudioTest="),Test))GainScale=.03f;
+        FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeDoorAudioTest="),Test))GainScale=.03f;
     }
     void Clear(){for(auto& V:Voices)StopVoice(V);Voices.Empty();Pending.Empty();Casts.Empty();Bursts.Empty();LastSequence=0;LastCombatSequence=0;Session.Empty();}
     void Apply(const J& Snapshot){
@@ -189,12 +192,14 @@ public:
             if(Position.ContainsNaN())continue;
             const bool Creature=Kind==TEXT("creatures")&&TArray<FString>{TEXT("attack"),TEXT("pain_light"),TEXT("pain_medium"),TEXT("pain_heavy"),TEXT("die"),TEXT("evade"),TEXT("splat")}.Contains(Name);
             const bool Weapon=Kind==TEXT("weapons")&&TArray<FString>{TEXT("activate"),TEXT("deactivate"),TEXT("use"),TEXT("style_use"),TEXT("hit_light"),TEXT("hit_medium"),TEXT("style_hit"),TEXT("parried"),TEXT("blocked")}.Contains(Name);
-            if(!Creature&&!Weapon)continue;
-            auto Row=Object(Object(CombatIndex,*Kind),*FString::FromInt(int32(Number(Event,TEXT("set")))));
+            const bool Door=Kind==TEXT("doors")&&(Name==TEXT("open")||Name==TEXT("close"));
+            if(!Creature&&!Weapon&&!Door)continue;
+            const auto EventIndex=Door?DoorIndex:CombatIndex;
+            auto Row=Object(Object(EventIndex,*Kind),*FString::FromInt(int32(Number(Event,TEXT("set")))));
             if(!Row){++Missing;continue;}
             FString StructureName=String(Row,*Name);
             if(StructureName.IsEmpty()&&Weapon&&(Name==TEXT("style_use")||Name==TEXT("style_hit")))StructureName=String(Row,Name==TEXT("style_use")?TEXT("use"):TEXT("hit_medium"));
-            TGuardValue<J> IndexGuard(Index,CombatIndex);TGuardValue<FString> FolderGuard(Folder,CombatFolder);
+            TGuardValue<J> IndexGuard(Index,EventIndex);TGuardValue<FString> FolderGuard(Folder,Door?DoorFolder:CombatFolder);
             TGuardValue<FVector> AnchorGuard(Anchor,Position);TGuardValue<bool> AnchoredGuard(Anchored,true);
             ++CombatSeen;Structure(StructureName,Owner,TEXT("combat"),0);
         }
@@ -214,6 +219,7 @@ public:
         float MaxVoice=0;for(const auto& Voice:Voices)if(Voice.Component.IsValid())MaxVoice=FMath::Max(MaxVoice,Voice.Component->VolumeMultiplier);
         Out->SetNumberField(TEXT("max_voice_volume"),MaxVoice);Out->SetNumberField(TEXT("master_volume"),S->AudioMasterVolume);Out->SetNumberField(TEXT("effects_volume"),S->AudioEffectsVolume);
         Out->SetBoolField(TEXT("combat_ready"),CombatIndex.IsValid());Out->SetNumberField(TEXT("combat_events_seen"),CombatSeen);
+        Out->SetBoolField(TEXT("door_ready"),DoorIndex.IsValid());
         Out->SetNumberField(TEXT("combat_events_received"),CombatReceived);Out->SetNumberField(TEXT("combat_events_stale"),CombatStale);Out->SetNumberField(TEXT("combat_events_rejected"),CombatRejected);
         Out->SetNumberField(TEXT("events_seen"),Seen);Out->SetNumberField(TEXT("played_clips"),Played);Out->SetNumberField(TEXT("active_voices"),Voices.Num());Out->SetNumberField(TEXT("pending_clips"),Pending.Num());
         int32 Gather=0;for(const auto& V:Voices)Gather+=V.Phase==TEXT("gather");for(const auto& V:Pending)Gather+=V.Phase==TEXT("gather");Out->SetNumberField(TEXT("active_gather"),Gather);

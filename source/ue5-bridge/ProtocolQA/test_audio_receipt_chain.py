@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -99,6 +99,33 @@ def verify(workspace):
         options['predecessor_receipt_sha256']=digest(selection_path);options['files'][0]['before_sha256']='0'*64;put(options_path,options);rejected();checks+=1
         options['files'][0]['before_sha256']=previous_native;put(options_path,options)
         wave.write_bytes(b'tampered old wave after options');rejected();checks+=1
+        wave.write_bytes(before)
+        library=w/'DoorAudioLab/OriginalDoorAudio_v01';library.mkdir(parents=True)
+        files={}
+        for i in range(25):
+            p=library/('files/'+str(i)+'.wav');p.parent.mkdir(exist_ok=True);p.write_bytes(b'original door '+str(i).encode());files[str(p)]=digest(p)
+        catalog=library/'sounds.json';catalog.write_text('synthetic original door catalog')
+        resources_path=w/'DoorAudioLab/resources.json';put(resources_path,{'catalog':str(catalog),'catalog_sha256':digest(catalog),'files':files})
+        door_rows=[];previous_native=digest(binary)
+        targets=[(plugin/name) for name in DOOR_NATIVE_TARGETS]+[gateway,w/'Godot/door_audio_state.gd']
+        targets += [plugin/'Content/OriginalDoorAudio_v01'/Path(p).relative_to(library) for p in list(files)+[str(catalog)]]
+        new_native=plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeDoorAudioAcceptance.cpp'
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target in [plugin/name for name in DOOR_NATIVE_TARGETS] and target!=new_native:target.write_bytes(b'old door predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new door '+str(target).encode())
+            if target.is_relative_to(plugin/'Content/OriginalDoorAudio_v01'):target.write_bytes((library/target.relative_to(plugin/'Content/OriginalDoorAudio_v01')).read_bytes())
+            door_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        door_path=w/'DoorAudioLab/installed.json';door={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(options_path),'gateway_predecessor_receipt_sha256':digest(mode_path),
+            'resources_receipt_sha256':digest(resources_path),'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':door_rows}
+        put(door_path,door);assert verify_files(w)['door_audio_installed'];checks+=1
+        door['predecessor_receipt_sha256']='0'*64;put(door_path,door);rejected();checks+=1
+        door['predecessor_receipt_sha256']=digest(options_path);door['gateway_predecessor_receipt_sha256']='0'*64;put(door_path,door);rejected();checks+=1
+        door['gateway_predecessor_receipt_sha256']=digest(mode_path);door['files'][0]['before_sha256']='0'*64;put(door_path,door);rejected();checks+=1
+        door['files'][0]['before_sha256']=previous_native;put(door_path,door)
+        door_wave=targets[-1];saved=door_wave.read_bytes();door_wave.write_bytes(b'corrupt door WAV');rejected();checks+=1;door_wave.write_bytes(saved)
+        wave.write_bytes(b'tampered old combat wave after doors');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

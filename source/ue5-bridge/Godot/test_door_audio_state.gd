@@ -1,0 +1,47 @@
+extends SceneTree
+var checks:=0
+func check(value:bool,label:String)->void:
+    checks+=1
+    if not value:push_error(label);quit(1);assert(false,label)
+func _initialize()->void:
+    var audio=load(get_script().resource_path.get_base_dir().path_join("combat_audio_state.gd")).new()
+    var doors=load(get_script().resource_path.get_base_dir().path_join("door_audio_state.gd")).new()
+    var loaded={207033603:[1375.4,130,1250.6]}
+    var sets={"1":{"open":"s_door1open","close":"s_door1close"},"10":{"name":"destroyedbridge1"}}
+    var original:=JSON.stringify([loaded,sets])
+    doors.configure(loaded,sets)
+    var id:=207033603
+    doors.consume("door_state",{"door_id":id,"open":false,"flag":1},audio,100)
+    check(audio.events.is_empty(),"initial closed hydration is quiet")
+    doors.request(id,true,200);check(audio.events.is_empty(),"request alone cannot predict audio")
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":1},audio,250)
+    check(audio.events.size()==1 and audio.events[0].sheet=="doors" and audio.events[0].event=="open","acknowledged open uses original flag")
+    check(audio.events[0].position_m==loaded[id] and audio.events[0].owner=="door:"+str(id),"one group anchors sound to its doorway")
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":1},audio,260)
+    check(audio.events.size()==1,"repeated acknowledgement and double-leaf snapshots are quiet")
+    doors.consume("door_state",{"door_id":id,"open":false,"flag":1},audio,300)
+    check(audio.events.size()==2 and audio.events[1].event=="close","known server close uses original close event")
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":0},audio,400)
+    check(audio.events.size()==2 and doors.states[id],"zero flag stays silent while authoritative state advances")
+    doors.consume("door_state",{"door_id":id,"open":false,"flag":10},audio,500)
+    check(audio.events.size()==2,"missing original close slot is not substituted")
+    doors.consume("door_state",{"door_id":999,"open":true,"flag":1},audio,600)
+    check(audio.events.size()==2 and not doors.states.has(999),"unloaded door identity cannot emit audio")
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":999},audio,650)
+    check(audio.events.size()==2,"unknown sound flag remains silent")
+    doors.reset();audio.reset()
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":1},audio,700)
+    check(audio.events.is_empty(),"joining beside an open door is silent")
+    doors.consume("door_state",{"door_id":id,"open":false,"flag":1},audio,800)
+    check(audio.events.size()==1,"subsequent real transition after hydration is audible")
+    doors.reset();audio.reset();doors.request(id,true,1000)
+    doors.consume("door_state",{"door_id":id,"open":true,"flag":1},audio,7000)
+    check(audio.events.is_empty(),"expired request cannot turn hydration into a voice")
+    doors.reset();doors.request(id,true,8000)
+    doors.consume("region_changed",{},audio,8100)
+    check(doors.requests.is_empty() and doors.states.is_empty(),"zone reset forgets pending requests and states")
+    doors.consume("door_state",{"door_id":id,"open":1,"flag":1},audio,8200)
+    check(audio.events.is_empty(),"malformed state is quiet")
+    check(JSON.stringify([loaded,sets])==original,"dispatch never modifies loaded geometry or original sound tables")
+    print(JSON.stringify({"passed":true,"checks":checks}))
+    quit()

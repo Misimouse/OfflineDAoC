@@ -14,6 +14,7 @@ var player_state:RefCounted
 var combat_visual:RefCounted
 var combat_audio:RefCounted
 var weapon_mode_audio:RefCounted
+var door_audio:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -87,6 +88,7 @@ func _ready()->void:
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
     combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
     weapon_mode_audio=load(folder.path_join("weapon_mode_audio_state.gd")).new()
+    door_audio=load(folder.path_join("door_audio_state.gd")).new()
     var combat_audio_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalCombatAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-combat-audio-catalog="):combat_audio_path=arg.trim_prefix("--bridge-combat-audio-catalog=")
@@ -132,6 +134,14 @@ func _ready()->void:
         for model in collisions.get("models",{}).values():
             for fixture in model.get("door_fixtures",[]):
                 for id in fixture.get("groups",{}).values():allowed_doors[int(id)]=fixture.get("position_m",[])
+    var door_audio_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalDoorAudio_v01/sounds.json")
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--bridge-door-audio-catalog="):door_audio_path=arg.trim_prefix("--bridge-door-audio-catalog=")
+    var door_sets:Dictionary={}
+    if FileAccess.file_exists(door_audio_path):
+        var door_index:Variant=JSON.parse_string(FileAccess.get_file_as_string(door_audio_path))
+        if door_index is Dictionary:door_sets=door_index.get("doors",{})
+    door_audio.configure(allowed_doors,door_sets)
     transport=load(folder.path_join("visual_bridge.gd")).new();add_child(transport)
     transport.gameplay_enabled=true;assert(transport.start()==OK)
     adapter=load(folder.path_join("decoded_world_adapter.gd")).new();add_child(adapter);adapter.set_process(false)
@@ -195,6 +205,8 @@ func apply_entry(entry:Dictionary)->void:
 
 func world_event(kind:String,data:Dictionary)->void:
     player_models.consume(kind,data)
+    if kind in ["you","region_changed","quit"]:door_audio.reset()
+    elif kind=="door_state" and int(server.entry.get("zone",-1))==207:door_audio.consume(kind,data,combat_audio,Time.get_ticks_msec())
     if kind in ["you","region_changed","quit","npc","player","revive","death","remove","combat","attack_mode","status"]:
         # Preserve pre-packet health for the original light/medium pain rule.
         var audio_rows:Dictionary=adapter.entities.duplicate()
@@ -342,10 +354,12 @@ func command(value:Dictionary)->void:
         var text:=String(value.get("text",""))
         dispatch_chat(text)
     elif action=="door":
+        if int(server.entry.get("zone",-1))!=207:return
         var id:=int(value.get("door_id",-1))
         if not allowed_doors.has(id) or not value.get("open") is bool:return
         var p:Array=allowed_doors[id]
         if p.size()!=3 or position.distance_to(Vector3(float(p[0]),float(p[1]),float(p[2])))>5:return
+        door_audio.request(id,bool(value.open),Time.get_ticks_msec())
         server.client.DoorRequest(id,1 if value.open else 0);door_requests+=1
 
 func local_chat(text:String,channel:String="help")->void:

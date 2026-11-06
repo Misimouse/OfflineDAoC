@@ -62,6 +62,7 @@ private:
     void ClearSpellAudio();
     bool TickSpellAudioAcceptance();
     bool TickCombatAudioAcceptance();
+    bool TickDoorAudioAcceptance();
     TSharedPtr<FJsonObject> SpellAudioReport() const;
     TSharedPtr<SWidget> OptionsOverlay;
     bool bOptionsOpen=false,bAudioSettingsLoaded=false;
