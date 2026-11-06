@@ -178,3 +178,27 @@ The normal server/menu then passed again (six existing characters, 76 choices,
 no world entry, normal shutdown). Bainshee, Vampiir and Mauler remain disabled;
 their data being present is distinct from class activation and playable
 acceptance.
+
+## Installed-native Bainshee form cycles
+
+`run_central_bainshee_forms.py` repeats the complete original level-five form
+cycle for Celt, Elf and Lurikeen in serial disposable sessions with the full
+accepted class data. The central native observer mounts only installed plugin
+and project content. Its DLL/module manifest must match the installed plugin;
+model, equipment and appearance inputs are recorded and checked after the run.
+Old private joint evidence is left intact under its original output paths.
+
+All three installed-native cases passed: a positive self buff retains the
+original body; the offensive cast changes body and inventory portrait to the
+race's original form (1883/1885/1884); weapons disappear while transformed; the
+original roughly 30-second timer restores body, portrait, chosen look and
+inventory. The test fixture, server files and catalogs are restored, and native
+observer/server/client close normally. `verify_central_bainshee_forms.py` seals
+those results against current installed files, actual body/portrait stage
+reports and three PNG captures per race.
+
+Evidence: `<bridge>/Reports/central_bainshee_forms/verified.json`. Rendered form
+captures and Lurikeen restoration were inspected by Codex separately from owner
+acceptance. These filtered actor observers do not validate world scenery,
+combat damage, general spell particles or audio. Normal class activation is a
+separate guarded step.

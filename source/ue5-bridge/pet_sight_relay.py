@@ -1,6 +1,6 @@
 """Test-only relay: real UE geometry answers server LOS; all other native commands are ignored."""
 from bridge_paths import ROOT, INSTALL, ENGINE, ART_PROJECT
-import json,socket,select,subprocess,time
+import json,socket,select,subprocess,time,hashlib
 from pathlib import Path
 class NativeSightRelay:
  def __init__(self,backend,root,session,snapshot,output=None,duration=120,entity_ids=None,render=True,native_profile=None):
@@ -16,17 +16,30 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile=='expansion_forms' and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
+   if native_profile=='central_expansion_forms':
+    host=root/'ExpansionRaceLab/CentralInstalledHost/CentralInstalledHost.uproject'
+    plugin=root/'Client/Plugins/DAoCVisualBridge'
+    digest=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
+    assert host.exists()
+    assert (host.parent/'Content').is_junction() and (host.parent/'Content').resolve()==(root.parent/'DAoC-Enhanced-Unreal/Content').resolve()
+    assert (host.parent/'Plugins/DAoCVisualBridge/Content').is_junction() and (host.parent/'Plugins/DAoCVisualBridge/Content').resolve()==(plugin/'Content').resolve()
+    for name in ['UnrealEditor-DAoCVisualBridge.dll','UnrealEditor.modules']:
+     assert digest(host.parent/'Plugins/DAoCVisualBridge/Binaries/Win64'/name)==digest(plugin/'Binaries/Win64'/name)
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
+   appearance=review/'appearance_catalog.json'
+   if native_profile=='central_expansion_forms':
+    replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
+    appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
    for i,value in enumerate(cmd):
     for flag,path in replacements.items():
      if value.startswith(flag):cmd[i]=flag+str(path)
-   cmd.extend(['-DaocBridgeVisualProbe','-DaocBridgeLobbyAppearance='+str(review/'appearance_catalog.json')])
+   cmd.extend(['-DaocBridgeVisualProbe','-DaocBridgeLobbyAppearance='+str(appearance)])
   self.process=subprocess.Popen(cmd,cwd=root,stdout=self.log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW);self.ue,_=self.listener.accept();self.ue.settimeout(10);self.ue.sendall((json.dumps(dict(type='hello',protocol='daoc-visual-bridge',version=1,session=session))+'\n'+json.dumps(self.native_snapshot(snapshot))+'\n').encode());self.ue.setblocking(False);self.ue.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,65536);self.pending=b'';self.latest=b''
  def native_snapshot(self,value):
   if self.entity_ids is None:return value
@@ -34,7 +47,7 @@ class NativeSightRelay:
   # Limit the observer to the tested actors; the real backend/player still
   # receives the entire world. This never manufactures a visibility reply.
   native.pop('qa_skill_audit',None)
-  if self.native_profile!='expansion_forms':native.pop('classic_ui',None)
+  if self.native_profile not in ['expansion_forms','central_expansion_forms']:native.pop('classic_ui',None)
   return native
  def sendall(self,data):self.backend.sendall(data)
  def settimeout(self,value):self.backend.settimeout(value)

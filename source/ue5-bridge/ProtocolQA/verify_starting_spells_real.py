@@ -11,6 +11,7 @@ parser.add_argument('--expansion-power',action='store_true')
 parser.add_argument('--vampiir-bolt',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--native-form-probe',action='store_true')
+parser.add_argument('--central-installed-native',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
@@ -52,6 +53,7 @@ level=args.level or (3 if class_id==52 else 1)
 assert level!=6 or class_id==58, 'The level-six boundary fixture is specific to original Vampiir career abilities'
 assert not args.combined_data or args.combined_expansions
 assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined_expansions)
+assert not args.central_installed_native or args.native_form_probe
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
@@ -71,6 +73,7 @@ if args.vampiir_promotion:D=ROOT/'Reports/starting_spells'/('class_58_level_5_pr
 if args.combined_expansions:D=ROOT/'Reports/combined_expansions/starting_spells'/D.name;D.mkdir(parents=True,exist_ok=True)
 if args.native_form_probe:D=D.parent/(D.name+'_native');D.mkdir(parents=True,exist_ok=True)
 if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(parents=True,exist_ok=True)
+if args.central_installed_native:D=ROOT/'Reports/central_bainshee_forms'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -516,8 +519,11 @@ try:
    import importlib.util
    spec=importlib.util.spec_from_file_location('form_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
    native_inputs=[ROOT/'ExpansionRaceLab/FormLiveHost/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll']+[ROOT/'ExpansionRaceLab/MinotaurOwnerReview'/name for name in ['models.json','equipment_catalog.json','appearance_catalog.json']]
+   if args.central_installed_native:
+    native_inputs=[ROOT/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',ROOT/'models.json',ROOT/'equipment_catalog_v01.json',ROOT/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/Pregame/appearance_catalog.json']
+    result['native_uses_installed_central_assets']=True
    result['native_form_inputs']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in native_inputs}
-   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=100,entity_ids=['player:local'],render=True,native_profile='expansion_forms');sock=relay
+   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=100,entity_ids=['player:local'],render=True,native_profile='central_expansion_forms' if args.central_installed_native else 'expansion_forms');sock=relay
    wait(lambda:bool(relay.read_report().get('player_visual',{}).get('body_asset')) and bool(relay.read_report().get('player_visual',{}).get('portrait_asset')),'Native original body and inventory portrait actually rendered',90)
    native_before=relay.read_report()['player_visual']
    assert native_before['body_visible'] and native_before['body_asset']
@@ -539,7 +545,7 @@ try:
   wait(lambda:local_player().get('morphed') and local_player().get('model_id')==form_model,'Original offensive CastFinished transforms Bainshee',20)
   changed_at=time.monotonic()
   if args.native_form_probe:
-   catalogue=json.loads((ROOT/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
+   catalogue=json.loads((ROOT/'models.json' if args.central_installed_native else ROOT/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
    expected_asset=catalogue[str(form_model)]['asset']
    wait(lambda:relay.read_report().get('player_visual',{}).get('body_asset')==expected_asset and relay.read_report().get('player_visual',{}).get('portrait_asset')==expected_asset,'Native body and portrait follow real server transformation',12)
    visual=relay.read_report()['player_visual']
