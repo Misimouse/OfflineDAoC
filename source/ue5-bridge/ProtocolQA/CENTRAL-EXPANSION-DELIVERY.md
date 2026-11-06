@@ -151,3 +151,30 @@ If a closed launcher leaves a server orphan, do not weaken the occupied-port
 guard. Its stdin may no longer have an owner. In the observed case, the owner
 explicitly authorized termination after a verified SQLite backup. Keep that
 exception separate from the routine installer and normal shutdown path.
+
+## Class-data additions delivered separately
+
+`install_central_class_data.py` consumes a fresh conflict-free preview with
+every existing table fingerprint. It accepts additions only from the sealed
+six-table proposal, refuses occupied server/bridge ports and stale progress,
+backs up through SQLite and verifies the full database in one immediate
+transaction. Every old row, including every server property, must survive
+unchanged. It does not activate races/classes, change inventories or import
+quests, regions, NPCs or mobs.
+
+`test_central_class_data.py` exercises synthetic databases: successful six-table
+application and idempotency, rollback after an injected partial write, refusal
+of changed player progress, and refusal of an occupied bridge port. Its schema
+comes from the disposable fixture, with synthetic progress only. SQLite
+connections are explicitly closed before Windows temporary-folder cleanup.
+
+The 2026-11-06 central delivery added 254 Spell, 253 LineXSpell, four Ability,
+19 SpecXAbility, six ItemTemplate and three StartupLocation rows. Both existing
+Minotaur startup rows were preserved. All old rows in 125 tables and all server
+properties survived unchanged. Backup:
+`<bridge>/Backups/CentralClassData_20261106-022407-975469`.
+Receipt: `<bridge>/ExpansionRaceLab/CentralDelivery/installed_class_data.json`.
+The normal server/menu then passed again (six existing characters, 76 choices,
+no world entry, normal shutdown). Bainshee, Vampiir and Mauler remain disabled;
+their data being present is distinct from class activation and playable
+acceptance.

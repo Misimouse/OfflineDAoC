@@ -70,6 +70,8 @@ def prepare(workspace, install):
               'insert_rows': inserts, 'preserved_rows': preserved, 'conflicts': conflicts,
               'memory_dry_run': dry_run,
               'scope': 'Six class-data tables only. No account, character, inventory, quest, region, mob or world population writes.'}
+    if dry_run['passed']:
+        result['before_fingerprint'] = before
     output = workspace/'ExpansionRaceLab/CentralDelivery/data_preview.json'
     output.write_text(json.dumps(result, indent=2), encoding='utf-8')
     print(json.dumps({'passed': result['passed'], 'missing_rows': {k: len(v) for k, v in inserts.items()},
