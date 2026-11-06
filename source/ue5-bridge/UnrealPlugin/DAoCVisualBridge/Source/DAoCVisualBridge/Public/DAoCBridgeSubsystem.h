@@ -63,6 +63,7 @@ private:
     bool TickSpellAudioAcceptance();
     bool TickCombatAudioAcceptance();
     bool TickDoorAudioAcceptance();
+    bool TickServerSoundAcceptance();
     TSharedPtr<FJsonObject> SpellAudioReport() const;
     friend class FBridgeFootsteps;
     TSharedPtr<FBridgeFootsteps> Footsteps;

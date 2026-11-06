@@ -15,6 +15,7 @@ var combat_visual:RefCounted
 var combat_audio:RefCounted
 var weapon_mode_audio:RefCounted
 var door_audio:RefCounted
+var server_sound:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -89,6 +90,13 @@ func _ready()->void:
     combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
     weapon_mode_audio=load(folder.path_join("weapon_mode_audio_state.gd")).new()
     door_audio=load(folder.path_join("door_audio_state.gd")).new()
+    server_sound=load(folder.path_join("server_sound_state.gd")).new()
+    var server_sound_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalServerSoundAudio_v01/sounds.json")
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--bridge-server-sound-catalog="):server_sound_path=arg.trim_prefix("--bridge-server-sound-catalog=")
+    if FileAccess.file_exists(server_sound_path):
+        var server_sound_index:Variant=JSON.parse_string(FileAccess.get_file_as_string(server_sound_path))
+        if server_sound_index is Dictionary:server_sound.configure(server_sound_index.get("sounds",{}))
     var combat_audio_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalCombatAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-combat-audio-catalog="):combat_audio_path=arg.trim_prefix("--bridge-combat-audio-catalog=")
@@ -205,6 +213,7 @@ func apply_entry(entry:Dictionary)->void:
 
 func world_event(kind:String,data:Dictionary)->void:
     player_models.consume(kind,data)
+    server_sound.consume(kind,data,int(server.entry.get("zone",-1)) if server.playing else -1,position,Time.get_ticks_msec())
     if kind in ["you","region_changed","quit"]:door_audio.reset()
     elif kind=="door_state" and int(server.entry.get("zone",-1))==207:door_audio.consume(kind,data,combat_audio,Time.get_ticks_msec())
     if kind in ["you","region_changed","quit","npc","player","revive","death","remove","combat","attack_mode","status"]:
@@ -491,6 +500,7 @@ func _process(_delta:float)->void:
         if chat_state!=null:transport.snapshot_metadata["chat"]=chat_state.snapshot()
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["combat_audio"]=combat_audio.snapshot(now)
+        transport.snapshot_metadata["server_sound_audio"]=server_sound.snapshot(now)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["exchange"]=exchange.snapshot()

@@ -18,6 +18,11 @@ FOOTSTEP_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Bin
     'Source/DAoCVisualBridge/Private/DAoCBridgeFootsteps.cpp']
 
 
+SERVER_SOUND_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSpellAudio.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeSpellAudioAcceptance.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeServerSoundAcceptance.cpp']
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -67,6 +72,31 @@ def verify_files(workspace):
     foot=json.loads(foot_path.read_text()) if foot_path.exists() else None
     if foot and not foot.get('installed'):foot=None
     foot_replacements={}
+    server_path=workspace/'ServerSoundAudioLab/installed.json'
+    server=json.loads(server_path.read_text()) if server_path.exists() else None
+    if server and not server.get('installed'):server=None
+    server_replacements={}
+    if server:
+        assert foot and server['phase']=='complete' and not server['database_modified']
+        assert server['predecessor_receipt_sha256']==digest(foot_path) and server['native_before_sha256']==foot['native_after_sha256']
+        resource_path=workspace/'ServerSoundAudioLab/resources.json';assert server['resources_receipt_sha256']==digest(resource_path)
+        resource=json.loads(resource_path.read_text());catalog=Path(resource['catalog']);library=catalog.parent
+        assert library==workspace/'ServerSoundAudioLab/OriginalServerSoundAudio_v01' and len(resource['files'])==28
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+        sound_targets={str(plugin/'Content/OriginalServerSoundAudio_v01'/Path(p).relative_to(library)) for p in list(resource['files'])+[str(catalog)]}
+        expected={str(plugin/p) for p in SERVER_SOUND_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in ['live_gateway.gd','visual_bridge.gd','server_sound_state.gd']}|sound_targets
+        server_replacements={row['target']:row for row in server['files']}
+        assert len(server['files'])==len(server_replacements)==len(expected) and set(server_replacements)==expected
+        for origin,sha in {**resource['files'],str(catalog):resource['catalog_sha256']}.items():
+            target=str(plugin/'Content/OriginalServerSoundAudio_v01'/Path(origin).relative_to(library));assert server_replacements[target]['after_sha256']==sha
+        for target in sound_targets|{str(workspace/'Godot/server_sound_state.gd'),str(plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeServerSoundAcceptance.cpp')}:assert server_replacements[target]['before_sha256'] is None
+        binary=server_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==server['native_before_sha256'] and binary['after_sha256']==server['native_after_sha256']
+        for row in server['files']:assert digest(Path(row['target']))==row['after_sha256']
+    def latest_server(row,expected):
+        changed=server_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if foot:
         assert door and foot['phase']=='complete' and not foot['database_modified']
         assert foot['predecessor_receipt_sha256']==digest(door_path) and foot['native_before_sha256']==door['native_after_sha256']
@@ -83,11 +113,11 @@ def verify_files(workspace):
         for target in sound_targets|{str(plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeFootsteps.cpp')}:assert foot_replacements[target]['before_sha256'] is None
         binary=foot_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==foot['native_before_sha256'] and binary['after_sha256']==foot['native_after_sha256']
-        for row in foot['files']:assert digest(Path(row['target']))==row['after_sha256']
+        for row in foot['files']:assert digest(Path(row['target']))==latest_server(row,row['after_sha256'])
     def latest_foot(row,expected):
         changed=foot_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_server(row,expected)
     if door:
         assert options and mode and door['phase']=='complete' and not door['database_modified']
         assert door['predecessor_receipt_sha256']==digest(options_path) and door['gateway_predecessor_receipt_sha256']==digest(mode_path)
@@ -199,4 +229,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'verified_files':len(original['files'])}

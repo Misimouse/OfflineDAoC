@@ -30,11 +30,11 @@ uint32 U32(const TArray<uint8>& B,int32 I){return uint32(B[I])|(uint32(B[I+1])<<
 class FBridgeSpellAudio {
     using J=SpellAudioData::J;
     struct FPCM {TArray<uint8> Bytes;int32 Rate=0,Channels=0;double Seconds=0;};
-    struct FPending {J Row;FString Owner,Phase;double At=0;FString Root;FVector Position=FVector::ZeroVector;bool Anchored=false;};
+    struct FPending {J Row;FString Owner,Phase;double At=0;FString Root;FVector Position=FVector::ZeroVector;bool Anchored=false;bool Direct=false,Spatial=false;};
     struct FVoice {TWeakObjectPtr<UAudioComponent> Component;TWeakObjectPtr<USoundWaveProcedural> Wave;FString Owner,Phase;double Until=0;int32 Remaining=0;bool Anchored=false;float BaseGain=1.f;};
     UDAoCBridgeSubsystem* S;
-    J Index,Effects,CombatIndex,DoorIndex,FootstepIndex;
-    FString Folder,CombatFolder,DoorFolder,FootstepFolder,Session,LastName,LastFile;
+    J Index,Effects,CombatIndex,DoorIndex,FootstepIndex,ServerIndex;
+    FString Folder,CombatFolder,DoorFolder,FootstepFolder,ServerFolder,Session,LastName,LastFile;
     FVector Anchor=FVector::ZeroVector;
     bool Anchored=false;
     TMap<FString,FPCM> Cache;
@@ -42,9 +42,9 @@ class FBridgeSpellAudio {
     TMap<FString,double> Bursts;
     TArray<FPending> Pending;
     TArray<FVoice> Voices;
-    int64 LastSequence=0,LastCombatSequence=0,CacheBytes=0,Consumed=0,FootstepConsumed=0;
+    int64 LastSequence=0,LastCombatSequence=0,LastServerSequence=0,CacheBytes=0,Consumed=0,FootstepConsumed=0;
     int32 CombatSeen=0;
-    int32 FootstepClips=0;
+    int32 FootstepClips=0,ServerSeen=0,ServerClips=0,ServerRejected=0;
     int32 CombatReceived=0,CombatStale=0,CombatRejected=0;
     int32 Seen=0,Played=0,Culled=0,Duplicates=0,Quiet=0,Missing=0,Invalid=0;
     float GainScale=1;
@@ -121,19 +121,20 @@ class FBridgeSpellAudio {
         const float Far=Distances.Num()>1?FMath::Max(Near+1,float(Distances[1]->AsNumber())*2.5f):2500;
         const FVector Position=Job.Anchored?Job.Position:Owner->GetActorLocation();
         const float Distance=S->Camera?FVector::Distance(Position,S->Camera->GetActorLocation()):0;
-        if(Distance>=Far||Voices.Num()>=48||(Voices.Num()>=24&&Gain*FMath::Clamp(1-(Distance-Near)/(Far-Near),0.f,1.f)<.35f)){++Culled;return;}
+        if((!Job.Direct&&Distance>=Far)||Voices.Num()>=48||(!Job.Direct&&Voices.Num()>=24&&Gain*FMath::Clamp(1-(Distance-Near)/(Far-Near),0.f,1.f)<.35f)){++Culled;return;}
         const FString File=String(Job.Row,TEXT("file"));auto* Data=PCM(Job.Root,File);if(!Data)return;
         const float Pitch=FMath::Clamp(Range(Job.Row,TEXT("rate"),1),.05f,4.f);
         auto* Wave=NewObject<USoundWaveProcedural>(S);Wave->NumChannels=Data->Channels;Wave->SetSampleRate(Data->Rate);Wave->Duration=float(Data->Seconds);Wave->bLooping=false;Wave->SoundGroup=SOUNDGROUP_Effects;
         Wave->QueueAudio(Data->Bytes.GetData(),Data->Bytes.Num());
         auto* Attenuation=NewObject<USoundAttenuation>(S);auto& Settings=Attenuation->Attenuation;
-        Settings.bAttenuate=true;Settings.bSpatialize=true;Settings.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
+        Settings.bAttenuate=!Job.Direct;Settings.bSpatialize=!Job.Direct||Job.Spatial;Settings.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
         Settings.AttenuationShape=EAttenuationShape::Sphere;Settings.AttenuationShapeExtents=FVector(Near,0,0);Settings.FalloffDistance=Far-Near;
-        auto* Component=UGameplayStatics::SpawnSoundAtLocation(S,Wave,Position,FRotator::ZeroRotator,Gain*GainScale*S->AudioMasterVolume*S->AudioEffectsVolume,Pitch,0,Attenuation,nullptr,true);
+        auto* Component=Job.Direct&&!Job.Spatial?UGameplayStatics::SpawnSound2D(S,Wave,Gain*GainScale*S->AudioMasterVolume*S->AudioEffectsVolume,Pitch,0,nullptr,false,true):UGameplayStatics::SpawnSoundAtLocation(S,Wave,Position,FRotator::ZeroRotator,Gain*GainScale*S->AudioMasterVolume*S->AudioEffectsVolume,Pitch,0,Attenuation,nullptr,true);
         if(!Component){++Invalid;return;}
         Voices.Add({Component,Wave,Job.Owner,Job.Phase,FPlatformTime::Seconds()+Data->Seconds/Pitch+.1,Data->Bytes.Num(),Job.Anchored,Gain*GainScale});
         ++Played;LastName=String(Job.Row,TEXT("name"));LastFile=File;
         if(Job.Phase==TEXT("footstep"))++FootstepClips;
+        if(Job.Direct)++ServerClips;
     }
 public:
     explicit FBridgeSpellAudio(UDAoCBridgeSubsystem* Owner):S(Owner){
@@ -150,10 +151,13 @@ public:
         FString FootstepPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalFootstepAudio_v01/sounds.json");
         FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeFootstepSoundCatalog="),FootstepPath);
         FootstepFolder=FPaths::GetPath(FootstepPath);FootstepIndex=SpellAudioData::Read(FootstepPath);
+        FString ServerPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalServerSoundAudio_v01/sounds.json");
+        FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeServerSoundCatalog="),ServerPath);
+        ServerFolder=FPaths::GetPath(ServerPath);ServerIndex=SpellAudioData::Read(ServerPath);
         Effects=SpellAudioData::Read(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/SpellVisuals_v01/catalog.json"));
         FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeDoorAudioTest="),Test))GainScale=.03f;
     }
-    void Clear(){for(auto& V:Voices)StopVoice(V);Voices.Empty();Pending.Empty();Casts.Empty();Bursts.Empty();LastSequence=0;LastCombatSequence=0;Session.Empty();}
+    void Clear(){for(auto& V:Voices)StopVoice(V);Voices.Empty();Pending.Empty();Casts.Empty();Bursts.Empty();LastSequence=0;LastCombatSequence=0;LastServerSequence=0;Session.Empty();}
     void Step(int32 Model){
         using namespace SpellAudioData;
         if(!FootstepIndex)return;
@@ -190,6 +194,27 @@ public:
                 if(Number(Def,TEXT("projectile"))>0){auto* A=Actor(Caster);auto* B=Actor(Target);if(A&&B){Phase(Effect,TEXT("travel"),Caster,Delay);Delay+=FVector::Distance(A->GetActorLocation(),B->GetActorLocation())/2125.;}}
                 Phase(Effect,Flag(Event,TEXT("resisted"))?TEXT("resisted"):TEXT("hit"),Target,FMath::Max(0.,Delay-Age/1000.));
             }
+        }
+        if(ServerIndex)for(auto Value:Array(Snapshot,TEXT("server_sound_audio"))){
+            if(Value->Type!=EJson::Object)continue;
+            auto Event=Value->AsObject();const double RawSequence=Number(Event,TEXT("seq"),-1);
+            if(RawSequence<=0||RawSequence!=FMath::FloorToDouble(RawSequence)||RawSequence>9007199254740991.){++ServerRejected;continue;}
+            const int64 Seq=int64(RawSequence);if(Seq<=LastServerSequence){++Duplicates;continue;}LastServerSequence=Seq;
+            const double Age=Number(Event,TEXT("age_ms"),-1),RawId=Number(Event,TEXT("sound_id"),-1);
+            if(Age<0||Age>1000||RawId<=0||RawId>65535||RawId!=FMath::FloorToDouble(RawId)){++ServerRejected;continue;}
+            bool Placed=false;if(!Event->TryGetBoolField(TEXT("placed"),Placed)){++ServerRejected;continue;}
+            const auto Row=Object(Object(ServerIndex,TEXT("sounds")),*FString::FromInt(int32(RawId)));
+            if(!Row){++ServerRejected;continue;}
+            FVector Position=FVector::ZeroVector;
+            if(Placed){
+                auto Point=Array(Event,TEXT("position_m"));const double Radius=Number(Event,TEXT("radius_m"),-1);
+                if(Point.Num()!=3||Radius<=0||Radius>1638.375||Point[0]->Type!=EJson::Number||Point[1]->Type!=EJson::Number||Point[2]->Type!=EJson::Number){++ServerRejected;continue;}
+                Position=FVector((Point[0]->AsNumber()-1364)*100,(Point[2]->AsNumber()-1263)*100,(Point[1]->AsNumber()-130)*100);
+                auto* Player=Actor(TEXT("player:local"));
+                if(Position.ContainsNaN()||!Player||FVector::Distance(Position,Player->GetActorLocation())>Radius*100){++ServerRejected;continue;}
+            }
+            if(Pending.Num()>=256){++Culled;continue;}
+            Pending.Add({Row,TEXT("server:sound"),TEXT("server_sound"),FPlatformTime::Seconds(),ServerFolder,Position,true,true,Placed});++ServerSeen;
         }
         if(CombatIndex)for(auto Value:Array(Snapshot,TEXT("combat_audio"))){
             ++CombatReceived;
@@ -233,6 +258,8 @@ public:
         Out->SetNumberField(TEXT("max_voice_volume"),MaxVoice);Out->SetNumberField(TEXT("master_volume"),S->AudioMasterVolume);Out->SetNumberField(TEXT("effects_volume"),S->AudioEffectsVolume);
         Out->SetBoolField(TEXT("combat_ready"),CombatIndex.IsValid());Out->SetNumberField(TEXT("combat_events_seen"),CombatSeen);
         Out->SetBoolField(TEXT("door_ready"),DoorIndex.IsValid());
+        Out->SetBoolField(TEXT("server_sound_ready"),ServerIndex.IsValid());
+        Out->SetNumberField(TEXT("server_sound_events"),ServerSeen);Out->SetNumberField(TEXT("server_sound_clips"),ServerClips);Out->SetNumberField(TEXT("server_sound_rejected"),ServerRejected);
         Out->SetBoolField(TEXT("footstep_ready"),FootstepIndex.IsValid());
         Out->SetNumberField(TEXT("footstep_clips"),FootstepClips);
         Out->SetNumberField(TEXT("footstep_pcm_consumed_bytes"),double(FootstepConsumed));

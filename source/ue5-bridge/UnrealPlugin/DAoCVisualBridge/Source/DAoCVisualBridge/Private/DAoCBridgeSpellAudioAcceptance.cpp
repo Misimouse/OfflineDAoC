@@ -10,7 +10,7 @@
 #include "Serialization/JsonSerializer.h"
 
 bool UDAoCBridgeSubsystem::TickSpellAudioAcceptance(){
-    if(TickFootstepAcceptance()||TickDoorAudioAcceptance()||TickCombatAudioAcceptance())return true;
+    if(TickServerSoundAcceptance()||TickFootstepAcceptance()||TickDoorAudioAcceptance()||TickCombatAudioAcceptance())return true;
     FString File;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),File))return false;
     struct FRun {bool Started=false,Done=false;int32 Stage=0,Checks=0;double Began=0;TArray<FString> Failures;};
     static FRun Run;

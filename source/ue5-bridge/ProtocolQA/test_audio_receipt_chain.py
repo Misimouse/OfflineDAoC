@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -149,6 +149,30 @@ def verify(workspace):
         step['files'][0]['before_sha256']=previous_native;put(step_path,step)
         saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt step WAV');rejected();checks+=1;targets[-1].write_bytes(saved)
         wave.write_bytes(b'corrupt original combat WAV after steps');rejected();checks+=1;wave.write_bytes(before)
+        library=w/'ServerSoundAudioLab/OriginalServerSoundAudio_v01';library.mkdir(parents=True);files={}
+        for i in range(28):
+            p=library/('files/'+str(i)+'.wav');p.parent.mkdir(exist_ok=True);p.write_bytes(b'original event '+str(i).encode());files[str(p)]=digest(p)
+        catalog=library/'sounds.json';catalog.write_text('synthetic original event rows')
+        resources_path=w/'ServerSoundAudioLab/resources.json';put(resources_path,{'catalog':str(catalog),'catalog_sha256':digest(catalog),'files':files})
+        event_rows=[];previous_native=digest(binary)
+        native_targets=[plugin/name for name in SERVER_SOUND_NATIVE_TARGETS]
+        targets=native_targets+[w/'Godot'/name for name in ['live_gateway.gd','visual_bridge.gd','server_sound_state.gd']]+[plugin/'Content/OriginalServerSoundAudio_v01'/Path(p).relative_to(library) for p in list(files)+[str(catalog)]]
+        new_native=plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeServerSoundAcceptance.cpp'
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target in native_targets and target!=new_native:target.write_bytes(b'old event predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new event '+str(target).encode())
+            if target.is_relative_to(plugin/'Content/OriginalServerSoundAudio_v01'):target.write_bytes((library/target.relative_to(plugin/'Content/OriginalServerSoundAudio_v01')).read_bytes())
+            event_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        event_path=w/'ServerSoundAudioLab/installed.json';event={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(step_path),'resources_receipt_sha256':digest(resources_path),
+            'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':event_rows}
+        put(event_path,event);assert verify_files(w)['server_sound_audio_installed'];checks+=1
+        event['predecessor_receipt_sha256']='0'*64;put(event_path,event);rejected();checks+=1
+        event['predecessor_receipt_sha256']=digest(step_path);event['files'][0]['before_sha256']='0'*64;put(event_path,event);rejected();checks+=1
+        event['files'][0]['before_sha256']=previous_native;put(event_path,event)
+        saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt event WAV');rejected();checks+=1;targets[-1].write_bytes(saved)
+        wave.write_bytes(b'corrupt original combat WAV after events');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

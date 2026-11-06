@@ -19,15 +19,17 @@ for key in ['workspace','install']:parser.add_argument('--'+key,type=Path,requir
 parser.add_argument('--native',action='store_true')
 parser.add_argument('--crossing',action='store_true')
 parser.add_argument('--footsteps',action='store_true')
+parser.add_argument('--server-sounds',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
+assert not args.server_sounds or (args.native and not args.crossing and not args.footsteps)
 assert not args.crossing or args.native
 assert not args.footsteps or (args.native and args.crossing)
 os.environ['DAOC_INSTALL']=str(args.install.resolve());sys.path.insert(0,str(workspace/'ProtocolQA'))
 from qa_runtime import ROOT,RUN,SERVER,DB,env,dotnet,ENGINE
 assert ROOT.resolve()==workspace and DB.is_relative_to(RUN) and RUN.is_relative_to(workspace/'ProtocolQA')
-output=workspace/('Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
+output=workspace/('Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
 result={'passed':False,'disposable_only':True,'checks':{},'errors':[]};server=client=peer=relay=None;logs=[];backed=False
-session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[]
+session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[];sound_trace=[]
 config=RUN/'bridge_config.json';config_before=config.read_bytes()
 digest=lambda path:hashlib.sha256(path.read_bytes()).hexdigest()
 source=repo/'source/ue5-bridge/Godot';inputs={str(p):digest(p) for p in source.glob('*.gd')}
@@ -55,6 +57,8 @@ def pump():
             if args.crossing and relay:
                 current=relay.read_report()
                 if current.get('door_auto_test') and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
+            for event in value.get('server_sound_audio',[]):
+                if not any(row['seq']==event['seq'] for row in sound_trace):sound_trace.append(event)
             for event in value.get('combat_audio',[]):
                 if event.get('sheet')=='doors' and not any(row['seq']==event['seq'] for row in trace):trace.append(event)
             for row in value.get('doors',[]):
@@ -98,6 +102,7 @@ try:
     (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
     log=(output/'client.log').open('w',encoding='utf-8');logs.append(log)
     command=[str(args.install/'new-client/tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character=Codexdruid','--bridge-door-audio-catalog='+str(workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json')]
+    if args.server_sounds:command.append('--bridge-server-sound-catalog='+str(workspace/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json'))
     client=subprocess.Popen(command,cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
     end=time.monotonic()+45
     while time.monotonic()<end:
@@ -109,7 +114,7 @@ try:
         import importlib.util
         relay_source=repo/'source/ue5-bridge/pet_sight_relay.py'
         spec=importlib.util.spec_from_file_location('door_native_relay',relay_source);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
         if args.crossing:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
@@ -146,16 +151,29 @@ try:
         assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
         result['checks']['real_close_acknowledged_and_anchored']=True
         settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
+    if args.server_sounds:
+        wait(lambda:relay.read_report().get('spell_audio',{}).get('active_voices',-1)==0,'Earlier door voices finish before event PCM witness',15)
+        server_pcm_before=relay.read_report()['spell_audio']['pcm_consumed_bytes']
+        for sid in [7,11,12]:
+            before=len(sound_trace);send('chat',text='/cast sound '+str(sid))
+            wait(lambda:len(sound_trace)>before,'Real server sound packet '+str(sid))
+            assert sound_trace[-1]['sound_id']==sid and not sound_trace[-1]['placed']
+        settle(2);assert len(sound_trace)==3;result['checks']['actual_server_sound_packets']=True
+        wait(lambda:relay.read_report().get('spell_audio',{}).get('server_sound_clips',0)==3,'Native plays all three actual server sounds',15)
+        wait(lambda:relay.read_report()['spell_audio']['pcm_consumed_bytes']>server_pcm_before,'Actual server event PCM consumed',15)
+        result['server_sound_pcm_bytes']=relay.read_report()['spell_audio']['pcm_consumed_bytes']-server_pcm_before
     if relay:
         wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
         wait(lambda:relay.read_report().get('spell_audio',{}).get('played_clips',0)>=len(trace),'Native consumes every actual door transition',10)
-        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
+        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0)+audio.get('server_sound_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
         if args.footsteps:
             steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
             result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=True
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
+    if args.server_sounds:
+        catalog=workspace/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json';result['native_inputs'][str(catalog)]=digest(catalog)
     assert all(digest(Path(path))==sha for path,sha in inputs.items())
     result['checks']['source_unchanged']=True;result['passed']=True
 except Exception:result['errors'].append(traceback.format_exc())
@@ -179,7 +197,7 @@ finally:
     if backed:
         with closing(checked()) as db,closing(sqlite3.connect(output/'before.sqlite3.db')) as backup:backup.backup(db)
         config.write_bytes(config_before);result['database_restored']=True
-    result.update(events=trace,states=states,source_inputs=inputs,normal_shutdown=bool(client and server and client.returncode==server.returncode==0))
+    result.update(events=trace,server_sound_events=sound_trace,states=states,source_inputs=inputs,normal_shutdown=bool(client and server and client.returncode==server.returncode==0))
     if motion:(output/'crossing_samples.json').write_text(json.dumps(motion),encoding='utf-8')
     result['passed']=result['passed'] and result['normal_shutdown'] and not result['errors']
     (output/'verified.json').write_text(json.dumps(result,indent=2),encoding='utf-8')

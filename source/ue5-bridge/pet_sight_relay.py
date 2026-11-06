@@ -18,7 +18,7 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk'] and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
@@ -42,15 +42,19 @@ class NativeSightRelay:
     assert host.exists()
    if native_profile=='footstep_walk':
     host=root/'FootstepAudioLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
+   if native_profile=='server_sound':
+    host=root/'ServerSoundAudioLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
+    settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
+    cmd.extend(['-DaocBridgeServerSoundCatalog='+str(root/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json'),'-DaocBridgeAudioSettings='+str(settings)])
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
    appearance=review/'appearance_catalog.json'
-   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk']:
+   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound']:
     plugin=root/'Client/Plugins/DAoCVisualBridge'
     replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
     appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
-   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk']:
+   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound']:
     cmd.remove('-nosound')
     cmd.append('-AudioMixer')
    if native_profile=='spell_audio':
@@ -103,7 +107,7 @@ class NativeSightRelay:
      if str(v.get('query_id','')).startswith('probe:'):self.probe_result=v.get('visible');self.probes.append(dict(v,report_position=self.read_report().get('position_m')));self.probe=None
      else:self.answers.append(dict(v,question=self.questions.get(v.get('query_id')),report_position=self.read_report().get('position_m')));self.backend.sendall(line+b'\n')
     elif v.get('action')=='ping':self.backend.sendall(line+b'\n')
-    elif self.native_profile in ['door_crossing','footstep_walk'] and v.get('action') in ['move','door']:self.backend.sendall(line+b'\n')
+    elif self.native_profile in ['door_crossing','footstep_walk','server_sound'] and v.get('action') in ['move','door']:self.backend.sendall(line+b'\n')
   if self.backend not in ready:raise socket.timeout()
   b=self.backend.recv(size);self.bbuf+=b
   while b'\n' in self.bbuf:
