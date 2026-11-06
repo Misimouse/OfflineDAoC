@@ -144,7 +144,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -339,7 +339,8 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         FInputModeGameAndUI Mode;Mode.SetHideCursorDuringCapture(false);Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);PC->SetInputMode(Mode);
     }
     auto* Viewport=GetWorld()->GetGameViewport();const bool Focused=Viewport&&Viewport->Viewport&&Viewport->Viewport->HasFocus();
-    const bool Typing=ExchangeTyping();const bool Dead=PlayerIsDead();const bool FacingLocked=!PlayerCanMove();
+    if(bOptionsOpen&&PC->WasInputKeyJustPressed(EKeys::Escape)){CloseOptions();return;}
+    const bool Typing=ExchangeTyping()||bOptionsOpen;const bool Dead=PlayerIsDead();const bool FacingLocked=!PlayerCanMove();
     if(!Focused||Dead||bChatOpen||Typing){bMouseLookToggle=false;bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
     if(!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2&&PC->WasInputKeyJustPressed(EKeys::Enter))OpenChat();
     PlayerPawn->bUseControllerRotationYaw=false;
@@ -386,7 +387,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
             FString BestId;double Best=600;for(auto& Pair:Entities){FVector Aim;if(!Pair.Key.StartsWith(TEXT("npc:"))||!CanSelect(Pair.Key,Aim))continue;double Distance=FVector::Dist(Pair.Value->GetActorLocation(),PlayerPosition);if(Distance<Best){Best=Distance;BestId=Pair.Key;}}
             if(!BestId.IsEmpty())SelectEntity(BestId,true);
         }
-        if(PC->WasInputKeyJustPressed(EKeys::Escape)&&!CloseClassicPanel()&&!CloseInventory()&&!CloseInteraction()){Send(TEXT("logout"));bExiting=true;bMouseLookToggle=false;SetMouseLook(false);Status=TEXT("Saving and logging out...");}
+        if(PC->WasInputKeyJustPressed(EKeys::Escape)&&!CloseClassicPanel()&&!CloseInventory()&&!CloseInteraction())OpenOptions();
     }else{PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
     PlayerPosition=PlayerPawn->FeetPosition();TravelledMetres+=FVector::Dist2D(PreviousFeet,PlayerPosition)/100;PreviousFeet=PlayerPosition;
     PeakMovementSpeed=FMath::Max(PeakMovementSpeed,PlayerPawn->GetVelocity().Size2D()/100);
@@ -569,6 +570,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     UpdateUILayout();
     UpdateChatInput();
     if(TickExchangeAcceptance())return;
+    if(TickOptionsAudioAcceptance())return;
     if(TickViewportAcceptance())return;
     if(TickCharacterLobbyAcceptance())return;
     if(TickClassicAcceptance())return;

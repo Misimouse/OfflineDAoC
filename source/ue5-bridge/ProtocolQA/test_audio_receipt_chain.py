@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files
+from central_activation_receipts import verify_files, OPTIONS_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -83,6 +83,22 @@ def verify(workspace):
         selection['files'][0]['before_sha256']='0'*64;put(selection_path,selection);rejected();checks+=1
         selection['files'][0]['before_sha256']=selection['native_before_sha256'];put(selection_path,selection)
         binary.write_bytes(b'tampered installed selection');rejected();checks+=1
+        binary.write_bytes(b'new synthetic selection Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')
+        previous_native=digest(binary);option_rows=[]
+        new_names={'Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeOptionsAcceptance.cpp','Content/ClassicUI/options.png'}
+        for name in OPTIONS_TARGETS:
+            target=plugin/name;target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and name not in new_names:target.write_bytes(b'old options predecessor')
+            previous=digest(target) if target.exists() else None
+            target.write_bytes(b'new synthetic options '+name.encode())
+            option_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        options_path=w/'OptionsAudioLab/installed.json';options={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(selection_path),'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':option_rows}
+        put(options_path,options);assert verify_files(w)['options_audio_installed'];checks+=1
+        options['predecessor_receipt_sha256']='0'*64;put(options_path,options);rejected();checks+=1
+        options['predecessor_receipt_sha256']=digest(selection_path);options['files'][0]['before_sha256']='0'*64;put(options_path,options);rejected();checks+=1
+        options['files'][0]['before_sha256']=previous_native;put(options_path,options)
+        wave.write_bytes(b'tampered old wave after options');rejected();checks+=1
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

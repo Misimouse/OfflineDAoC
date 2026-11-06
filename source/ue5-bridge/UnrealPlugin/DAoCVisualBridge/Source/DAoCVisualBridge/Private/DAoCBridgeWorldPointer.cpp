@@ -28,6 +28,7 @@ void UDAoCBridgeSubsystem::InstallWorldPointerInput(){
 }
 void UDAoCBridgeSubsystem::RemoveWorldPointerInput(){if(WorldPointerInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(WorldPointerInput);WorldPointerInput.Reset();bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
 bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{
+ if(bOptionsOpen)return true;
  auto Hit=[&](const TSharedPtr<SWidget>& W){return W.IsValid()&&W->GetVisibility().IsVisible()&&W->GetCachedGeometry().IsUnderLocation(Absolute);};
  if(bChatOpen||ExchangeTyping()||FSlateApplication::Get().AnyMenusVisible())return true;
  if(bClassicOpen&&Hit(ClassicPanelBox)||bClassicMiniGroupOpen&&Hit(ClassicMiniGroupBox))return true;

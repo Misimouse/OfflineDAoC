@@ -10,7 +10,7 @@ from prepare_combined_expansion_data import digest
 
 def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -54,6 +54,7 @@ if __name__=='__main__':
     for key in ['workspace','engine']:parser.add_argument('--'+key,type=Path,required=True)
     parser.add_argument('--combat-candidate',action='store_true')
     parser.add_argument('--target-selection-candidate',action='store_true')
+    parser.add_argument('--options-audio-candidate',action='store_true')
     args=parser.parse_args()
-    assert not (args.combat_candidate and args.target_selection_candidate)
-    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve(),'TargetSelectionLab' if args.target_selection_candidate else 'CombatAudioLab' if args.combat_candidate else 'SpellAudioLab')))
+    assert sum([args.combat_candidate,args.target_selection_candidate,args.options_audio_candidate])<=1
+    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve(),'OptionsAudioLab' if args.options_audio_candidate else 'TargetSelectionLab' if args.target_selection_candidate else 'CombatAudioLab' if args.combat_candidate else 'SpellAudioLab')))

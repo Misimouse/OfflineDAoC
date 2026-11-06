@@ -31,7 +31,7 @@ class FBridgeSpellAudio {
     using J=SpellAudioData::J;
     struct FPCM {TArray<uint8> Bytes;int32 Rate=0,Channels=0;double Seconds=0;};
     struct FPending {J Row;FString Owner,Phase;double At=0;FString Root;FVector Position=FVector::ZeroVector;bool Anchored=false;};
-    struct FVoice {TWeakObjectPtr<UAudioComponent> Component;TWeakObjectPtr<USoundWaveProcedural> Wave;FString Owner,Phase;double Until=0;int32 Remaining=0;bool Anchored=false;};
+    struct FVoice {TWeakObjectPtr<UAudioComponent> Component;TWeakObjectPtr<USoundWaveProcedural> Wave;FString Owner,Phase;double Until=0;int32 Remaining=0;bool Anchored=false;float BaseGain=1.f;};
     UDAoCBridgeSubsystem* S;
     J Index,Effects,CombatIndex;
     FString Folder,CombatFolder,Session,LastName,LastFile;
@@ -128,13 +128,14 @@ class FBridgeSpellAudio {
         auto* Attenuation=NewObject<USoundAttenuation>(S);auto& Settings=Attenuation->Attenuation;
         Settings.bAttenuate=true;Settings.bSpatialize=true;Settings.DistanceAlgorithm=EAttenuationDistanceModel::Linear;
         Settings.AttenuationShape=EAttenuationShape::Sphere;Settings.AttenuationShapeExtents=FVector(Near,0,0);Settings.FalloffDistance=Far-Near;
-        auto* Component=UGameplayStatics::SpawnSoundAtLocation(S,Wave,Position,FRotator::ZeroRotator,Gain*GainScale,Pitch,0,Attenuation,nullptr,true);
+        auto* Component=UGameplayStatics::SpawnSoundAtLocation(S,Wave,Position,FRotator::ZeroRotator,Gain*GainScale*S->AudioMasterVolume*S->AudioEffectsVolume,Pitch,0,Attenuation,nullptr,true);
         if(!Component){++Invalid;return;}
-        Voices.Add({Component,Wave,Job.Owner,Job.Phase,FPlatformTime::Seconds()+Data->Seconds/Pitch+.1,Data->Bytes.Num(),Job.Anchored});
+        Voices.Add({Component,Wave,Job.Owner,Job.Phase,FPlatformTime::Seconds()+Data->Seconds/Pitch+.1,Data->Bytes.Num(),Job.Anchored,Gain*GainScale});
         ++Played;LastName=String(Job.Row,TEXT("name"));LastFile=File;
     }
 public:
     explicit FBridgeSpellAudio(UDAoCBridgeSubsystem* Owner):S(Owner){
+        S->LoadAudioSettings();
         FString Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalAudio_v01/sounds.json");
         FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSoundCatalog="),Path);
         Folder=FPaths::GetPath(Path);Index=SpellAudioData::Read(Path);
@@ -142,7 +143,7 @@ public:
         FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatSoundCatalog="),CombatPath);
         CombatFolder=FPaths::GetPath(CombatPath);CombatIndex=SpellAudioData::Read(CombatPath);
         Effects=SpellAudioData::Read(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/SpellVisuals_v01/catalog.json"));
-        FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test))GainScale=.03f;
+        FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsAudioTest="),Test))GainScale=.03f;
     }
     void Clear(){for(auto& V:Voices)StopVoice(V);Voices.Empty();Pending.Empty();Casts.Empty();Bursts.Empty();LastSequence=0;LastCombatSequence=0;Session.Empty();}
     void Apply(const J& Snapshot){
@@ -201,7 +202,7 @@ public:
     void Tick(){
         const double Now=FPlatformTime::Seconds();
         for(int32 I=Voices.Num()-1;I>=0;--I){
-            auto& V=Voices[I];if(V.Wave.IsValid()){const int32 Left=V.Wave->GetAvailableAudioByteCount();Consumed+=FMath::Max(0,V.Remaining-Left);V.Remaining=Left;}
+            auto& V=Voices[I];if(V.Component.IsValid())V.Component->SetVolumeMultiplier(V.BaseGain*S->AudioMasterVolume*S->AudioEffectsVolume);if(V.Wave.IsValid()){const int32 Left=V.Wave->GetAvailableAudioByteCount();Consumed+=FMath::Max(0,V.Remaining-Left);V.Remaining=Left;}
             auto* Owner=Actor(V.Owner);
             if(!V.Component.IsValid()||(!Owner&&!V.Anchored)||Now>=V.Until){StopVoice(V);Voices.RemoveAt(I);}else if(!V.Anchored)V.Component->SetWorldLocation(Owner->GetActorLocation());
         }
@@ -210,6 +211,8 @@ public:
     }
     J Report()const{
         auto Out=MakeShared<FJsonObject>();Out->SetBoolField(TEXT("ready"),Index.IsValid()&&Effects.IsValid());
+        float MaxVoice=0;for(const auto& Voice:Voices)if(Voice.Component.IsValid())MaxVoice=FMath::Max(MaxVoice,Voice.Component->VolumeMultiplier);
+        Out->SetNumberField(TEXT("max_voice_volume"),MaxVoice);Out->SetNumberField(TEXT("master_volume"),S->AudioMasterVolume);Out->SetNumberField(TEXT("effects_volume"),S->AudioEffectsVolume);
         Out->SetBoolField(TEXT("combat_ready"),CombatIndex.IsValid());Out->SetNumberField(TEXT("combat_events_seen"),CombatSeen);
         Out->SetNumberField(TEXT("combat_events_received"),CombatReceived);Out->SetNumberField(TEXT("combat_events_stale"),CombatStale);Out->SetNumberField(TEXT("combat_events_rejected"),CombatRejected);
         Out->SetNumberField(TEXT("events_seen"),Seen);Out->SetNumberField(TEXT("played_clips"),Played);Out->SetNumberField(TEXT("active_voices"),Voices.Num());Out->SetNumberField(TEXT("pending_clips"),Pending.Num());

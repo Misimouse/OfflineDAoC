@@ -9,7 +9,7 @@ void UDAoCBridgeSubsystem::ApplyCameraView(){
     PlayerPawn->CameraArm->bEnableCameraLag=!bFirstPerson;
 }
 void UDAoCBridgeSubsystem::ToggleFirstPerson(){
-    if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||PlayerIsDead()||bChatOpen||ExchangeTyping()||bExiting)return;
+    if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||PlayerIsDead()||bChatOpen||ExchangeTyping()||bExiting||bOptionsOpen)return;
     bFirstPerson=!bFirstPerson;ApplyCameraView();
 }
 void UDAoCBridgeSubsystem::AdjustCameraZoom(float Steps){

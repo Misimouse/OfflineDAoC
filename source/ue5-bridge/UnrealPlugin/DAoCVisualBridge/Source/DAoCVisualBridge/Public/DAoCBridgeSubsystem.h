@@ -63,6 +63,15 @@ private:
     bool TickSpellAudioAcceptance();
     bool TickCombatAudioAcceptance();
     TSharedPtr<FJsonObject> SpellAudioReport() const;
+    TSharedPtr<SWidget> OptionsOverlay;
+    bool bOptionsOpen=false,bAudioSettingsLoaded=false;
+    float AudioMasterVolume=1.f,AudioEffectsVolume=1.f;
+    FString AudioSettingsPath;
+    void LoadAudioSettings();
+    void SetAudioVolume(bool Master,float Value);
+    void OpenOptions();
+    bool CloseOptions();
+    bool TickOptionsAudioAcceptance();
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;
     FString Session, Status, Character, CatalogPath;
