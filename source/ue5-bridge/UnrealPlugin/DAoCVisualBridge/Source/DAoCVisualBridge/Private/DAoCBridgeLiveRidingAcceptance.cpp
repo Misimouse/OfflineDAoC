@@ -1,5 +1,9 @@
 #include "DAoCBridgeSubsystem.h"
 #include "Engine/SkeletalMesh.h"
+#include "DAoCBridgeLiveRiding.h"
+#include "Animation/SkeletalMeshActor.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Misc/CommandLine.h"
@@ -32,6 +36,30 @@ bool UDAoCBridgeSubsystem::TickLiveRidingAssetAcceptance(){
         }
         Check(Spine,TEXT("horse spine anchor survives import"));
         for(const FString Key:{TEXT("idle"),TEXT("walk"),TEXT("run")}){FString Animation;(*Entry)->TryGetStringField(Key,Animation);Check(LoadObject<UAnimSequenceBase>(nullptr,*Animation)!=nullptr,TEXT("horse locomotion loads: ")+Key);}
+    }
+    FString DataPath;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeRidingCatalog="),DataPath);FBridgeLiveRidingData Data;
+    Check(Data.Load(DataPath),TEXT("source-verified saddle catalog loads"));
+    FBridgeLiveRidingData Missing;Check(!Missing.Load(DataPath+TEXT(".absent")),TEXT("missing seat data cannot silently use guessed saddle"));
+    FVector Seat;Check(!Data.Resolve(nullptr,2174,Seat),TEXT("missing component rejected"));
+    if(Horse){
+        auto* First=GetWorld()->SpawnActor<ASkeletalMeshActor>();auto* Second=GetWorld()->SpawnActor<ASkeletalMeshActor>();
+        auto* Mesh=First->GetSkeletalMeshComponent();auto* Other=Second->GetSkeletalMeshComponent();
+        Mesh->SetSkeletalMeshAsset(Horse);Other->SetSkeletalMeshAsset(Horse);Mesh->RefreshBoneTransforms();Other->RefreshBoneTransforms();
+        const FVector Reference(-.00000718784,8.24311027246,158.02972997649); // independently recovered original glTF rest point, cm
+        for(double Scale:{.5,1.,1.3}){
+            const FTransform Transform(FRotator(0,73,0),FVector(234,-162,58),FVector(Scale));Mesh->SetWorldTransform(Transform);Mesh->RefreshBoneTransforms();
+            Check(Data.Resolve(Mesh,2174,Seat),TEXT("instance-scaled saddle resolves"));
+            Check(FVector::Dist(Seat,Transform.TransformPosition(Reference))<.05,TEXT("rest saddle matches original source under scale rotation and translation"));
+        }
+        Check(!Data.Resolve(Mesh,449,Seat),TEXT("unprepared horse model has no invented seat"));
+        Mesh->SetWorldTransform(FTransform::Identity);Other->SetWorldTransform(FTransform(FQuat::Identity,FVector(0,400,0),FVector(.75)));
+        Mesh->RefreshBoneTransforms();Other->RefreshBoneTransforms();FVector FirstRest,OtherRest;Data.Resolve(Mesh,2174,FirstRest);Data.Resolve(Other,2174,OtherRest);
+        FString Run;(*Entry)->TryGetStringField(TEXT("run"),Run);if(auto* Clip=LoadObject<UAnimSequenceBase>(nullptr,*Run)){
+            Mesh->PlayAnimation(Clip,true);Mesh->TickAnimation(.32f,false);Mesh->RefreshBoneTransforms();FVector Posed;Check(Data.Resolve(Mesh,2174,Posed),TEXT("animated spine resolves original saddle offset"));
+            Check(FVector::Dist(Posed,FirstRest)>.5,TEXT("seat follows actual galloping back instead of remaining at fixed height"));
+            FVector OtherAfter;Data.Resolve(Other,2174,OtherAfter);Check(OtherAfter.Equals(OtherRest,.01),TEXT("another horse instance cannot reuse this horse posed saddle"));
+        }
+        First->Destroy();Second->Destroy();
     }
     Report->SetBoolField(TEXT("passed"),Failures.IsEmpty());Report->SetNumberField(TEXT("checks"),Checks);Report->SetObjectField(TEXT("riders"),Riders);Report->SetArrayField(TEXT("horse_bones"),Bones);
     TArray<TSharedPtr<FJsonValue>> Errors;for(const auto& F:Failures)Errors.Add(MakeShared<FJsonValueString>(F));Report->SetArrayField(TEXT("failures"),Errors);
