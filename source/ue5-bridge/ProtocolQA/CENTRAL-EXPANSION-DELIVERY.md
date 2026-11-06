@@ -129,6 +129,24 @@ The installed live menu check passed on 2026-11-06: six existing characters,
 Its actual rendered selection screen was inspected separately; this is not
 owner approval of character appearance or proof of live Minotaur world entry.
 
+The separate installed-resource native world witness subsequently passed with
+a disposable Minotaur on the Warden path: actual model 1419, GM protection,
+navigation readiness, original bind preserved and normal exit. Run the matrix
+with `--central-minotaur-activation <plan> --central-installed-native
+--native-world-probe --minotaur-original-start` and the accepted joint candidate.
+Evidence stays in `Reports/central_minotaur_world`, leaving the four-career
+activation proof intact. The native host mounts only central content and verifies
+the installed DLL, catalogs and activation files; the private review asset roots
+are not used. This remains a disposable gameplay witness, not a performance,
+world-art or owner appearance acceptance.
+
+All four original Minotaur trainer promotions also passed against the central
+eligibility profile and accepted joint server build. They promote at level five
+and retain the advanced class and received skill lists after saved reentry.
+`--minotaur-promotion --central-minotaur-activation <plan>` writes separate
+`Reports/central_minotaur_promotion` evidence. Test-only trainers and level
+preparation belong to the restored disposable fixture, never the owner's world.
+
 If a closed launcher leaves a server orphan, do not weaken the occupied-port
 guard. Its stdin may no longer have an owner. In the observed case, the owner
 explicitly authorized termination after a verified SQLite backup. Keep that

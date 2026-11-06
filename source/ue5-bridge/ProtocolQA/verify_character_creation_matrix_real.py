@@ -17,6 +17,7 @@ parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--combined-expansions',action='store_true')
 parser.add_argument('--combined-data',type=Path)
 parser.add_argument('--central-minotaur-activation',type=Path)
+parser.add_argument('--central-installed-native',action='store_true')
 parser.add_argument('--native-world-probe',action='store_true')
 parser.add_argument('--review-output',type=Path)
 parser.add_argument('--shar-gm-transfer',action='store_true')
@@ -31,7 +32,8 @@ assert not args.minotaur_promotion or args.minotaur_candidate
 assert not args.minotaur_original_start or (args.minotaur_candidate and not promoting)
 assert not args.combined_expansions or args.candidate_build
 assert not args.combined_data or args.combined_expansions
-assert not args.native_world_probe or (args.combined_expansions and (args.minotaur_original_start or args.bainshee_candidate or args.vampiir_candidate))
+assert not args.central_installed_native or (args.central_minotaur_activation and args.native_world_probe)
+assert not args.native_world_probe or ((args.combined_expansions or args.central_installed_native) and (args.minotaur_original_start or args.bainshee_candidate or args.vampiir_candidate))
 assert not args.review_output or args.minotaur_promotion
 uses_shar=args.shar_candidate or args.vampiir_shar
 assert not args.vampiir_shar or args.vampiir_candidate
@@ -49,7 +51,7 @@ assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation req
 assert not args.minotaur_candidate or args.candidate_build, 'Minotaur creation requires its sealed private source variant'
 central_plan=None
 if args.central_minotaur_activation:
-    assert args.minotaur_candidate and args.minotaur_original_start and not args.combined_expansions and not promoting
+    assert args.minotaur_candidate and (args.minotaur_original_start or args.minotaur_promotion) and not args.combined_expansions
     assert args.central_minotaur_activation.resolve()==(ROOT/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/plan.json').resolve()
     central_plan=json.loads(args.central_minotaur_activation.read_text())
     assert central_plan['passed'] and not central_plan['installed'] and not central_plan['normal_database_modified']
@@ -69,6 +71,8 @@ if args.combined_expansions:D=ROOT/'Reports/combined_expansions'/D.name;D.mkdir(
 if args.native_world_probe:D=D.parent/(D.name+'_world');D.mkdir(exist_ok=True)
 if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(exist_ok=True)
 if central_plan:D=ROOT/'Reports/central_minotaur_activation';D.mkdir(exist_ok=True)
+if central_plan and args.minotaur_promotion:D=ROOT/'Reports/central_minotaur_promotion';D.mkdir(exist_ok=True)
+if args.central_installed_native:D=ROOT/'Reports/central_minotaur_world';D.mkdir(exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -570,8 +574,9 @@ try:
             handoff_bind=tuple(db.execute('SELECT '+bind_columns+' FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone())
         send('qa_native_handoff');time.sleep(.5);sock.close();sock=None
         from probe_combined_native_world import start, observe
-        native_process=start(ROOT,INSTALL,ENGINE,D)
+        native_process=start(ROOT,INSTALL,ENGINE,D,installed=args.central_installed_native)
         report['native_world_probe']=observe(native_process,D,name,client)
+        if args.central_installed_native:report['native_world_uses_installed_central_assets']=True
         client.wait(timeout=90);assert client.returncode==0
         with checked() as db:
             assert tuple(db.execute('SELECT '+bind_columns+' FROM DOLCharacters WHERE Name=? AND AccountName=?',(name,account_name)).fetchone())==handoff_bind
