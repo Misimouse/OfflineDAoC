@@ -17,6 +17,7 @@ parser.add_argument('--minotaur-original-start',action='store_true')
 parser.add_argument('--combined-expansions',action='store_true')
 parser.add_argument('--combined-data',type=Path)
 parser.add_argument('--central-minotaur-activation',type=Path)
+parser.add_argument('--central-spellclass-activation',type=Path)
 parser.add_argument('--central-installed-native',action='store_true')
 parser.add_argument('--native-world-probe',action='store_true')
 parser.add_argument('--review-output',type=Path)
@@ -50,6 +51,14 @@ assert not args.shar_gm_transfer or args.candidate_build, 'GM transfer requires 
 assert not args.vampiir_candidate or args.candidate_build, 'Vampiir creation requires its sealed private source variant'
 assert not args.minotaur_candidate or args.candidate_build, 'Minotaur creation requires its sealed private source variant'
 central_plan=None
+spellclass_plan=None
+if args.central_spellclass_activation:
+    assert not args.central_minotaur_activation and args.combined_expansions and args.combined_data
+    assert (args.bainshee_candidate or args.vampiir_candidate) and not promoting and not args.native_world_probe
+    assert args.central_spellclass_activation.resolve()==(ROOT/'ExpansionRaceLab/CentralDelivery/SpellClassActivation/plan.json').resolve()
+    spellclass_plan=json.loads(args.central_spellclass_activation.read_text())
+    assert spellclass_plan['passed'] and not spellclass_plan['installed'] and not spellclass_plan['normal_database_modified']
+    assert hashlib.sha256((args.candidate_build/'build_receipt.json').read_bytes()).hexdigest()==spellclass_plan['candidate_receipt_sha256']
 if args.central_minotaur_activation:
     assert args.minotaur_candidate and (args.minotaur_original_start or args.minotaur_promotion) and not args.combined_expansions
     assert args.central_minotaur_activation.resolve()==(ROOT/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/plan.json').resolve()
@@ -73,6 +82,7 @@ if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(exist_ok=True)
 if central_plan:D=ROOT/'Reports/central_minotaur_activation';D.mkdir(exist_ok=True)
 if central_plan and args.minotaur_promotion:D=ROOT/'Reports/central_minotaur_promotion';D.mkdir(exist_ok=True)
 if args.central_installed_native:D=ROOT/'Reports/central_minotaur_world';D.mkdir(exist_ok=True)
+if spellclass_plan:D=ROOT/'Reports/central_spellclass_activation'/('bainshee' if args.bainshee_candidate else 'vampiir');D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 report={'passed':False,'disposable_only':True,'real_protocol':True,'cases':[],'errors':[]}
 backup=ROOT/'Backups'/('CharacterCreationMatrix_'+time.strftime('%Y%m%d-%H%M%S'));backup.mkdir()
@@ -172,6 +182,11 @@ try:
                 changed=db.execute('UPDATE ServerProperty SET Value=? WHERE Key=?',(value,key))
                 assert changed.rowcount==1
             report['central_activation_plan_sha256']=hashlib.sha256(args.central_minotaur_activation.read_bytes()).hexdigest()
+        if spellclass_plan:
+            for key,value in spellclass_plan['properties_after'].items():
+                changed=db.execute('UPDATE ServerProperty SET Value=? WHERE Key=?',(value,key))
+                assert changed.rowcount==1
+            report['central_spellclass_plan_sha256']=hashlib.sha256(args.central_spellclass_activation.read_bytes()).hexdigest()
         if args.combined_data:
             from prepare_combined_expansion_data import apply_marked
             report['preloaded_combined_data']=apply_marked(db,args.combined_data,RUN.name,ROOT)
@@ -278,6 +293,7 @@ try:
         rules.DB=DB;rules.OUT=RUN/('vampiir_server_classes.json' if args.vampiir_candidate else ('shar_server_classes.json' if args.shar_candidate else 'bainshee_server_classes.json'));rules.main()
         candidate=json.loads(rules.OUT.read_text())
         if central_plan:assert candidate==central_plan['rules'], 'QA profile must equal the prepared central activation policy'
+        if spellclass_plan:assert candidate==spellclass_plan['rules'], 'QA profile must equal the central spell-class activation policy'
         if args.bainshee_candidate:assert candidate['classes']['39']['gender']=='female' and candidate['classes']['39']['races']==[9,11,12]
         elif args.minotaur_candidate:
             assert {int(k) for k,v in candidate['classes'].items() if 21 in v['races']}=={43,44,45,46}
@@ -393,7 +409,7 @@ try:
                 'shar':[c for c in lobby()['choices'] if c['race']=='Shar'],
                 'minotaur':[c for c in lobby()['choices'] if c['race']=='Minotaur']}
         counts={key:len(value) for key,value in groups.items()}
-        assert counts=={'bainshee':3,'vampiir':6,'shar':12,'minotaur':4},counts
+        assert counts==({'bainshee':3,'vampiir':4,'shar':0,'minotaur':4} if spellclass_plan else {'bainshee':3,'vampiir':6,'shar':12,'minotaur':4}),counts
         assert all(c['female'] for c in groups['bainshee']) and all(not c['female'] for c in groups['minotaur'])
         report['combined_choices_verified']={key:len(value) for key,value in groups.items()}
     suffix=''.join(chr(97+int(x,16)) for x in hashlib.sha256(str(time.time_ns()).encode()).hexdigest()[:5])

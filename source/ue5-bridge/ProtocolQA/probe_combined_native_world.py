@@ -4,6 +4,7 @@ import hashlib
 from pathlib import Path
 import subprocess
 import time
+from central_activation_receipts import verify_files
 
 
 def read(path):
@@ -28,7 +29,7 @@ def start(workspace,install,engine,output,installed=False):
             assert digest(host/'Plugins/DAoCVisualBridge/Binaries/Win64'/name)==digest(plugin/'Binaries/Win64'/name)
         activation=json.loads((workspace/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/installed.json').read_text())
         assert activation['installed'] and activation['only_race_enabled']==21
-        assert all(digest(Path(row['target']))==row['after_sha256'] for row in activation['files'])
+        verify_files(workspace)
         models,equipment,appearance=workspace/'models.json',workspace/'equipment_catalog_v01.json',plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
         paths=[models,equipment,appearance,plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll']
         (output/'installed_inputs.json').write_text(json.dumps({str(p):digest(p) for p in paths},indent=2),encoding='utf-8')

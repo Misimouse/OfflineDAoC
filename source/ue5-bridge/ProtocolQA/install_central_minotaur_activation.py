@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 from prepare_combined_expansion_data import digest
 from install_review_expansion_delta import fingerprint
 from snapshot_world_database import snapshot
+from central_activation_receipts import verify_files
 
 
 def preserved(before, after):
@@ -41,8 +42,9 @@ def install(workspace, game, apply=False):
     if receipt_path.exists():
         receipt = json.loads(receipt_path.read_text())
         assert receipt['installed'] and receipt['plan_sha256'] == digest(plan_path)
-        assert all(digest(Path(row['target'])) == row['after_sha256'] for row in files)
-        return {'passed': True, 'installed': True, 'already_current': True}
+        verified = verify_files(workspace)
+        return {'passed': True, 'installed': True, 'already_current': True,
+                'rules_successor_present': verified['spellclasses_installed']}
     for row in files:
         source, target = Path(row['source']).resolve(), Path(row['target']).resolve()
         assert source.is_relative_to(workspace.parent)

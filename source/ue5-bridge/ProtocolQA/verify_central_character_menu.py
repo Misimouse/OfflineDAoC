@@ -7,13 +7,13 @@ import socket
 import subprocess
 import time
 
-from prepare_combined_expansion_data import digest
+from central_activation_receipts import verify_files
 
 
 def verify(workspace, install, engine):
     receipt = json.loads((workspace/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/installed.json').read_text())
     assert receipt['installed'] and receipt['only_race_enabled'] == 21
-    assert all(digest(Path(row['target'])) == row['after_sha256'] for row in receipt['files'])
+    verify_files(workspace)
     for port in (10300, 19727):
         with socket.socket() as guard:
             guard.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)

@@ -202,3 +202,38 @@ captures and Lurikeen restoration were inspected by Codex separately from owner
 acceptance. These filtered actor observers do not validate world scenery,
 combat damage, general spell particles or audio. Normal class activation is a
 separate guarded step.
+
+## Bainshee/Vampiir activation delivered
+
+The later spell-class activation adds only class 39 and 58 eligibility. It
+does not enable Shar or other races, Mauler or the custom Sluaghbinder. Every
+previous class definition and realm choice survives after removing only the
+two additions. Female Bainshee choices are Celt/Elf/Lurikeen; Vampiir choices
+are male/female Celt/Lurikeen. The four existing Minotaur careers remain.
+
+`prepare_central_spellclass_activation.py` checks installed dependencies,
+prepares a fresh logical-state guard and generates the exact proposed rules.
+`run_central_spellclass_creation.py` tests all seven combinations with that
+same complete policy and full accepted class data. Creation, complete parsed
+starting lists, appearance, saved return and existing-character reentry pass
+for all cases; Mauler/custom/Shar choices remain excluded.
+
+`install_central_spellclass_activation.py` requires those seven cases and the
+three installed-native form cycles to match the prepared plan. It changes one
+ServerProperty Value and the generated rules file, backed up separately from
+prior deliveries. All other rows in 125 tables and every other property field
+are verified unchanged. The completed receipt records exactly one rules-file
+successor, so `central_activation_receipts.py` can verify the newer rules
+without rewriting the historic Minotaur receipt or overlooking other changed
+files. Rechecking either installer after installation is idempotent.
+
+Installed backup: `<bridge>/Backups/CentralSpellClassActivation_20261106-030325-507012`.
+Receipt: `<bridge>/ExpansionRaceLab/CentralDelivery/SpellClassActivation/installed.json`.
+The actual normal menu subsequently passed with six existing characters and
+83 choices, no world entry, normal logout and server shutdown.
+
+The server's existing `start_as_base_class=True` remains unchanged. These
+choices begin as Magician/Stalker and reach their advanced career through
+original level-five promotion. This is distinct from modern direct advanced
+class creation. General spell-particle/audio fidelity and full class gameplay
+acceptance remain separate from eligibility, data, reentry and form rendering.
