@@ -7,13 +7,14 @@ import subprocess
 from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
-def verify(workspace,engine,installed=False):
-    root=workspace/'WaterMovementLab';build=read(root/'native_build.json');resources=read(root/'resources.json')
+def verify(workspace,engine,installed=False,lab_name="WaterMovementLab"):
+    assert lab_name in ["WaterMovementLab","JumpLandingLab"]
+    root=workspace/lab_name;build=read(root/'native_build.json');resource_path=workspace/'WaterMovementLab/resources.json';resources=read(resource_path)
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     before=digest(normal);assert build['passed'] and resources['passed']
     if installed:
         from central_activation_receipts import verify_files
-        assert verify_files(workspace)['water_movement_installed'] and before==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
+        assert verify_files(workspace)['jump_landing_installed' if lab_name=='JumpLandingLab' else 'water_movement_installed'] and before==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     else:assert before==build['normal_binary_sha256']
     project=Path(build['project']);assert all(digest(project.parent/'Plugins/DAoCVisualBridge/Binaries/Win64'/p)==sha for p,sha in build['binaries_sha256'].items())
     if installed:project=workspace/'Client/DAoCBridgeClient.uproject'
@@ -35,7 +36,7 @@ def verify(workspace,engine,installed=False):
         if name!='selection':assert report['pcm_consumed_bytes']>0
         reports[name]=report;print(name+' passed',flush=True)
     assert digest(normal)==before
-    proof={'passed':True,'reports':reports,'report_directory':str(output),'normal_binary_modified':False,'build_receipt_sha256':digest(root/'native_build.json'),'resources_receipt_sha256':digest(root/'resources.json'),'server_started':False,'owner_listening_accepted':False,'water_steps_implemented':True,'npc_steps_enabled':False,'surface_swimming_candidate':True}
+    proof={'passed':True,'reports':reports,'report_directory':str(output),'normal_binary_modified':False,'build_receipt_sha256':digest(root/'native_build.json'),'resources_receipt_sha256':digest(resource_path),'server_started':False,'owner_listening_accepted':False,'water_steps_implemented':True,'npc_steps_enabled':False,'surface_swimming_candidate':True}
     proof['installed_client']=installed
     (output/'verified.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
     return {'passed':True,'checks':{key:row['checks'] for key,row in reports.items()},'report_directory':str(output)}

@@ -7,8 +7,10 @@ class NativeSightRelay:
   folder=Path(output) if output is not None else root/'Reports/training_staff_fx_pets'
   assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=180
   folder.mkdir(parents=True,exist_ok=True)
+  jump_candidate=native_profile in ['jump_water_walk','jump_water_crossing']
+  if jump_candidate:native_profile=native_profile.removeprefix('jump_')
   self.native_profile=native_profile
-  self.geometry_gate=native_profile in ['door_crossing','footstep_walk','water_walk','water_crossing']
+  self.geometry_gate=native_profile in ['door_crossing','footstep_walk','water_walk','water_crossing','jump_landing']
   self.audio_forwarded=[];self.movement_forwarded=[]
   self.entity_ids=set(entity_ids) if entity_ids is not None else None
   self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=folder/'live_native_current.json';self.report.unlink(missing_ok=True)
@@ -18,7 +20,7 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing'] and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
@@ -46,6 +48,9 @@ class NativeSightRelay:
     host=root/'ServerSoundAudioLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
     cmd.extend(['-DaocBridgeServerSoundCatalog='+str(root/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json'),'-DaocBridgeAudioSettings='+str(settings)])
+   if native_profile=='jump_landing':
+    host=root/'JumpLandingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
+    cmd.remove('-DaocBridgeReadOnly');cmd.extend(['-DaocBridgeAutoJumpTest','-DaocBridgeYaw=0'])
    if native_profile=='water_walk':
     host=root/'WaterMovementLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
@@ -54,17 +59,18 @@ class NativeSightRelay:
     host=root/'WaterMovementLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
     cmd.extend(['-DaocBridgeWaterField='+str(root/'WaterMovementLab/water_field.json'),'-DaocBridgeAudioSettings='+str(settings)])
-   if native_profile in ['water_walk','water_crossing']:
+   if native_profile in ['water_walk','water_crossing','jump_landing']:
     cmd.append('-DaocBridgeEnvironmentCatalog='+str(root/'environment_catalog.json'))
+   if jump_candidate:host=root/'JumpLandingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
    appearance=review/'appearance_catalog.json'
-   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing']:
+   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing']:
     plugin=root/'Client/Plugins/DAoCVisualBridge'
     replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
     appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
-   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing']:
+   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing']:
     cmd.remove('-nosound')
     cmd.append('-AudioMixer')
    if native_profile=='spell_audio':
@@ -117,7 +123,7 @@ class NativeSightRelay:
      if str(v.get('query_id','')).startswith('probe:'):self.probe_result=v.get('visible');self.probes.append(dict(v,report_position=self.read_report().get('position_m')));self.probe=None
      else:self.answers.append(dict(v,question=self.questions.get(v.get('query_id')),report_position=self.read_report().get('position_m')));self.backend.sendall(line+b'\n')
     elif v.get('action')=='ping':self.backend.sendall(line+b'\n')
-    elif self.native_profile in ['door_crossing','footstep_walk','server_sound','water_walk','water_crossing'] and v.get('action') in ['move','door']:
+    elif self.native_profile in ['door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing'] and v.get('action') in ['move','door']:
      if v.get('action')=='move':self.movement_forwarded.append(v)
      self.backend.sendall(line+b'\n')
   if self.backend not in ready:raise socket.timeout()

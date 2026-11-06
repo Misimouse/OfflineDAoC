@@ -28,7 +28,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
     const bool Dead=Local?(Ready?PoseNum(Vitals,TEXT("health_pct"))<=0:Pose.Dead):Requested==TEXT("dead");
     const bool Sitting=Ready&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
-    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim");
+    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump");
     auto Clip=[&](const FString& Key)->UAnimSequenceBase*{FString Path;return (*Entry)->TryGetStringField(Key,Path)?LoadObject<UAnimSequenceBase>(nullptr,*Path):nullptr;};
     if(Dead){
         if(!Pose.Dead){
@@ -88,6 +88,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     else if(!Local&&!Moving&&PoseFlag(*Row,TEXT("combat_active"))){
         Key=TEXT("combat_idle");FString Stance;(*Row)->TryGetStringField(TEXT("combat_stance"),Stance);const FString Variant=Stance==TEXT("xbow")?TEXT("xbow_idle"):Key+TEXT("_")+Stance;if(!Stance.IsEmpty()&&(*Entry)->HasField(Variant))Key=Variant;
     }
+    if(Key==TEXT("jump"))Loop=false;
     if(!(*Entry)->HasField(Key)&&!Dead&&!Sitting&&Pose.Transition.IsEmpty())Key=Moving&&(*Entry)->HasField(TEXT("walk"))?TEXT("walk"):TEXT("idle");
     const FString StateKey=Reverse?TEXT("sit_down_reverse"):Key;
     const bool NewAction=Action&&Pose.PlayedActionSeq!=Pose.ActiveActionSeq;

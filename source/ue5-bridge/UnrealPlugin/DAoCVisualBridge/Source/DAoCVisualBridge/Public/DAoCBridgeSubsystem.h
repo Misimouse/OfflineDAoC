@@ -66,6 +66,7 @@ private:
     bool TickDoorAudioAcceptance();
     bool TickServerSoundAcceptance();
     bool TickWaterAcceptance();
+    bool TickJumpLandingAcceptance();
     TSharedPtr<FBridgeWaterData> WaterData;
     bool bLocalSwimming=false;
     FString LocalGroundSurface=TEXT("dirt");

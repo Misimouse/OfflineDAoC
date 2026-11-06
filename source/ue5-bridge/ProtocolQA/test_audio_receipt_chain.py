@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -195,6 +195,21 @@ def verify(workspace):
         saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt water mask');rejected();checks+=1;targets[-1].write_bytes(saved)
         wave.write_bytes(b'corrupt original combat WAV after water');rejected();checks+=1;wave.write_bytes(before)
         gateway=w/'Godot/live_gateway.gd';entry=next(row for row in water_rows if row['target']==str(gateway));old_gateway=entry['before_sha256'];entry['before_sha256']='0'*64;put(water_path,water);rejected();checks+=1;entry['before_sha256']=old_gateway;put(water_path,water)
+        # Jump successor must retain every prior audio/water target and exact predecessor.
+        previous_native=digest(binary);jump_rows=[]
+        for target in [plugin/p for p in JUMP_NATIVE_TARGETS]:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name!='DAoCBridgeJumpLandingAcceptance.cpp':target.write_bytes(b'old jump predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new jump '+str(target).encode())
+            jump_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        jump_path=w/'JumpLandingLab/installed.json';jump={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(water_path),'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':jump_rows}
+        put(jump_path,jump);assert verify_files(w)['jump_landing_installed'];checks+=1
+        jump['predecessor_receipt_sha256']='0'*64;put(jump_path,jump);rejected();checks+=1
+        jump['predecessor_receipt_sha256']=digest(water_path);jump['files'][0]['before_sha256']='0'*64;put(jump_path,jump);rejected();checks+=1
+        jump['files'][0]['before_sha256']=previous_native;put(jump_path,jump)
+        saved=targets[-1].read_bytes();targets[-1].write_bytes(b'bad old water after jump');rejected();checks+=1;targets[-1].write_bytes(saved)
+        wave.write_bytes(b'bad old combat after jump');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

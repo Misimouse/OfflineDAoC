@@ -31,6 +31,12 @@ WATER_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binari
     'Source/DAoCVisualBridge/Private/DAoCBridgeWaterAcceptance.cpp']
 
 
+JUMP_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeCharacter.h','Source/DAoCVisualBridge/Private/DAoCBridgeCharacter.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeJumpLandingAcceptance.cpp']
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -88,6 +94,26 @@ def verify_files(workspace):
     water=json.loads(water_path.read_text()) if water_path.exists() else None
     if water and not water.get('installed'):water=None
     water_replacements={}
+    jump_path=workspace/'JumpLandingLab/installed.json'
+    jump=json.loads(jump_path.read_text()) if jump_path.exists() else None
+    if jump and not jump.get('installed'):jump=None
+    jump_replacements={}
+    if jump:
+        assert water and jump['phase']=='complete' and not jump['database_modified']
+        assert jump['predecessor_receipt_sha256']==digest(water_path) and jump['native_before_sha256']==water['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+        jump_replacements={row['target']:row for row in jump['files']}
+        assert len(jump['files'])==len(jump_replacements)==len(JUMP_NATIVE_TARGETS)
+        assert set(jump_replacements)=={str(plugin/p) for p in JUMP_NATIVE_TARGETS}
+        for row in jump['files']:
+            assert (row['before_sha256'] is None)==(Path(row['target']).name=='DAoCBridgeJumpLandingAcceptance.cpp')
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=jump_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==jump['native_before_sha256'] and binary['after_sha256']==jump['native_after_sha256']
+    def latest_jump(row,expected):
+        changed=jump_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if water:
         assert server and water['phase']=='complete' and not water['database_modified']
         assert water['predecessor_receipt_sha256']==digest(server_path) and water['native_before_sha256']==server['native_after_sha256']
@@ -102,13 +128,13 @@ def verify_files(workspace):
         new_names=['DAoCBridgeWaterData.h','DAoCBridgeWaterMovement.cpp','DAoCBridgeWaterAcceptance.cpp','movement_flags_state.gd','water_field.json']
         for row in water['files']:
             if Path(row['target']).name in new_names:assert row['before_sha256'] is None
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_jump(row,row['after_sha256'])
         binary=water_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==water['native_before_sha256'] and binary['after_sha256']==water['native_after_sha256']
     def latest_water(row,expected):
         changed=water_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_jump(row,expected)
     if server:
         assert foot and server['phase']=='complete' and not server['database_modified']
         assert server['predecessor_receipt_sha256']==digest(foot_path) and server['native_before_sha256']==foot['native_after_sha256']
@@ -262,4 +288,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'verified_files':len(original['files'])}
