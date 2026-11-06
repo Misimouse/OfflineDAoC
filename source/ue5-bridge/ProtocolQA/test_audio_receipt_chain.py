@@ -48,6 +48,23 @@ def verify(workspace):
         receipt['native_after_sha256']='0'*64;put(path,receipt);rejected();checks+=1
         receipt['native_after_sha256']=digest(binary)
         receipt['spell_audio_receipt_sha256']='0'*64;put(path,receipt);rejected();checks+=1
+        receipt['spell_audio_receipt_sha256']=digest(audio_path);put(path,receipt)
+        gateway_before=digest(gateway)
+        gateway.write_text('newest gateway')
+        trigger=w/'Godot/weapon_mode_audio_state.gd';trigger.write_text('synthetic trigger')
+        mode_path=w/'WeaponModeAudioLab/installed.json'
+        mode={'installed':True,'phase':'complete','database_modified':False,'native_sha256':digest(binary),
+            'predecessor_receipt_sha256':digest(path),'files':[
+                {'target':str(gateway),'before_sha256':gateway_before,'after_sha256':digest(gateway)},
+                {'target':str(trigger),'before_sha256':None,'after_sha256':digest(trigger)}]}
+        put(mode_path,mode)
+        assert verify_files(w)['weapon_mode_audio_installed'];checks+=1
+        mode['files'][0]['before_sha256']='0'*64;put(mode_path,mode);rejected();checks+=1
+        mode['files'][0]['before_sha256']=gateway_before
+        mode['native_sha256']='0'*64;put(mode_path,mode);rejected();checks+=1
+        mode['native_sha256']=digest(binary);put(mode_path,mode)
+        trigger.write_text('tampered trigger');rejected();trigger.write_text('synthetic trigger');checks+=1
+        wave.write_bytes(b'changed original with successor');rejected();checks+=1
     return {'passed':True,'checks':checks,'synthetic_only':True,'normal_installation_modified':False}
 
 

@@ -9,6 +9,7 @@ import socket
 import subprocess
 
 from prepare_combined_expansion_data import digest
+from central_activation_receipts import verify_files
 
 
 def read(path):
@@ -18,6 +19,15 @@ def read(path):
 def install(workspace, apply=False):
     repo=Path(__file__).resolve().parents[3]
     root=workspace/'SpellAudioLab'
+    existing_path=root/'installed.json'
+    if existing_path.exists():
+        existing=read(existing_path)
+        assert existing['installed'] and existing['phase']=='complete'
+        assert all(digest(Path(p))==sha for p,sha in existing['evidence'].items())
+        chain=verify_files(workspace)
+        if not chain.get('combat_audio_installed',False):
+            assert all(digest(Path(row['target']))==row['after_sha256'] for row in existing['files'])
+        return {'passed':True,'installed':True,'already_current':True,'accepted_successor':chain.get('combat_audio_installed',False)}
     central=workspace/'Client/Plugins/DAoCVisualBridge'
     built=read(root/'native_build.json')
     resources=read(root/'resources.json')
@@ -64,12 +74,6 @@ def install(workspace, apply=False):
         assert path.is_relative_to(audio_source) and digest(path)==sha
         pairs.append((path,central/'Content/OriginalAudio_v01'/path.relative_to(audio_source)))
     receipt_path=root/'installed.json'
-    if receipt_path.exists():
-        receipt=read(receipt_path)
-        assert receipt['installed'] and receipt['phase']=='complete'
-        assert all(digest(Path(row['target']))==row['after_sha256'] for row in receipt['files'])
-        assert all(digest(s)==digest(t) for s,t in pairs)
-        return {'passed':True,'installed':True,'already_current':True}
     assert digest(central/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')==built['normal_binary_sha256']
     rows=[]
     for s,t in pairs:

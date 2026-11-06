@@ -19,6 +19,13 @@ def read(path):
 def install(workspace, apply=False):
     repo=Path(__file__).resolve().parents[3]
     root=workspace/'CombatAudioLab'
+    existing_path=root/'installed.json'
+    if existing_path.exists():
+        existing=read(existing_path)
+        assert existing['installed'] and existing['phase']=='complete'
+        assert all(digest(Path(p))==sha for p,sha in existing['evidence'].items())
+        chain=verify_files(workspace)
+        return {'passed':True,'installed':True,'already_current':True,'accepted_successor':chain.get('weapon_mode_audio_installed',False)}
     central=workspace/'Client/Plugins/DAoCVisualBridge'
     built=read(root/'native_build.json');resources=read(root/'resources.json')
     proof=read(root/'NativeAcceptance/verified.json');regression=read(root/'CharacterRegression/verified.json')
@@ -66,14 +73,6 @@ def install(workspace, apply=False):
         assert path.is_relative_to(audio_source) and digest(path)==sha
         pairs.append((path,central/'Content/OriginalCombatAudio_v01'/path.relative_to(audio_source)))
     receipt_path=root/'installed.json'
-    if receipt_path.exists():
-        receipt=read(receipt_path)
-        assert receipt['installed'] and receipt['phase']=='complete'
-        assert receipt['spell_audio_receipt_sha256']==digest(old_path)
-        assert all(digest(Path(row['target']))==row['after_sha256'] for row in receipt['files'])
-        assert all(digest(s)==digest(t) for s,t in pairs)
-        verify_files(workspace)
-        return {'passed':True,'installed':True,'already_current':True}
     verify_files(workspace)
     # The predecessor's complete file set must still be present before replacing it.
     assert all(digest(Path(row['target']))==row['after_sha256'] for row in old['files'])

@@ -14,6 +14,7 @@ parser.add_argument('--native-form-probe',action='store_true')
 parser.add_argument('--central-installed-native',action='store_true')
 parser.add_argument('--audio-native-candidate',action='store_true')
 parser.add_argument('--combat-audio-native-candidate',action='store_true')
+parser.add_argument('--weapon-mode-audio-candidate',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
@@ -58,6 +59,7 @@ assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined
 assert not args.central_installed_native or args.native_form_probe
 assert not args.audio_native_candidate or (args.native_form_probe and not args.central_installed_native)
 assert not args.combat_audio_native_candidate or (class_id==58 and args.expansion_power and args.combined_expansions and not args.native_form_probe)
+assert not args.weapon_mode_audio_candidate or args.combat_audio_native_candidate
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
@@ -80,6 +82,7 @@ if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(parents=True,exis
 if args.central_installed_native:D=ROOT/'Reports/central_bainshee_forms'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
 if args.audio_native_candidate:D=ROOT/'Reports/spell_audio_real_protocol'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
 if args.combat_audio_native_candidate:D=ROOT/'Reports/combat_audio_real_protocol';D.mkdir(parents=True,exist_ok=True)
+if args.weapon_mode_audio_candidate:D=ROOT/'Reports/weapon_mode_audio_real_protocol';D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -391,6 +394,7 @@ try:
    import importlib.util
    spec=importlib.util.spec_from_file_location('combat_audio_native_observer',Path(__file__).resolve().parents[1]/'pet_sight_relay.py');observer=importlib.util.module_from_spec(spec);spec.loader.exec_module(observer)
    inputs=[ROOT/'CombatAudioLab/NativeHost/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',ROOT/'CombatAudioLab/OriginalCombatAudio_v01/sounds.json',SOURCE/'live_gateway.gd',SOURCE/'visual_bridge.gd',SOURCE/'combat_audio_state.gd']
+   if args.weapon_mode_audio_candidate:inputs.append(SOURCE/'weapon_mode_audio_state.gd')
    result['native_audio_inputs']={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
    relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=130,entity_ids=['player:local',power_target],render=True,native_profile='combat_audio');sock=relay
    wait(lambda:relay.read_report().get('spell_audio',{}).get('combat_ready'),'Private native combat audio catalog ready',90)
@@ -440,6 +444,14 @@ try:
    assert audio.get('combat_ready') and audio.get('combat_events_seen',0)>0 and audio.get('played_clips',0)>0 and audio.get('pcm_consumed_bytes',0)>0
    assert audio.get('invalid_resources',-1)==0 and audio.get('unresolved_references',-1)==0,audio
    result['checks']['original_real_combat_audio_consumed_by_engine']=True
+   if args.weapon_mode_audio_candidate:
+    assert any(e['event']=='activate' and e['owner']=='player:local' for e in combat_audio_trace)
+    assert any(e['event']=='deactivate' and e['owner']=='player:local' for e in combat_audio_trace)
+    # The ordinary NPC can miss/evade, so the number of impact/pain events is
+    # determined by this real fight, not by a fixed assumed combat outcome.
+    assert audio['combat_events_seen']>=len(combat_audio_trace)>=2
+    assert audio['played_clips']>=len(combat_audio_trace)
+    result['checks']['original_server_confirmed_draw_and_sheathe_audio']=True
    assert all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==sha for p,sha in result['native_audio_inputs'].items())
    sock=relay.backend;sock.settimeout(.1)
  if training_mode:

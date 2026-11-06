@@ -13,6 +13,7 @@ var exchange:RefCounted
 var player_state:RefCounted
 var combat_visual:RefCounted
 var combat_audio:RefCounted
+var weapon_mode_audio:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -85,6 +86,7 @@ func _ready()->void:
     player_state=load(folder.path_join("player_combat_state.gd")).new()
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
     combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
+    weapon_mode_audio=load(folder.path_join("weapon_mode_audio_state.gd")).new()
     var combat_audio_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalCombatAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-combat-audio-catalog="):combat_audio_path=arg.trim_prefix("--bridge-combat-audio-catalog=")
@@ -193,7 +195,7 @@ func apply_entry(entry:Dictionary)->void:
 
 func world_event(kind:String,data:Dictionary)->void:
     player_models.consume(kind,data)
-    if kind in ["you","region_changed","quit","npc","player","revive","death","remove","combat"]:
+    if kind in ["you","region_changed","quit","npc","player","revive","death","remove","combat","attack_mode","status"]:
         # Preserve pre-packet health for the original light/medium pain rule.
         var audio_rows:Dictionary=adapter.entities.duplicate()
         var audio_form:Dictionary=player_models.snapshot()
@@ -201,6 +203,7 @@ func world_event(kind:String,data:Dictionary)->void:
         audio_rows["player:local"]={"model_id":audio_form.model_id,"position_m":[position.x,position.y,position.z],
             "health":audio_health,"health_known":player_state.ready,"state":"dead" if player_state.ready and audio_health<=0 else "idle"}
         combat_audio.consume(kind,data,int(server.me_oid),adapter.oid_to_id,audio_rows,Time.get_ticks_msec())
+        weapon_mode_audio.consume(kind,data,int(server.me_oid),combat_audio,audio_rows,inventory,Time.get_ticks_msec())
     exchange.observe(kind,data)
     if kind in ["you","region_changed","quit"]:line_of_sight.reset()
     if kind=="los":

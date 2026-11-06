@@ -12,6 +12,7 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
     assert lab_name in ['SpellAudioLab','CombatAudioLab']
     root=workspace/lab_name
+    assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
     plugin=host/'Plugins/DAoCVisualBridge'
     plugin.mkdir(parents=True,exist_ok=True)

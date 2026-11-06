@@ -1,5 +1,6 @@
 """Private actual combat playback plus regression of the installed original spell audio."""
 import argparse
+from datetime import datetime
 import json
 from pathlib import Path
 import subprocess
@@ -29,7 +30,11 @@ def verify(workspace, engine, installed=False):
     assert all(digest(Path(p))==sha for p,sha in resources['files'].items())
     assert digest(Path(resources['catalog']))==resources['catalog_sha256']
     output=root/('NativeInstalledAcceptance' if installed else 'NativeAcceptance')
-    output.mkdir(exist_ok=True)
+    # A later trigger delivery pins this proof. A new verification gets its own
+    # folder rather than overwriting the historical evidence it depends on.
+    if installed and (workspace/'WeaponModeAudioLab/installed.json').exists():
+        output=root/'NativeInstalledAcceptanceRuns'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    output.mkdir(parents=True,exist_ok=True)
     reports={}
     for name,flag in [('combat','DaocBridgeCombatAudioTest'),('spell_regression','DaocBridgeSpellAudioTest')]:
         path=output/(name+'.json')
@@ -55,6 +60,7 @@ def verify(workspace, engine, installed=False):
         'audible_owner_acceptance':False,'reports':reports,'build_receipt_sha256':digest(root/'native_build.json'),
         'resources_receipt_sha256':digest(root/'resources.json')}
     proof['installed_client_resources_only']=installed
+    proof['report_directory']=str(output)
     (output/'verified.json').write_text(json.dumps(proof,indent=2),encoding='utf-8')
     return proof
 

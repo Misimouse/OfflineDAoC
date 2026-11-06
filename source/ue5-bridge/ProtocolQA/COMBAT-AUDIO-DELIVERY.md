@@ -1,5 +1,9 @@
 # Original combat audio
 
+Follow-up: local server-confirmed draw/sheathe triggers are now delivered in
+[WEAPON-MODE-AUDIO-DELIVERY.md](WEAPON-MODE-AUDIO-DELIVERY.md). The trigger
+limitation below describes this original combat delivery before that follow-up.
+
 The bridge now publishes a separate `combat_audio` stream from actual server
 combat/death packets. UE uses the same bounded PCM playback engine as spell
 audio, with a separate original creature/weapon catalog. The world, HP,
