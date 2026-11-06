@@ -1,0 +1,15 @@
+# Live mounted transport package
+
+Reference: current original DaocClient Riding 0xC8 decode / Dismount request, live ServerWorld saddle logic, zone_viewer mounted position/state 0x18, and DOL GameStableMaster/GameTaxi. The separate offline HorseRoutes controller is not the authority for a connected game.
+
+Read-only `audit_live_riding.py` inspected public merchant/path rows using SQLite mode=ro plus query_only. Six paths are offered by three stablemasters inside Connacht. Only `HR_TirNaNog_DruimLigen` stays fully within zone 207 (21/21 points). Freagus in Ardee offers two paths that leave it. Offline routes.json has region=0 for every row; those values cannot be treated as the live region ID. Segment/terrain/visual acceptance is still required even for an in-bounds point list.
+
+Close this package in order:
+
+1. Isolated Godot mount-state contract: strict Riding packet, local/remote ownership, out-of-order steed spawn, removal, death/logout/region reset, dismount request awaiting real acknowledgement, stale/duplicate handling. No synthetic route movement or ticket consumption.
+2. Native saddle attachment and original ride_horse animation. Use the actual posed/instance-scaled saddle and keep camera orbit; mounted player cannot walk independently. Preserve authoritative mounted speed/heading/state in original position packets. Jump and /dismount send original request, do not fake successful unmount.
+3. Private real server itinerary: original stable ticket buy, consume once, real mount ACK, original horse route movement, jump/request/ACK, return to grounded collision and no orphaned camera. Verify ground height, animations and mount sound. Keep owner DB and WORK untouched.
+4. Boundaries are a delivery gate: the server must never continue charging/moving the player into unloaded zones. Resolve explicit supported travel handling before enabling unrestricted Ardee route purchase; do not silently alter original tickets/path rows or claim complete cross-zone travel.
+5. Current prior installed blocks must pass unchanged after candidate installation, with exact-file backup/rollback and cumulative owner checklist. No full stable travel claim until all phases are proven.
+
+Current normal runtime remains the tested target-tracking delivery. Riding work is private until these gates are met.

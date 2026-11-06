@@ -73,6 +73,7 @@ private:
     TSharedPtr<FBridgeMovementKeys> MovementKeys;
     TSharedPtr<FBridgeTargetTracking> TargetTracking;
     bool TickTargetTrackingAcceptance();
+    bool TickLiveRidingAssetAcceptance();
     void RequestTargetTracking(const FString& Mode);
     void ApplyTargetTracking(const TSharedPtr<FJsonObject>& Snapshot);
     bool UpdateTargetTracking(bool Enabled,bool Manual,FVector& Desired);
