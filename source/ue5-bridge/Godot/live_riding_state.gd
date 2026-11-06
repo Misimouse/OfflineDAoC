@@ -69,3 +69,33 @@ func snapshot(ids:Dictionary,entities:Dictionary)->Dictionary:
         var rid:=String(ids.get(rider,""));var sid:=String(ids.get(riders[rider].steed,""))
         if not rid.is_empty() and not sid.is_empty() and entities.has(rid) and _ready_steed(sid,entities):remote.append({"rider_entity_id":rid,"steed_entity_id":sid,"slot":riders[rider].slot})
     return {"revision":revision,"mounted":local_steed>0,"steed_oid":local_steed,"steed_entity_id":id if ready else "","steed_ready":ready,"slot":local_slot,"state_flags":0x18 if local_steed>0 else 0,"dismount_pending":pending_dismount,"remote":remote}
+
+func speed_limit(entities:Dictionary,ids:Dictionary)->float:
+    var row:Dictionary=entities.get(String(ids.get(local_steed,"")),{})
+    var speed:Variant=row.get("speed_mps",0.0)
+    if not (speed is int or speed is float) or not is_finite(float(speed)):return 0.0
+    return clampf(absf(float(speed)),0,37.5)
+func position_allowed(point:Vector3,entities:Dictionary,ids:Dictionary,now:int)->bool:
+    var id:=String(ids.get(local_steed,""))
+    if not point.is_finite() or not _ready_steed(id,entities):return false
+    var row:Dictionary=entities[id];var p:Variant=row.get("position_m",[])
+    if not p is Array or p.size()!=3:return false
+    for value in p:
+        if not (value is int or value is float) or not is_finite(float(value)):return false
+    var anchor:=Vector3(p[0],p[1],p[2]);var motion:Dictionary=row.get("motion",{})
+    var age:=clampf(float(now-int(motion.get("at_ms",now)))/1000.0,0,10)
+    var speed:=speed_limit(entities,ids);var forward:Variant=row.get("forward_xz",[0,0])
+    if not forward is Array or forward.size()!=2:return false
+    for value in forward:
+        if not (value is int or value is float) or not is_finite(float(value)):return false
+    var direction:=Vector3(forward[0],0,forward[1]).normalized();var length:=speed*minf(age,1.0)
+    var destination:Variant=motion.get("destination_m",[])
+    if destination is Array and destination.size()==3:
+        for value in destination:
+            if not (value is int or value is float) or not is_finite(float(value)):return false
+        var delta:=Vector3(destination[0],anchor.y,destination[2])-anchor
+        direction=delta.normalized();length=minf(delta.length(),speed*age)
+    var predicted:=anchor+direction*length
+    var interval:=clampf(float(motion.get("interval_ms",500))/1000.0,0,.8)
+    var tolerance:=maxf(4.0,speed*interval+2.0)
+    return Vector2(point.x-predicted.x,point.z-predicted.z).length()<=tolerance and absf(point.y-anchor.y)<=8.0

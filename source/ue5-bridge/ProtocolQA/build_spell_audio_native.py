@@ -20,7 +20,11 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     normal_binary=central/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     normal_hash=digest(normal_binary)
     quote=lambda p:"'"+str(p).replace("'","''")+"'"
+    if lab_name=='LiveRidingLab':
+        from prepare_live_riding_content import prepare
+        prepare(workspace)
     for target,source in [(host/'Content',workspace.parent/'DAoC-Enhanced-Unreal/Content'),(plugin/'Content',central/'Content')]:
+        if lab_name=='LiveRidingLab' and target==plugin/'Content':continue
         if target.exists():assert target.is_junction() and target.resolve()==source.resolve()
         else:subprocess.run(['powershell.exe','-NoProfile','-Command','New-Item -ItemType Junction -Path '+quote(target)+' -Target '+quote(source)+' | Out-Null'],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
     shutil.copy2(central/'DAoCVisualBridge.uplugin',plugin/'DAoCVisualBridge.uplugin')

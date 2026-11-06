@@ -18,6 +18,8 @@ var door_audio:RefCounted
 var server_sound:RefCounted
 var movement_flags:RefCounted
 var target_tracking:RefCounted
+var live_riding:RefCounted
+var travel_routes:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -95,6 +97,14 @@ func _ready()->void:
     server_sound=load(folder.path_join("server_sound_state.gd")).new()
     movement_flags=load(folder.path_join("movement_flags_state.gd")).new()
     target_tracking=load(folder.path_join("target_tracking_state.gd")).new()
+    live_riding=load(folder.path_join("live_riding_state.gd")).new()
+    travel_routes=load(folder.path_join("live_travel_routes.gd")).new()
+    var travel_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/LiveRiding_v01/travel_routes.json")
+    for arg in OS.get_cmdline_user_args():
+        if arg.begins_with("--bridge-travel-catalog="):travel_path=arg.trim_prefix("--bridge-travel-catalog=")
+    if FileAccess.file_exists(travel_path):travel_routes.configure(JSON.parse_string(FileAccess.get_file_as_string(travel_path)))
+    inventory.purchase_filter=travel_routes.decision
+
     var server_sound_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalServerSoundAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-server-sound-catalog="):server_sound_path=arg.trim_prefix("--bridge-server-sound-catalog=")
@@ -218,6 +228,7 @@ func apply_entry(entry:Dictionary)->void:
         status="Connected to Connacht"
 
 func world_event(kind:String,data:Dictionary)->void:
+    live_riding.consume(kind,data,Time.get_ticks_msec())
     player_models.consume(kind,data)
     server_sound.consume(kind,data,int(server.entry.get("zone",-1)) if server.playing else -1,position,Time.get_ticks_msec())
     if kind in ["you","region_changed","quit"]:door_audio.reset()
@@ -324,6 +335,8 @@ func command(value:Dictionary)->void:
     if action=="tracking_feedback":
         if target_tracking.consume(value):emit_tracking_feedback()
         return
+    if action=="dismount":
+        live_riding.request_dismount(server.client,Time.get_ticks_msec());return
     if action=="move":
         if int(server.entry.get("zone",-1))!=207:return
         var p=value.get("position_m",[]);var f=value.get("forward_xz",[])
@@ -333,10 +346,12 @@ func command(value:Dictionary)->void:
         var next:=Vector3(float(p[0]),float(p[1]),float(p[2]))
         if next.x<0 or next.z<0 or next.x>1638.4 or next.z>1638.4 or next.y < -100 or next.y>2000:return
         var pct:=int(server.max_speed_pct)
-        var limit:float=player_state.run_speed_mps(pct)
+        var mounted:bool=live_riding.local_steed>0
+        var limit:float=live_riding.speed_limit(adapter.entities,adapter.oid_to_id) if mounted else player_state.run_speed_mps(pct)
+        if mounted and not live_riding.position_allowed(next,adapter.entities,adapter.oid_to_id,Time.get_ticks_msec()):move_rejected+=1;return
         var elapsed:=clampf(float(Time.get_ticks_msec()-last_position_send)/1000.0,0.05,0.5)
         if next.distance_to(position)>maxf(5.0,limit*elapsed+1.0):move_rejected+=1;return
-        if limit<=0 and next.distance_to(position)>.1:move_rejected+=1;return
+        if limit<=0 and next.distance_to(position)>(4.0 if mounted else .1):move_rejected+=1;return
         if player_state.ready and int(player_state.vitals.get("health_pct",0))<=0:return
         if not movement_flags.consume(value):return
         position=next
@@ -392,6 +407,8 @@ func dispatch_chat(text:String)->bool:
     if classic_ui.create_macro(text):
         classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec());local_chat(classic_ui.feedback);return true
     var parts:=text.split(" ",false);var word:=String(parts[0]).to_lower()
+    if word=="/dismount":
+        live_riding.request_dismount(server.client,Time.get_ticks_msec());return true
     if word in ["/face","/follow","/stick"]:return request_tracking(word.trim_prefix("/"))
     if word=="/loc":
         var zone_name:=String(server.entry.get("zone_name","Connacht" if int(server.entry.get("zone",0))==207 else str(server.entry.get("zone",0))))
@@ -410,7 +427,7 @@ func emit_tracking_feedback()->void:
     var text:String=target_tracking.take_feedback()
     if not text.is_empty():local_chat(text,"system")
 func request_tracking(mode:String)->bool:
-    var ready:bool=int(server.entry.get("zone",-1))==207 and player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving
+    var ready:bool=live_riding.local_steed==0 and int(server.entry.get("zone",-1))==207 and player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving
     var accepted:bool=target_tracking.request(mode,interaction.selected_id,adapter.entities,position,ready,Time.get_ticks_msec())
     emit_tracking_feedback();return accepted
 func request_logout(exit_application:bool=true)->void:
@@ -468,6 +485,7 @@ func _process(_delta:float)->void:
     release_state.advance(now)
     if release_state.revision!=release_revision:player_state.revision+=1
     adapter.advance_corpses(now)
+    if server.playing and live_riding.unavailable(adapter.entities,adapter.oid_to_id,now):live_riding.request_dismount(server.client,now)
     if server.playing and not leaving and now-last_inventory_sync>=250:sync_inventory(now)
     if server.playing:ever_played=true
     if transport.peer!=null and transport.peer.get_status()==StreamPeerTCP.STATUS_CONNECTED:
@@ -523,16 +541,17 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["combat_audio"]=combat_audio.snapshot(now)
         transport.snapshot_metadata["server_sound_audio"]=server_sound.snapshot(now)
-        target_tracking.maintain(adapter.entities,player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving,now)
+        target_tracking.maintain(adapter.entities,player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving and live_riding.local_steed==0,now)
         emit_tracking_feedback()
         transport.snapshot_metadata["target_tracking"]=target_tracking.snapshot(now)
+        transport.snapshot_metadata["riding"]=live_riding.snapshot(adapter.oid_to_id,adapter.entities)
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["exchange"]=exchange.snapshot()
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states
-        transport.snapshot_metadata["interaction"]=interaction.snapshot(adapter.entities,position)
+        transport.snapshot_metadata["interaction"]=travel_routes.annotate(interaction.snapshot(adapter.entities,position),adapter.entities)
         transport.snapshot_metadata["inventory"]=inventory.snapshot()
         var player_snapshot:Dictionary=player_state.snapshot()
         player_snapshot["weapon_stance"]=local_weapon_stance()
@@ -568,7 +587,7 @@ func sync_attack_visibility()->void:
     var now:=Time.get_ticks_msec();var visible:=target_visible(now)
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var oid:=int(interaction.selected_id.get_slice(":",1)) if not interaction.selected_id.is_empty() else 0
-    server.client.Heading(heading,oid,0x30 if visible else 0,movement_flags.state(sitting))
+    server.client.Heading(heading,oid,0x30 if visible else 0,(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)))
     attack_visibility_syncs+=1
     last_attack_visibility={"target":interaction.selected_id,"native_target":target_sight_id,"visible":visible,"age_ms":now-target_sight_at,"at_ms":now}
 
@@ -577,7 +596,7 @@ func send_position(speed:float)->void:
     var flags:=0x30 if valid else 0
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var health:=int(player_state.vitals.get("health_pct",100)) if player_state.ready else 100
-    server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,movement_flags.vertical_speed_mps/.025,207,movement_flags.state(sitting),movement_flags.on_ground,heading,flags,health,server.me_oid)
+    server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,movement_flags.vertical_speed_mps/.025,207,(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)),movement_flags.on_ground,heading,flags,health,server.me_oid)
 
 func sync_inventory(now:int)->void:
     last_inventory_sync=now

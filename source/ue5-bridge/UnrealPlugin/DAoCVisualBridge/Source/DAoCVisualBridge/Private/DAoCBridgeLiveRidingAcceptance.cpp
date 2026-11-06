@@ -37,9 +37,47 @@ bool UDAoCBridgeSubsystem::TickLiveRidingAssetAcceptance(){
         Check(Spine,TEXT("horse spine anchor survives import"));
         for(const FString Key:{TEXT("idle"),TEXT("walk"),TEXT("run")}){FString Animation;(*Entry)->TryGetStringField(Key,Animation);Check(LoadObject<UAnimSequenceBase>(nullptr,*Animation)!=nullptr,TEXT("horse locomotion loads: ")+Key);}
     }
+    auto* TaxiEntry=ModelCatalog.Find(TEXT("448"));FString TaxiPath;if(TaxiEntry)(*TaxiEntry)->TryGetStringField(TEXT("asset"),TaxiPath);
+    auto* Taxi=LoadObject<USkeletalMesh>(nullptr,*TaxiPath);Check(Taxi!=nullptr,TEXT("original ticket template 313 model 448 loads"));TArray<TSharedPtr<FJsonValue>> TaxiBones;
+    if(Taxi){
+        const FReferenceSkeleton& Ref=Taxi->GetRefSkeleton();bool Spine=false;
+        for(int32 I=0;I<Ref.GetNum();++I){
+            FTransform Transform=Ref.GetRefBonePose()[I];for(int32 P=Ref.GetParentIndex(I);P>=0;P=Ref.GetParentIndex(P))Transform=Transform*Ref.GetRefBonePose()[P];
+            auto Bone=MakeShared<FJsonObject>();const FString Name=Ref.GetBoneName(I).ToString();Bone->SetStringField(TEXT("name"),Name);
+            const FTransform Local=Ref.GetRefBonePose()[I];const FVector L=Local.GetLocation(),Scale=Local.GetScale3D();const FQuat Q=Local.GetRotation();
+            Bone->SetArrayField(TEXT("local_translation_cm"),{MakeShared<FJsonValueNumber>(L.X),MakeShared<FJsonValueNumber>(L.Y),MakeShared<FJsonValueNumber>(L.Z)});
+            Bone->SetArrayField(TEXT("local_scale"),{MakeShared<FJsonValueNumber>(Scale.X),MakeShared<FJsonValueNumber>(Scale.Y),MakeShared<FJsonValueNumber>(Scale.Z)});
+            Bone->SetArrayField(TEXT("local_rotation_xyzw"),{MakeShared<FJsonValueNumber>(Q.X),MakeShared<FJsonValueNumber>(Q.Y),MakeShared<FJsonValueNumber>(Q.Z),MakeShared<FJsonValueNumber>(Q.W)});
+            const FVector P=Transform.GetLocation();Bone->SetArrayField(TEXT("component_cm"),{MakeShared<FJsonValueNumber>(P.X),MakeShared<FJsonValueNumber>(P.Y),MakeShared<FJsonValueNumber>(P.Z)});TaxiBones.Add(MakeShared<FJsonValueObject>(Bone));
+            if(Name==TEXT("Bip01-Spine1"))Spine=true;
+        }
+        Check(Spine,TEXT("actual route horse spine imported"));
+        for(const FString Key:{TEXT("idle"),TEXT("walk"),TEXT("run")}){FString Animation;(*TaxiEntry)->TryGetStringField(Key,Animation);Check(LoadObject<UAnimSequenceBase>(nullptr,*Animation)!=nullptr,TEXT("actual route horse locomotion loads: ")+Key);}
+    }
+    Report->SetArrayField(TEXT("taxi_bones"),TaxiBones);
+    if(Taxi){
+        FString SeatPath;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeRidingCatalog="),SeatPath);FBridgeLiveRidingData Actual;Check(Actual.Load(SeatPath),TEXT("actual taxi source saddle data loads"));
+        auto* Actor=GetWorld()->SpawnActor<ASkeletalMeshActor>();auto* Mesh=Actor->GetSkeletalMeshComponent();Mesh->SetSkeletalMeshAsset(Taxi);
+        const FVector SourceSaddle(.1460952201883694,.01884025754406763,152.17514100345707);
+        for(double Scale:{.96,1.,1.3}){
+            const FTransform Transform(FRotator(0,-132,0),FVector(300,-220,80),FVector(Scale));Mesh->SetWorldTransform(Transform);Mesh->RefreshBoneTransforms();FVector Seat;
+            Check(Actual.Resolve(Mesh,448,Seat),TEXT("race-sized original route taxi seat resolves"));
+            Check(FVector::Dist(Seat,Transform.TransformPosition(SourceSaddle))<.05,TEXT("actual taxi skin bind reference preserves independently recovered source saddle"));
+        }
+        Actor->Destroy();
+    }
+
     FString DataPath;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeRidingCatalog="),DataPath);FBridgeLiveRidingData Data;
     Check(Data.Load(DataPath),TEXT("source-verified saddle catalog loads"));
     FBridgeLiveRidingData Missing;Check(!Missing.Load(DataPath+TEXT(".absent")),TEXT("missing seat data cannot silently use guessed saddle"));
+    Check(FMath::IsNearlyEqual(Data.GaitRate(448,TEXT("run"),37.5,.4666667),2.3333335f,.001f),TEXT("actual route gallop cadence follows original 300-unit stride"));
+    Check(FMath::IsNearlyEqual(Data.GaitRate(448,TEXT("walk"),1.375,1),1.f,.001f),TEXT("original 55-unit walk stride"));
+    Check(Data.GaitRate(448,TEXT("idle"),37.5,.5)==1.f,TEXT("idle is never accelerated"));
+    Check(Data.GaitRate(448,TEXT("run"),100,.5)==3.f,TEXT("original gallop rate upper clamp"));
+    Check(Data.GaitRate(448,TEXT("run"),.01,.5)==.3f,TEXT("original gait lower clamp"));
+    Check(Data.GaitRate(448,TEXT("run"),NAN,.5)==1.f,TEXT("invalid gait speed cannot poison animation"));
+    Check(FMath::IsNearlyEqual(Data.GaitRate(448,TEXT("run"),37.5,.4666667,1.3),2.3333335f/1.3f,.001f),TEXT("larger actual horse has proportionately longer stride"));
+    Check(Data.GaitRate(448,TEXT("run"),37.5,.5,0)==1.f,TEXT("invalid instance scale rejected"));
     FVector Seat;Check(!Data.Resolve(nullptr,2174,Seat),TEXT("missing component rejected"));
     if(Horse){
         auto* First=GetWorld()->SpawnActor<ASkeletalMeshActor>();auto* Second=GetWorld()->SpawnActor<ASkeletalMeshActor>();

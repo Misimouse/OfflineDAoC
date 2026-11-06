@@ -49,6 +49,16 @@ TARGET_TRACKING_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dl
     'Source/DAoCVisualBridge/Private/DAoCBridgeTargetTrackingAcceptance.cpp']
 
 
+LIVE_RIDING_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeFootsteps.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeSpellAudio.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeLiveRiding.h','Source/DAoCVisualBridge/Private/DAoCBridgeLiveRiding.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeLiveRidingAcceptance.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeLiveRidingController.cpp']
+LIVE_RIDING_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','inventory_state.gd','live_riding_state.gd','live_travel_routes.gd']
+LIVE_RIDING_NEW_NAMES={'DAoCBridgeLiveRiding.h','DAoCBridgeLiveRiding.cpp','DAoCBridgeLiveRidingAcceptance.cpp','DAoCBridgeLiveRidingController.cpp','live_riding_state.gd','live_travel_routes.gd'}
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -118,6 +128,30 @@ def verify_files(workspace):
     tracking=json.loads(tracking_path.read_text()) if tracking_path.exists() else None
     if tracking and not tracking.get('installed'):tracking=None
     tracking_replacements={}
+    riding_path=workspace/'LiveRidingLab/installed.json'
+    riding=json.loads(riding_path.read_text()) if riding_path.exists() else None
+    if riding and not riding.get('installed'):riding=None
+    riding_replacements={}
+    if riding:
+        assert tracking and riding['phase']=='complete' and not riding['database_modified'] and not riding['server_rules_modified']
+        assert riding['predecessor_receipt_sha256']==digest(tracking_path) and riding['native_before_sha256']==tracking['native_after_sha256']
+        assert riding['resources_receipt_sha256']==digest(workspace/'LiveRidingLab/resources.json')
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';library=plugin/'Content/LiveRiding_v01'
+        expected={str(plugin/p) for p in LIVE_RIDING_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in LIVE_RIDING_GODOT_TARGETS}|{str(workspace/'models.json')}
+        content=riding['content_targets'];assert 3<=len(content)<=128 and len(set(content))==len(content)
+        assert all(Path(p).resolve().is_relative_to(library.resolve()) for p in content)
+        expected.update(content);riding_replacements={row['target']:row for row in riding['files']}
+        assert len(riding_replacements)==len(riding['files'])==len(expected) and set(riding_replacements)==expected
+        for row in riding['files']:
+            new=row['target'] in content or Path(row['target']).name in LIVE_RIDING_NEW_NAMES
+            assert (row['before_sha256'] is None)==new and digest(Path(row['target']))==row['after_sha256']
+        binary=riding_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==riding['native_before_sha256'] and binary['after_sha256']==riding['native_after_sha256']
+    def latest_riding(row,expected):
+        changed=riding_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
+
     if tracking:
         assert keys and tracking['phase']=='complete' and not tracking['database_modified']
         assert tracking['predecessor_receipt_sha256']==digest(keys_path) and tracking['native_before_sha256']==keys['native_after_sha256']
@@ -128,13 +162,13 @@ def verify_files(workspace):
         assert len(tracking['files'])==len(tracking_replacements)==len(expected) and set(tracking_replacements)==expected
         for row in tracking['files']:
             assert (row['before_sha256'] is None)==(Path(row['target']).name in ['DAoCBridgeTargetTracking.h','DAoCBridgeTargetTracking.cpp','DAoCBridgeTargetTrackingAcceptance.cpp','target_tracking_state.gd'])
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_riding(row,row['after_sha256'])
         binary=tracking_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==tracking['native_before_sha256'] and binary['after_sha256']==tracking['native_after_sha256']
     def latest_tracking(row,expected):
         changed=tracking_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_riding(row,expected)
     if keys:
         assert jump and keys['phase']=='complete' and not keys['database_modified']
         assert keys['predecessor_receipt_sha256']==digest(jump_path) and keys['native_before_sha256']==jump['native_after_sha256']
@@ -344,4 +378,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'verified_files':len(original['files'])}

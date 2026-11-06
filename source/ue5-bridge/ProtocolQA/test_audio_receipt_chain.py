@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS,LIVE_RIDING_NATIVE_TARGETS,LIVE_RIDING_GODOT_TARGETS,LIVE_RIDING_NEW_NAMES
 from prepare_combined_expansion_data import digest
 
 
@@ -244,6 +244,27 @@ def verify(workspace):
         track['files'][0]['before_sha256']=previous_native;put(track_path,track)
         state_target=w/'Godot/target_tracking_state.gd';saved=state_target.read_bytes();state_target.write_bytes(b'bad tracking state');rejected();checks+=1;state_target.write_bytes(saved)
         wave.write_bytes(b'bad old combat after tracking');rejected();checks+=1;wave.write_bytes(before)
+        # The riding successor may replace only its exact code/catalog files
+        # and introduce files inside its own new content namespace.
+        previous_native=digest(binary);ride_root=w/'LiveRidingLab';ride_root.mkdir();ride_resources=ride_root/'resources.json';put(ride_resources,{'passed':True})
+        content=[plugin/'Content/LiveRiding_v01'/n for n in ['riding.json','travel_routes.json','Audio/sounds.json']]
+        targets=[plugin/p for p in LIVE_RIDING_NATIVE_TARGETS]+[w/'Godot'/n for n in LIVE_RIDING_GODOT_TARGETS]+[w/'models.json']+content
+        ride_rows=[]
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in LIVE_RIDING_NEW_NAMES and target not in content:target.write_bytes(b'old riding predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new riding '+str(target).encode());ride_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        ride_path=ride_root/'installed.json';ride={'installed':True,'phase':'complete','database_modified':False,'server_rules_modified':False,
+            'predecessor_receipt_sha256':digest(track_path),'resources_receipt_sha256':digest(ride_resources),'native_before_sha256':previous_native,'native_after_sha256':digest(binary),
+            'content_targets':[str(p) for p in content],'files':ride_rows}
+        put(ride_path,ride);assert verify_files(w)['live_riding_installed'];checks+=1
+        ride['predecessor_receipt_sha256']='0'*64;put(ride_path,ride);rejected();checks+=1;ride['predecessor_receipt_sha256']=digest(track_path)
+        ride['files'][0]['before_sha256']='0'*64;put(ride_path,ride);rejected();checks+=1;ride['files'][0]['before_sha256']=previous_native
+        ride['content_targets'][0]=str(plugin/'Content/unrelated.json');put(ride_path,ride);rejected();checks+=1;ride['content_targets'][0]=str(content[0]);put(ride_path,ride)
+        for target in [w/'Godot/inventory_state.gd',plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeLiveRidingController.cpp',content[2]]:
+            saved=target.read_bytes();target.write_bytes(b'changed riding file');rejected();checks+=1;target.write_bytes(saved)
+        wave.write_bytes(b'changed old audio after riding');rejected();checks+=1;wave.write_bytes(before)
+        assert verify_files(w)['live_riding_installed'];checks+=1
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

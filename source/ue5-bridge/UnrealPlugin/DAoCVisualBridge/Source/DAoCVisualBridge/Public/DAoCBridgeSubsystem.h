@@ -10,6 +10,7 @@ class FJsonObject;
 class FBridgeSpellVisuals;
 class FBridgeSpellAudio;
 class FBridgeWaterData;
+class FBridgeLiveRidingData;
 struct FBridgeMovementKeys;
 struct FBridgeTargetTracking;
 class FDAoCLobbyMotion;
@@ -74,6 +75,18 @@ private:
     TSharedPtr<FBridgeTargetTracking> TargetTracking;
     bool TickTargetTrackingAcceptance();
     bool TickLiveRidingAssetAcceptance();
+    TSharedPtr<FBridgeLiveRidingData> RidingData;
+    TSharedPtr<FJsonObject> RidingState;
+    int64 RidingRevision=-1;
+    bool bLocalMounted=false,bLocalSeatReady=false;
+    FString LocalSteedId;
+    double RidingSpeedMps=0,LastDismountRequest=-100;
+    void ApplyLiveRiding(const TSharedPtr<FJsonObject>& Snapshot);
+    void TickLiveRiding(float DeltaTime);
+    void ClearLiveRiding();
+    void RequestDismount();
+    TSharedPtr<FJsonObject> LiveRidingReport()const;
+
     void RequestTargetTracking(const FString& Mode);
     void ApplyTargetTracking(const TSharedPtr<FJsonObject>& Snapshot);
     bool UpdateTargetTracking(bool Enabled,bool Manual,FVector& Desired);
@@ -91,9 +104,10 @@ private:
     TSharedPtr<FJsonObject> WaterMovementReport()const;
     TSharedPtr<FJsonObject> SpellAudioReport() const;
     friend class FBridgeFootsteps;
-    TSharedPtr<FBridgeFootsteps> Footsteps;
+    TSharedPtr<FBridgeFootsteps> Footsteps,RidingFootsteps;
     void TickFootsteps();
     void ClearFootsteps();
+    void PlayRidingHoof(int32 Model,const FString& Owner);
     void PlayLocalFootstep(int32 Model,const FString& Surface=TEXT("dirt"));
     TSharedPtr<FJsonObject> FootstepReport() const;
     bool TickFootstepAcceptance();

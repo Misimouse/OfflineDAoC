@@ -4,8 +4,9 @@ from pathlib import Path
 from datetime import datetime
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,engine):
-    root=workspace/'TargetTrackingLab';build=json.loads((root/'native_build.json').read_text());resources=json.loads((root/'resources.json').read_text())
+def verify(workspace,engine,lab_name="TargetTrackingLab"):
+    assert lab_name in ["TargetTrackingLab","LiveRidingLab"]
+    root=workspace/lab_name;build=json.loads((root/'native_build.json').read_text());resources=json.loads((workspace/'TargetTrackingLab/resources.json').read_text())
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     assert build['passed'] and resources['passed'] and digest(normal)==build['normal_binary_sha256']
     assert all(digest(Path(p))==sha for p,sha in resources['input_hashes'].items())
@@ -17,7 +18,7 @@ def verify(workspace,engine):
     raw=report.read_bytes();state=json.loads(raw.decode('utf-16' if raw[:2] in [b'\xff\xfe',b'\xfe\xff'] else 'utf-8-sig'))
     assert state['passed'] and state['checks']>=35 and not state['failures'],state
     assert digest(normal)==build['normal_binary_sha256']
-    state.update(normal_installation_modified=False,server_started=False,build_receipt_sha256=digest(root/'native_build.json'),resources_receipt_sha256=digest(root/'resources.json'))
+    state.update(normal_installation_modified=False,server_started=False,build_receipt_sha256=digest(root/'native_build.json'),resources_receipt_sha256=digest(workspace/'TargetTrackingLab/resources.json'))
     (output/'verified.json').write_text(json.dumps(state,indent=2),encoding='utf-8')
     return dict(passed=True,checks=state['checks'],output=str(output))
 if __name__=='__main__':

@@ -4,8 +4,9 @@ from pathlib import Path
 from datetime import datetime
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,engine):
-    root=workspace/'JumpLandingLab';build=json.loads((root/'native_build.json').read_text())
+def verify(workspace,engine,lab_name="JumpLandingLab"):
+    assert lab_name in ["JumpLandingLab","LiveRidingLab"]
+    root=workspace/lab_name;build=json.loads((root/'native_build.json').read_text())
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     assert build['passed'] and digest(normal)==build['normal_binary_sha256']
     output=root/'PhysicsAcceptance'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)

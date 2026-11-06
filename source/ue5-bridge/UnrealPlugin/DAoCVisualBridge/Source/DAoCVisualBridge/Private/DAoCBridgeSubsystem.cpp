@@ -78,7 +78,7 @@ void ApplyApprovedBarkCompatibility(UWorld* World){
     }
 }
 constexpr int32 MaxFrame=1048576;
-double ProfileEndTime(){double Seconds=105;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeProfileSeconds="),Seconds);return FMath::Clamp(Seconds,30.,105.);}
+double ProfileEndTime(){double Seconds=105;FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeProfileSeconds="),Seconds);return FMath::Clamp(Seconds,30.,FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeExtendedRidingTest"))?300.:105.);}
 FVector UEPoint(const TArray<TSharedPtr<FJsonValue>>& P) {return FVector((P[0]->AsNumber()-1364)*100,(P[2]->AsNumber()-1263)*100,(P[1]->AsNumber()-130)*100);}
 TArray<TSharedPtr<FJsonValue>> JsonPoint(const FVector& P) {return {MakeShared<FJsonValueNumber>(P.X/100+1364),MakeShared<FJsonValueNumber>(P.Z/100+130),MakeShared<FJsonValueNumber>(P.Y/100+1263)};}
 bool ValidPoint(const TArray<TSharedPtr<FJsonValue>>& P,int32 Count) {
@@ -146,7 +146,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){ClearLiveRiding();if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -283,6 +283,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     for(auto& Id:Gone){if(IsValid(Entities[Id]))Entities[Id]->Destroy();Entities.Remove(Id);EntityModels.Remove(Id);RemoteMotion.Remove(Id);EntityRows.Remove(Id);NameplateVisibility.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);}
     if(!Seen.Contains(TEXT("player:local")))bLocalAvailable=false;
     ApplyTargetTracking(M);
+    ApplyLiveRiding(M);
     ApplySpellVisuals(M);
     ApplySpellAudio(M);
     AnswerLineOfSightQueries(M);
@@ -348,7 +349,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     if(!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2&&PC->WasInputKeyJustPressed(EKeys::Enter))OpenChat();
     PlayerPawn->bUseControllerRotationYaw=false;
     if(Dead){PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->DisableMovement();}
-    else if(bNavigationReady&&PlayerPawn->GetCharacterMovement()->MovementMode==MOVE_None)PlayerPawn->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    else if(!bLocalMounted&&bNavigationReady&&PlayerPawn->GetCharacterMovement()->MovementMode==MOVE_None)PlayerPawn->GetCharacterMovement()->SetMovementMode(MOVE_Walking);
     if(!Dead&&!bChatOpen&&!Typing&&PC->WasInputKeyJustPressed(EKeys::F3))bMouseLookToggle=!bMouseLookToggle;
     SetMouseLook(!Dead&&!bChatOpen&&!Typing&&bControls&&!bExiting&&Focused&&!ClassicUIHovered()&&!InventoryHovered()&&!PlayerStatusHovered()&&(bMouseLookToggle||(bRightPointerHeld&&bRightPointerDragged)));
     if(bMouseLook){
@@ -361,9 +362,10 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     }
     UpdateRemoteMotionProbe();
     if(!Dead)PC->SetControlRotation(FRotator(CameraPitch,CameraYaw,0));
-    UpdateWaterMovement(!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty());
+    UpdateWaterMovement(!bLocalMounted&&!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty());
+    TickLiveRiding(Dt);
     if(!MovementKeys){MovementKeys=MakeShared<FBridgeMovementKeys>();FString Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/MovementKeys_v01/movement.json");FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeMovementKeysCatalog="),Path);MovementKeys->Load(Path);}
-    const bool TrackingEnabled=Focused&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!Dead&&!FacingLocked&&!bChatOpen&&!Typing;
+    const bool TrackingEnabled=!bLocalMounted&&Focused&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!Dead&&!FacingLocked&&!bChatOpen&&!Typing;
     const bool InputAvailable=TrackingEnabled&&FPlatformTime::Seconds()-ChatClosedAt>.2;
     FBridgeMovementKeys::FFrame Keys;
     if(!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoMovementKeysTest")))Keys=MovementKeys->Advance(InputAvailable,PC->WasInputKeyJustPressed(EKeys::NumLock),PC->WasInputKeyJustPressed(EKeys::ScrollLock),
@@ -394,7 +396,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         const bool ManualTrackInput=PC->IsInputKeyDown(EKeys::W)||PC->IsInputKeyDown(EKeys::S)||PC->IsInputKeyDown(EKeys::A)||PC->IsInputKeyDown(EKeys::D)||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock);
         const bool Tracking=UpdateTargetTracking(TrackingEnabled,ManualTrackInput,Desired);
         if(!Tracking&&!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
-        if(Focused&&!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PC->WasInputKeyJustPressed(EKeys::SpaceBar)&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();
+        if(Focused&&PC->WasInputKeyJustPressed(EKeys::SpaceBar)){if(bLocalMounted)RequestDismount();else if(!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();}
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoJumpTest"))){
             const double T=FPlatformTime::Seconds()-PlayerStartedAt;
             if(T>=8&&T<8.15&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();
@@ -416,26 +418,26 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(PC->WasInputKeyJustPressed(EKeys::Escape)&&!CloseClassicPanel()&&!CloseInventory()&&!CloseInteraction())OpenOptions();
     }else{PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
     if(!TrackingEnabled)StopTargetTracking(true);
-    UpdateWaterMovement(!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty(),Desired.IsNearlyZero());
+    UpdateWaterMovement(!bLocalMounted&&!Dead&&bNavigationReady&&bLocalAvailable&&!Session.IsEmpty(),Desired.IsNearlyZero());
     PlayerPosition=PlayerPawn->FeetPosition();TravelledMetres+=FVector::Dist2D(PreviousFeet,PlayerPosition)/100;PreviousFeet=PlayerPosition;
     PeakMovementSpeed=FMath::Max(PeakMovementSpeed,PlayerPawn->GetVelocity().Size2D()/100);
     if(!Dead&&!bChatOpen&&!Typing&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&FPlatformTime::Seconds()-LastMove>.1){
         auto Values=MakeShared<FJsonObject>();Values->SetArrayField(TEXT("position_m"),JsonPoint(PlayerPosition));
         Values->SetArrayField(TEXT("forward_xz"),{MakeShared<FJsonValueNumber>(FMath::Cos(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw))),MakeShared<FJsonValueNumber>(FMath::Sin(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw)))});
         Values->SetStringField(TEXT("target_entity_id"),CurrentTarget());Values->SetBoolField(TEXT("target_in_view"),PlayerSeesTarget());
-        Values->SetBoolField(TEXT("swimming"),bLocalSwimming);Values->SetBoolField(TEXT("on_ground"),PlayerPawn->GetCharacterMovement()->IsMovingOnGround());Values->SetNumberField(TEXT("vertical_speed_mps"),PlayerPawn->GetCharacterMovement()->IsMovingOnGround()&&PlayerPawn->PendingLandingSpeedMps>0?-PlayerPawn->PendingLandingSpeedMps:PlayerPawn->GetVelocity().Z/100);
-        Values->SetNumberField(TEXT("speed_mps"),PlayerPawn->GetVelocity().Size2D()/100);Send(TEXT("move"),Values);PlayerPawn->PendingLandingSpeedMps=0;LastMove=FPlatformTime::Seconds();
+        Values->SetBoolField(TEXT("swimming"),bLocalSwimming);Values->SetBoolField(TEXT("on_ground"),!bLocalMounted&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround());Values->SetNumberField(TEXT("vertical_speed_mps"),bLocalMounted?0:PlayerPawn->GetCharacterMovement()->IsMovingOnGround()&&PlayerPawn->PendingLandingSpeedMps>0?-PlayerPawn->PendingLandingSpeedMps:PlayerPawn->GetVelocity().Z/100);
+        Values->SetNumberField(TEXT("speed_mps"),bLocalMounted?RidingSpeedMps:PlayerPawn->GetVelocity().Size2D()/100);Send(TEXT("move"),Values);PlayerPawn->PendingLandingSpeedMps=0;LastMove=FPlatformTime::Seconds();
     }
     if(auto* Local=Entities.Find(TEXT("player:local")))if(IsValid(*Local)){
         if(IsValid(Camera))(*Local)->SetActorHiddenInGame(FVector::DistSquared(Camera->GetActorLocation(),PlayerPosition+FVector(0,0,170))<10000);
         if(auto* Figure=Cast<ASkeletalMeshActor>(*Local))Figure->GetSkeletalMeshComponent()->ForceMotionVector();
-        if(!Dead){(*Local)->SetActorLocation(PlayerPosition);if(!FacingLocked)(*Local)->SetActorRotation(FRotator(0,PlayerPawn->GetActorRotation().Yaw-90,0));}
+        if(!Dead){(*Local)->SetActorLocation(PlayerPosition);if(!FacingLocked||bLocalMounted)(*Local)->SetActorRotation(FRotator(0,PlayerPawn->GetActorRotation().Yaw-90,0));}
         const bool Airborne=PlayerPawn->GetCharacterMovement()->IsFalling();
         if(Airborne&&PlayerPawn->AirborneSince==0)PlayerPawn->AirborneSince=FPlatformTime::Seconds();
         if(!Airborne)PlayerPawn->AirborneSince=0;
         const bool JumpPose=Airborne&&(PlayerPawn->GetVelocity().Z>0||FPlatformTime::Seconds()-PlayerPawn->AirborneSince>.15);
         const bool Backward=PlayerPawn->GetVelocity().Size2D()>5&&FVector::DotProduct(PlayerPawn->GetVelocity(),PlayerPawn->GetActorForwardVector())<-5;
-        FString State=JumpPose?TEXT("jump"):bLocalSwimming?TEXT("swim"):Backward?TEXT("walk_back"):PlayerPawn->GetVelocity().Size2D()>250?TEXT("run"):PlayerPawn->GetVelocity().Size2D()>5?TEXT("walk"):TEXT("idle");
+        FString State=bLocalMounted&&bLocalSeatReady?TEXT("ride_horse"):JumpPose?TEXT("jump"):bLocalSwimming?TEXT("swim"):Backward?TEXT("walk_back"):PlayerPawn->GetVelocity().Size2D()>250?TEXT("run"):PlayerPawn->GetVelocity().Size2D()>5?TEXT("walk"):TEXT("idle");
         SetEntityAnimation(TEXT("player:local"),State);
     }
 }
@@ -490,6 +492,7 @@ void UDAoCBridgeSubsystem::WriteReport(){
     O->SetNumberField(TEXT("travelled_metres"),TravelledMetres);O->SetNumberField(TEXT("camera_yaw"),CameraYaw);O->SetNumberField(TEXT("camera_pitch"),CameraPitch);
     O->SetBoolField(TEXT("mouse_captured"),bMouseLook);O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);
     O->SetObjectField(TEXT("target_tracking"),TargetTrackingReport());
+    O->SetObjectField(TEXT("riding"),LiveRidingReport());
     if(MovementKeys){auto Keys=MakeShared<FJsonObject>();Keys->SetBoolField(TEXT("run_lock"),MovementKeys->RunLock);Keys->SetBoolField(TEXT("walk_toggle"),MovementKeys->WalkToggle);Keys->SetNumberField(TEXT("test_phase"),MovementKeysTestPhase);if(PlayerPawn)Keys->SetNumberField(TEXT("ground_speed_limit_mps"),PlayerPawn->GetCharacterMovement()->MaxWalkSpeed/100);O->SetObjectField(TEXT("movement_keys"),Keys);}
     if(PlayerPawn){O->SetNumberField(TEXT("landing_count"),PlayerPawn->LandingCount);O->SetNumberField(TEXT("last_landing_speed_mps"),PlayerPawn->LastLandingSpeedMps);}
     O->SetBoolField(TEXT("character_grounded"),IsValid(PlayerPawn)&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround());

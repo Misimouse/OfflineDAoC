@@ -1,19 +1,27 @@
-# Live mounted transport package
+# Live stable transport: bounded delivery
 
-Reference: current original DaocClient Riding 0xC8 decode / Dismount request, live ServerWorld saddle logic, zone_viewer mounted position/state 0x18, and DOL GameStableMaster/GameTaxi. The separate offline HorseRoutes controller is not the authority for a connected game.
+Status: installed on6November; owner gameplay and listening review remain pending. This closes the single-zone live riding package, not the entire client migration or unrestricted world travel. See LIVE-RIDING-DELIVERY.md for reproduction and scope.
 
-Read-only `audit_live_riding.py` inspected public merchant/path rows using SQLite mode=ro plus query_only. Six paths are offered by three stablemasters inside Connacht. Only `HR_TirNaNog_DruimLigen` stays fully within zone 207 (21/21 points). Freagus in Ardee offers two paths that leave it. Offline routes.json has region=0 for every row; those values cannot be treated as the live region ID. Segment/terrain/visual acceptance is still required even for an in-bounds point list.
+The server remains authoritative for ticket consumption, actual horse identity/size, mount acknowledgement, route, speed and dismount acknowledgement. The separate offline HorseRoutes controller is not substituted into a connected session. Original live route tickets and paths remain unchanged.
 
-Close this package in order:
+The actual Carsten ticket HR_TirNaNog_DruimLigen uses template313/model448, rather than standing stable horse2174. The original missing448 mesh, materials and animations were added in a new namespace, preserving every existing model entry. Native saddle placement follows the actual posed bone and instance transform. Rider animation uses original ride_horse; native input cannot walk the rider independently. Space and /dismount send the original request and wait for its acknowledgement.
 
-1. Isolated Godot mount-state contract: strict Riding packet, local/remote ownership, out-of-order steed spawn, removal, death/logout/region reset, dismount request awaiting real acknowledgement, stale/duplicate handling. No synthetic route movement or ticket consumption.
-2. Native saddle attachment and original ride_horse animation. Use the actual posed/instance-scaled saddle and keep camera orbit; mounted player cannot walk independently. Preserve authoritative mounted speed/heading/state in original position packets. Jump and /dismount send original request, do not fake successful unmount.
-3. Private real server itinerary: original stable ticket buy, consume once, real mount ACK, original horse route movement, jump/request/ACK, return to grounded collision and no orphaned camera. Verify ground height, animations and mount sound. Keep owner DB and WORK untouched.
-4. Boundaries are a delivery gate: the server must never continue charging/moving the player into unloaded zones. Resolve explicit supported travel handling before enabling unrestricted Ardee route purchase; do not silently alter original tickets/path rows or claim complete cross-zone travel.
-5. Current prior installed blocks must pass unchanged after candidate installation, with exact-file backup/rollback and cumulative owner checklist. No full stable travel claim until all phases are proven.
+Only the completed original21-point, approximately2180m itinerary is enabled. Five offered itineraries leave the currently loaded Connacht zone. The original shop shows those destinations unavailable, and the inventory command path rejects purchase before network transmission. Unknown or changed ticket/stable definitions cannot silently enable travel. No fabricated route, altered price, path rewrite or owner DB edit.
 
-Current normal runtime remains the tested target-tracking delivery. Riding work is private until these gates are met.
+The original sound-set41 supplies four byte-identical WAVs. Original Godot bone-contact timing drives native hoof sounds at the actual clip/stride rate. Master and effects volume apply. Human footsteps are suppressed while riding; hoof contact generation stops after dismount. Only prepared single-passenger slot0 is supported.
 
-Preparation evidence now covers 60 isolated packet/state checks and 44 native asset/saddle checks. All 13 original ride_horse animations load. The saddle reference point is recovered from the exact GLB imported into Unreal; 117 bone positions agree after axis conversion within 0.000052 cm. The native seat resolver follows the posed spine and the actual component transform, tested with scale/rotation/translation, galloping motion and a second independent mount. These are private prerequisites, not a delivered ride controller.
+Completed evidence:
 
-Reproduction order: `prepare_live_riding_data.py --source-only` extracts the deterministic catalog from the original GLB; build with `build_spell_audio_native.py --live-riding-candidate`; run `verify_live_riding_assets.py`; then run `prepare_live_riding_data.py` without source-only to verify native bones/current build and seal private resource evidence. No normal runtime installation is performed by these steps.
+- 68 isolated Riding-state checks,8 gateway checks,29 travel catalogue/inventory checks and35 existing inventory checks.
+- 64 native asset/saddle/stride checks, including all13 original playable ride clips and actual size factors0.96/1/1.3.
+- 265 previous audio/interface checks on the private candidate; walking53, jump9, target tracking35 and original water sampling65559 checks on the same binary.
+- Current-build full original server itinerary: Reports/live_riding_real_protocol/20261106-232432-545801/verified.json.
+- Current-build original ticket purchase, unsupported-ticket rejection, hoof PCM, actual native Space input and grounded/silent dismount: Reports/live_riding_real_protocol/20261106-233037-523164/verified.json.
+- Both real trials ended normally and restored the marked disposable database. Failed earlier attempts remain failed and were retained; the long-route QA profile now explicitly allows sufficient runtime and waits for its real duration.
+- Installation preview passed,60files installed,12 replaced files backed up, exact predecessor/successor file validation passed, and repeat installation returned already_current. Installed-client audio/UI regression results are kept separately.
+
+Source2174 axis calibration agrees within0.000052cm. Source448 node-rest versus imported skin reference differs by at most0.9996cm (spine anchor0.1863cm); that is recorded separately, not falsely described as exact. Independent native tests retain the source saddle point with the actual imported and posed reference under rotation, translation and instance scale. No guessed saddle-height fallback.
+
+Receipt: LiveRidingLab/installed.json. Backup: Backups/LiveRiding_20261106-234604-348155. Native DLL SHA256: eb2113ff0633cdb150a78ed2090934f405cc75497d5cf501f9f16aecf2f3bb01. Original archives, normal server data and WORK maps were not modified.
+
+Remaining scope: owner review; unrestricted cross-zone stable routes require more loaded world and explicit transition coverage. Personal mounts, boats, multiple seats and broader NPC travel are not claimed. The next main integration block is CLIENT-CONTROLS, using the original editable keybind/settings UI as reference.

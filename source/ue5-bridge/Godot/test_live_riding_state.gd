@@ -49,4 +49,15 @@ func _initialize()->void:
     r.reset(10)
     for i in range(128):r.consume("riding",{"rider":100+i,"steed":500,"mount":1,"slot":0},11000)
     check(r.riders.size()==128 and not r.consume("riding",{"rider":300,"steed":500,"mount":1,"slot":0},11001),"remote rider memory bounded")
+    r.reset(10);r.consume("riding",packet,12000)
+    entities["npc:20"].position_m=[100,130,100];entities["npc:20"].forward_xz=[1,0];entities["npc:20"].speed_mps=37.5
+    entities["npc:20"].motion={"at_ms":12000,"interval_ms":500,"destination_m":[200,130,100]}
+    check(r.speed_limit(entities,ids)==37.5,"mounted speed comes from original steed")
+    check(r.position_allowed(Vector3(137.5,131.6,100),entities,ids,13000),"native saddle prediction near actual server trajectory accepted")
+    check(not r.position_allowed(Vector3(500,131.6,100),entities,ids,13000),"unrelated native teleport rejected")
+    check(not r.position_allowed(Vector3(137.5,160,100),entities,ids,13000),"unsupported mounted flight rejected")
+    check(not r.position_allowed(Vector3(NAN,130,100),entities,ids,13000),"invalid mounted position rejected")
+    entities["npc:20"].speed_mps=100;check(r.speed_limit(entities,ids)==37.5,"ground taxi original speed cap")
+    entities["npc:20"].speed_mps=INF;check(r.speed_limit(entities,ids)==0,"malformed steed speed cannot accelerate player")
+    check(not r.position_allowed(Vector3.ZERO,{},ids,13000),"missing steed cannot authorize mounted input")
     c.free();print(JSON.stringify({"passed":true,"checks":checks}));quit()

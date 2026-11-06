@@ -18,6 +18,7 @@
 
 class FBridgeFootsteps {
     UDAoCBridgeSubsystem* S;
+    bool MountedMode=false;
     TMap<FString,TArray<float>> Contacts;
     TSharedPtr<FJsonObject> Index;
     TWeakObjectPtr<UAnimSequence> Previous;
@@ -26,9 +27,9 @@ class FBridgeFootsteps {
     float LastTime=0;
     int32 Steps=0,Sampled=0;
 public:
-    explicit FBridgeFootsteps(UDAoCBridgeSubsystem* Owner):S(Owner){
-        FString Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalFootstepAudio_v01/sounds.json");
-        FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeFootstepSoundCatalog="),Path);
+    explicit FBridgeFootsteps(UDAoCBridgeSubsystem* Owner,bool Mounted=false):S(Owner),MountedMode(Mounted){
+        FString Path=FPaths::ProjectPluginsDir()/(MountedMode?TEXT("DAoCVisualBridge/Content/LiveRiding_v01/Audio/sounds.json"):TEXT("DAoCVisualBridge/Content/OriginalFootstepAudio_v01/sounds.json"));
+        FParse::Value(FCommandLine::Get(),MountedMode?TEXT("DaocBridgeRidingSoundCatalog="):TEXT("DaocBridgeFootstepSoundCatalog="),Path);
         FString Text;if(FFileHelper::LoadFileToString(Text,*Path))FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Index);
     }
     const TArray<float>& ContactTimes(int32 Model,const FString& Clip,UAnimSequence* Animation){
@@ -36,7 +37,7 @@ public:
         if(const auto* Found=Contacts.Find(Key))return *Found;
         TArray<float> Times;
         auto Child=[](const TSharedPtr<FJsonObject>& O,const FString& Name){const TSharedPtr<FJsonObject>* V=nullptr;return O&&O->TryGetObjectField(Name,V)?*V:TSharedPtr<FJsonObject>();};
-        auto Source=Child(Child(Child(Child(Index,TEXT("local_player_models")),FString::FromInt(Model)),TEXT("contacts")),Clip);
+        auto Source=Child(Child(Child(Child(Index,MountedMode?TEXT("mounted_models"):TEXT("local_player_models")),FString::FromInt(Model)),TEXT("contacts")),Clip);
         const TArray<TSharedPtr<FJsonValue>>* Values=nullptr;double Length=0;
         // Use the original Godot bone-contact witness. Refuse changed clips;
         // do not infer steps from a timer or a retargeted reference skeleton.
@@ -56,24 +57,26 @@ public:
         LastTime=At;if(Crossed)++Steps;return Crossed;
     }
     void Tick(){
-        auto* Actor=Cast<ASkeletalMeshActor>(S->Entities.FindRef(TEXT("player:local")));
-        auto* Row=S->EntityRows.Find(TEXT("player:local"));auto* Pawn=S->PlayerPawn.Get();
+        if(MountedMode&&(!S->bLocalMounted||!S->bLocalSeatReady)){Previous.Reset();PreviousActor.Reset();return;}
+        const FString Id=MountedMode?S->LocalSteedId:TEXT("player:local");
+        auto* Actor=Cast<ASkeletalMeshActor>(S->Entities.FindRef(Id));
+        auto* Row=S->EntityRows.Find(Id);auto* Pawn=S->PlayerPawn.Get();
         if(!Actor||!Row||!Pawn){Previous.Reset();PreviousActor.Reset();return;}
         if(PreviousActor!=Actor){Previous.Reset();PreviousActor=Actor;}
         auto* Mesh=Actor->GetSkeletalMeshComponent();auto* Instance=Mesh->GetSingleNodeInstance();
         auto* Animation=Instance?Cast<UAnimSequence>(Instance->GetCurrentAsset()):nullptr;
-        const FString Clip=S->AnimationStates.FindRef(TEXT("player:local"));
+        const FString Clip=S->AnimationStates.FindRef(Id);
         const bool Locomotion=Clip==TEXT("walk")||Clip==TEXT("run")||Clip==TEXT("walk_back")||Clip==TEXT("strafe_left")||Clip==TEXT("strafe_right")||Clip==TEXT("swim");
-        const bool Moving=Locomotion&&((Clip==TEXT("swim")&&S->bLocalSwimming)||(Pawn->GetCharacterMovement()->IsMovingOnGround()&&Pawn->GetVelocity().Size2D()>5.f));
+        const bool Moving=Locomotion&&(MountedMode?S->RidingSpeedMps>.05:!S->bLocalMounted&&((Clip==TEXT("swim")&&S->bLocalSwimming)||(Pawn->GetCharacterMovement()->IsMovingOnGround()&&Pawn->GetVelocity().Size2D()>5.f)));
         const int32 Model=(*Row)->GetIntegerField(TEXT("model_id"));
-        if(Advance(Model,Clip,Animation,Instance?Instance->GetCurrentTime():0,Moving))S->PlayLocalFootstep(Model,S->LocalGroundSurface);
+        if(Advance(Model,Clip,Animation,Instance?Instance->GetCurrentTime():0,Moving)){if(MountedMode)S->PlayRidingHoof(Model,Id);else S->PlayLocalFootstep(Model,S->LocalGroundSurface);}
     }
     TSharedPtr<FJsonObject> Report()const{auto Out=MakeShared<FJsonObject>();Out->SetNumberField(TEXT("contacts_crossed"),Steps);Out->SetNumberField(TEXT("clips_sampled"),Sampled);return Out;}
 };
 
-void UDAoCBridgeSubsystem::TickFootsteps(){if(!Footsteps)Footsteps=MakeShared<FBridgeFootsteps>(this);Footsteps->Tick();}
-void UDAoCBridgeSubsystem::ClearFootsteps(){Footsteps.Reset();}
-TSharedPtr<FJsonObject> UDAoCBridgeSubsystem::FootstepReport()const{return Footsteps?Footsteps->Report():MakeShared<FJsonObject>();}
+void UDAoCBridgeSubsystem::TickFootsteps(){if(!Footsteps)Footsteps=MakeShared<FBridgeFootsteps>(this);Footsteps->Tick();if(!RidingFootsteps)RidingFootsteps=MakeShared<FBridgeFootsteps>(this,true);RidingFootsteps->Tick();}
+void UDAoCBridgeSubsystem::ClearFootsteps(){Footsteps.Reset();RidingFootsteps.Reset();}
+TSharedPtr<FJsonObject> UDAoCBridgeSubsystem::FootstepReport()const{auto Out=Footsteps?Footsteps->Report():MakeShared<FJsonObject>();if(RidingFootsteps)Out->SetObjectField(TEXT("riding"),RidingFootsteps->Report());return Out;}
 
 bool UDAoCBridgeSubsystem::TickFootstepAcceptance(){
     FString File;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeFootstepTest="),File))return false;

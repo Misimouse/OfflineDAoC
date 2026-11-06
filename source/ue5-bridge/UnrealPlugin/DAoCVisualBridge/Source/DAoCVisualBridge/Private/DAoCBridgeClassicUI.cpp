@@ -461,22 +461,24 @@ void UDAoCBridgeSubsystem::RefreshClassicMerchant(){
  const int64 Catalog=int64(CN(Merchant,TEXT("catalog_revision"),-1));const int32 Page=ClassicMerchantPage;
  for(auto Value:CA(Pages,*FString::FromInt(Page))){
   auto Item=Value->AsObject();const int32 Index=int32(CN(Item,TEXT("index"),-1));if(Index<0||Index>29)continue;if(Index==ClassicMerchantSelected)Selected=Item;
-  auto Buy=[this,Page,Index,Id,Catalog](){BuyMerchantItem(Page,Index,Id,Catalog);};
+  bool TravelAvailable=true;Item->TryGetBoolField(TEXT("travel_available"),TravelAvailable);
+  auto Buy=[this,Page,Index,Id,Catalog,TravelAvailable](){if(TravelAvailable)BuyMerchantItem(Page,Index,Id,Catalog);};
   auto Select=[this,Index,Buy](){const double Now=FPlatformTime::Seconds();const bool Twice=ClassicMerchantSelected==Index&&Now-ClassicMerchantClickAt<=.5;ClassicMerchantSelected=Index;ClassicMerchantClickAt=Now;if(Twice)Buy();RefreshClassicMerchant();};
   auto Row=SNew(SHorizontalBox);
   Row->AddSlot().AutoWidth()[SNew(SBox).WidthOverride(18).HeightOverride(18)[SNew(SClassicAction).Entry(Item).Icon(ClassicIcon(int32(CN(Item,TEXT("icon"),-1)))).Border(nullptr).Font(CF(6)).Bar(-1).Bank(-1).Slot(-1).InventorySlot(-1).Click(Select).DoubleClick(Buy)]];
-  Row->AddSlot().FillWidth(1)[CB(CT(CS(Item,TEXT("name")),8,Index==ClassicMerchantSelected?Gold:Cream),Select)];
+  Row->AddSlot().FillWidth(1)[CB(CT(CS(Item,TEXT("name")),8,!TravelAvailable?FLinearColor(.4,.4,.4,1):Index==ClassicMerchantSelected?Gold:Cream),Select)];
   List->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(18)[SNew(SBorder).Padding(0).BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"))).BorderBackgroundColor(Index==ClassicMerchantSelected?FLinearColor(.25,.2,.08,.45):FLinearColor(0,0,0,.05))[Row]]];
  }
  At(Canvas,{8,20},{324,360},SNew(SScrollBox)+SScrollBox::Slot()[List]);
  const int64 Price=int64(CN(Selected,TEXT("price")));const int64 Divisors[]={10000000000LL,10000000LL,10000LL,100LL,1LL};const int64 Limits[]={1000,1000,1000,100,100};const double CoinX[]={64,109,154,199,244};
  for(int32 I=0;I<5;++I){At(Canvas,{CoinX[I],392},{33,13},SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"))).BorderBackgroundColor(FLinearColor(.02,.02,.02,1)).Padding(0)[CT(Selected.IsValid()?FString::Printf(TEXT("%lld"),(Price/Divisors[I])%Limits[I]):TEXT(""),8)]);}
- At(Canvas,{8,406},{328,14},CT(CS(InventoryState,TEXT("feedback")),7,Gold));
+ bool TravelAvailable=true;if(Selected)Selected->TryGetBoolField(TEXT("travel_available"),TravelAvailable);
+ At(Canvas,{8,406},{328,14},CT(TravelAvailable?CS(InventoryState,TEXT("feedback")):CS(Selected,TEXT("travel_reason")),7,Gold));
  const int32 Position=PageNumbers.Find(Page);
  for(int32 Direction:{-1,1}){const int32 Next=PageNumbers[FMath::Clamp(Position+Direction,0,PageNumbers.Num()-1)];At(Canvas,{Direction<0?10.:96.,426},{22,16},CB(CT(Direction<0?TEXT("<"):TEXT(">"),9),[this,Next](){ClassicMerchantPage=Next;ClassicMerchantSelected=-1;ClassicMerchantClickAt=0;RefreshClassicMerchant();}));}
  At(Canvas,{34,428},{60,12},CT(FString::Printf(TEXT("%d / %d"),Position+1,PageNumbers.Num()),8));
  bool Pending=false;if(InventoryState)InventoryState->TryGetBoolField(TEXT("pending"),Pending);
- At(Canvas,{250,424},{80,18},SNew(SBox).IsEnabled(Selected.IsValid()&&!Pending&&CN(Merchant,TEXT("window"),-1)==0)[CB(CT(TEXT("BUY"),10),[this,Page,Id,Catalog](){if(ClassicMerchantSelected>=0)BuyMerchantItem(Page,ClassicMerchantSelected,Id,Catalog);})]);
+ At(Canvas,{250,424},{80,18},SNew(SBox).IsEnabled(Selected.IsValid()&&TravelAvailable&&!Pending&&CN(Merchant,TEXT("window"),-1)==0)[CB(CT(TEXT("BUY"),10),[this,Page,Id,Catalog](){if(ClassicMerchantSelected>=0)BuyMerchantItem(Page,ClassicMerchantSelected,Id,Catalog);})]);
  At(Canvas,{160,424},{70,18},SNew(SBox).IsEnabled(SelectedItemSlot>=40&&SelectedItemSlot<80&&InventoryItem(SelectedItemSlot).IsValid()&&!Pending)[CB(CT(TEXT("SELL"),10),[this](){bInventoryMoving=false;SendItemAction(TEXT("merchant_sell"),SelectedItemSlot);})]);
  auto Drop=SNew(SClassicShopDrop).Sell([this](int32 Slot,const FString& Token){if(CS(InventoryItem(Slot),TEXT("token"))==Token){bInventoryMoving=false;SendItemAction(TEXT("merchant_sell"),Slot);}})[Canvas];
  ClassicMerchantPanel=SNew(SClassicMove).Content(Drop).Move([this](FVector2D Delta){if(ClassicMerchantPosition.X<0)ClassicMerchantPosition.X=FMath::Max(0.,(UIViewportSize().X/ClassicScale()-350)*.5);ClassicMerchantPosition+=Delta;});

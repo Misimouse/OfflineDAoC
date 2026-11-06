@@ -1,6 +1,7 @@
 extends RefCounted
 ## A view of server inventory. Commands never change items or coins optimistically.
 const EQUIPMENT:=[10,11,12,13,21,22,23,24,25,26,27,28,29,32,33,34,35,36,37]
+var purchase_filter:Callable
 var items:Dictionary={}
 var vault:Dictionary={}
 var money:Dictionary={}
@@ -131,6 +132,9 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
             if input_integer(value,"count",1)!=1:return fail("Buy one pack at a time.")
             if int(offered.get("price",-1))<0 or total_copper()<int(offered.price):return fail("You do not have enough money.")
             if first_free()<0:return fail("Free a backpack slot before buying.")
+            if purchase_filter.is_valid():
+                var gate:Dictionary=purchase_filter.call(row,page,offered)
+                if gate.get("managed",false) and not gate.get("available",false):return fail(String(gate.get("reason","This destination is not available in the loaded world yet.")))
             client.call("Target",int(id.get_slice(":",1)),0xE000)
             client.call("BuyItem",x,y,page*30+index,1,0)
         else:

@@ -20,13 +20,15 @@ def audit(workspace,install):
     with closing(sqlite3.connect('file:'+db.as_posix()+'?mode=ro',uri=True)) as con:
         con.execute('PRAGMA query_only=ON');assert con.execute('PRAGMA query_only').fetchone()[0]==1
         con.row_factory=sqlite3.Row
-        stables=con.execute("SELECT Name,ItemsListTemplateID,X,Y FROM Mob WHERE Region=? AND ClassType LIKE '%Stable%' AND X>=? AND X<? AND Y>=? AND Y<?",(zone['region'],lo[0],hi[0],lo[1],hi[1])).fetchall()
+        stables=con.execute("SELECT Name,ItemsListTemplateID,X,Y,Z,Model FROM Mob WHERE Region=? AND ClassType LIKE '%Stable%' AND X>=? AND X<? AND Y>=? AND Y<?",(zone['region'],lo[0],hi[0],lo[1],hi[1])).fetchall()
         for stable in stables:
-            for item in con.execute('SELECT ItemTemplateID FROM MerchantItem WHERE ItemListID=?',(stable['ItemsListTemplateID'],)):
+            for item in con.execute('SELECT ItemTemplateID,PageNumber,SlotPosition FROM MerchantItem WHERE ItemListID=?',(stable['ItemsListTemplateID'],)):
                 points=con.execute('SELECT Step,X,Y,Z,MaxSpeed,WaitTime FROM PathPoints WHERE PathID=? ORDER BY Step',(item[0],)).fetchall()
                 if not points:continue
                 mask=[contains(p['X'],p['Y']) for p in points]
-                rows.append(dict(stable=stable['Name'],ticket=item[0],point_count=len(points),inside_points=sum(mask),fully_inside_zone207=all(mask),first_outside_step=next((p['Step'] for p,ok in zip(points,mask) if not ok),None),starts_near_stable=abs(points[0]['X']-stable['X'])<500 and abs(points[0]['Y']-stable['Y'])<500))
+                definition=con.execute('SELECT Color,Name,Model,Price,Object_Type FROM ItemTemplate WHERE Id_nb=?',(item[0],)).fetchone()
+                template=con.execute('SELECT Model FROM NpcTemplate WHERE TemplateId=?',(definition[0],)).fetchone() if definition else None
+                rows.append(dict(stable=stable['Name'],stable_position_m=[(stable['X']-lo[0])*.025,stable['Z']*.025,(stable['Y']-lo[1])*.025],stable_model=stable['Model'],page=item['PageNumber'],index=item['SlotPosition'],name=definition['Name'],model=definition['Model'],price=definition['Price'],object_type=definition['Object_Type'],ticket=item[0],steed_template_id=definition[0] if definition else None,steed_model=template[0] if template else None,point_count=len(points),inside_points=sum(mask),fully_inside_zone207=all(mask),first_outside_step=next((p['Step'] for p,ok in zip(points,mask) if not ok),None),starts_near_stable=abs(points[0]['X']-stable['X'])<500 and abs(points[0]['Y']-stable['Y'])<500))
     assert rows and all(r['starts_near_stable'] for r in rows)
     result=dict(passed=True,scope='Read-only public stable/path contract, not live riding implementation',zone=207,region=200,
         server_packet='Riding 0xC8: rider u16, steed u16, mount u8, slot u8',client_request='Dismount 0xC8 with zero u16 payload',

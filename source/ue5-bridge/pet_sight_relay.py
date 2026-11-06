@@ -5,14 +5,15 @@ from pathlib import Path
 class NativeSightRelay:
  def __init__(self,backend,root,session,snapshot,output=None,duration=120,entity_ids=None,render=True,native_profile=None):
   folder=Path(output) if output is not None else root/'Reports/training_staff_fx_pets'
-  assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=180
+  assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=(300 if native_profile=='live_riding' else 180)
   folder.mkdir(parents=True,exist_ok=True)
   keys_candidate=native_profile in ['keys_water_walk','keys_water_crossing']
   if keys_candidate:native_profile=native_profile.removeprefix('keys_')
   jump_candidate=native_profile in ['jump_water_walk','jump_water_crossing']
   if jump_candidate:native_profile=native_profile.removeprefix('jump_')
   self.native_profile=native_profile
-  self.geometry_gate=native_profile in ['door_crossing','footstep_walk','water_walk','water_crossing','jump_landing','movement_keys','target_tracking']
+  self.duration=duration
+  self.geometry_gate=native_profile in ['door_crossing','footstep_walk','water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding']
   self.audio_forwarded=[];self.movement_forwarded=[]
   self.entity_ids=set(entity_ids) if entity_ids is not None else None
   self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=folder/'live_native_current.json';self.report.unlink(missing_ok=True)
@@ -22,7 +23,7 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking'] and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
@@ -50,6 +51,9 @@ class NativeSightRelay:
     host=root/'ServerSoundAudioLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
     cmd.extend(['-DaocBridgeServerSoundCatalog='+str(root/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json'),'-DaocBridgeAudioSettings='+str(settings)])
+   if native_profile=='live_riding':
+    host=root/'LiveRidingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
+    cmd.remove('-DaocBridgeReadOnly');cmd.extend(['-DaocBridgeExtendedRidingTest','-DaocBridgeAutoTargetTrackingTest','-DaocBridgeRidingCatalog='+str(root/'LiveRidingLab/riding.json'),'-DaocBridgeYaw=0','-DaocBridgeRidingCapture='+str(output/'Mounted.png'),'-DaocBridgeRidingSpaceRequest='+str(output/'Space.request'),'-DaocBridgeRidingSoundCatalog='+str(root/'LiveRidingLab/OriginalRidingAudio_v01/sounds.json')])
    if native_profile=='target_tracking':
     host=root/'TargetTrackingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     cmd.remove('-DaocBridgeReadOnly');cmd.extend(['-DaocBridgeAutoTargetTrackingTest','-DaocBridgeYaw=0'])
@@ -67,7 +71,7 @@ class NativeSightRelay:
     host=root/'WaterMovementLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
     settings=folder/'native_audio.ini';settings.write_text('[Audio]\nMaster=0.03\nEffects=1\n',encoding='utf-8')
     cmd.extend(['-DaocBridgeWaterField='+str(root/'WaterMovementLab/water_field.json'),'-DaocBridgeAudioSettings='+str(settings)])
-   if native_profile in ['water_walk','water_crossing','jump_landing','movement_keys','target_tracking']:
+   if native_profile in ['water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding']:
     cmd.append('-DaocBridgeEnvironmentCatalog='+str(root/'environment_catalog.json'))
    if jump_candidate:host=root/'JumpLandingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
    if keys_candidate:host=root/'MovementKeysLab/NativeHost/SpellAudioHost.uproject';assert host.exists();cmd.append('-DaocBridgeMovementKeysCatalog='+str(root/'MovementKeysLab/movement.json'))
@@ -75,11 +79,12 @@ class NativeSightRelay:
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
    appearance=review/'appearance_catalog.json'
-   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking']:
+   if native_profile in ['central_expansion_forms','spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding']:
     plugin=root/'Client/Plugins/DAoCVisualBridge'
     replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
     appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
-   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking']:
+   if native_profile=='live_riding':replacements['-DaocBridgeCatalog=']=root/'LiveRidingLab/models.json'
+   if native_profile in ['spell_audio','combat_audio','door_audio','door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding']:
     cmd.remove('-nosound')
     cmd.append('-AudioMixer')
    if native_profile=='spell_audio':
@@ -101,11 +106,11 @@ class NativeSightRelay:
   self.process=subprocess.Popen(cmd,cwd=root,stdout=self.log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW);self.ue,_=self.listener.accept();self.ue.settimeout(10);self.ue.sendall((json.dumps(dict(type='hello',protocol='daoc-visual-bridge',version=1,session=session))+'\n'+json.dumps(self.native_snapshot(snapshot))+'\n').encode());self.ue.setblocking(False);self.ue.setsockopt(socket.SOL_SOCKET,socket.SO_SNDBUF,65536);self.pending=b'';self.latest=b''
  def native_snapshot(self,value):
   if value.get('combat_audio') and len(self.audio_forwarded)<32:self.audio_forwarded.append({'snapshot_seq':value.get('seq'),'events':value['combat_audio']})
-  if self.entity_ids is None:return value
-  native=dict(value);native['entities']=[e for e in value.get('entities',[]) if e['id'] in self.entity_ids]
+  if self.entity_ids is None and self.native_profile!='live_riding':return value
+  native=dict(value);native['entities']=[e for e in value.get('entities',[]) if self.entity_ids is None or e['id'] in self.entity_ids]
   if self.geometry_gate:
    report=self.read_report()
-   ready=report.get('navigation_ready') and report.get('door_groups',0)>=2 and report.get('structure_colliders',0)>=11 and report.get('terrain_colliders',0)>=1
+   ready=report.get('navigation_ready') and report.get('terrain_colliders',0)>=1 and (self.native_profile=='live_riding' or (report.get('door_groups',0)>=2 and report.get('structure_colliders',0)>=11))
    if ready:self.geometry_gate=False
    else:native['entities']=[]
   # Limit the observer to the tested actors; the real backend/player still
@@ -132,7 +137,7 @@ class NativeSightRelay:
      if str(v.get('query_id','')).startswith('probe:'):self.probe_result=v.get('visible');self.probes.append(dict(v,report_position=self.read_report().get('position_m')));self.probe=None
      else:self.answers.append(dict(v,question=self.questions.get(v.get('query_id')),report_position=self.read_report().get('position_m')));self.backend.sendall(line+b'\n')
     elif v.get('action')=='ping':self.backend.sendall(line+b'\n')
-    elif self.native_profile in ['door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking'] and v.get('action') in ['move','door','tracking_feedback','tracking_request']:
+    elif self.native_profile in ['door_crossing','footstep_walk','server_sound','water_walk','water_crossing','jump_landing','movement_keys','target_tracking','live_riding'] and v.get('action') in ['move','door','tracking_feedback','tracking_request','dismount']:
      if v.get('action')=='move':self.movement_forwarded.append(v)
      self.backend.sendall(line+b'\n')
   if self.backend not in ready:raise socket.timeout()
@@ -158,4 +163,4 @@ class NativeSightRelay:
   if self.ue:self.ue.close()
   self.listener.close()
  def finish(self):
-  self.process.wait(timeout=110);self.log.close();return self.process.returncode
+  self.process.wait(timeout=max(110,self.duration+20));self.log.close();return self.process.returncode

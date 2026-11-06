@@ -29,7 +29,8 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     if(PlayerState.IsValid()&&PlayerState->TryGetObjectField(TEXT("vitals"),VitalsPtr))Vitals=*VitalsPtr;
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
     const bool Dead=Local?(Ready?PoseNum(Vitals,TEXT("health_pct"))<=0:Pose.Dead):Requested==TEXT("dead");
-    const bool Sitting=Ready&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
+    const bool Mounted=!Dead&&(Local?(bLocalMounted&&bLocalSeatReady):(*Row)->HasField(TEXT("riding_steed_entity_id")));
+    const bool Sitting=Ready&&!Mounted&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
     const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump")||Requested==TEXT("walk_back");
     auto Clip=[&](const FString& Key)->UAnimSequenceBase*{FString Path;return (*Entry)->TryGetStringField(Key,Path)?LoadObject<UAnimSequenceBase>(nullptr,*Path):nullptr;};
     if(Dead){
@@ -63,7 +64,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     if(Pose.ActionUntil<=Now){Pose.ActionClip.Empty();Pose.ActionUntil=0;}
     bool SpellPose=false,SpellLoop=false;FString SpellKey;double SpellAt=0;int64 SpellSeq=0;
     const TSharedPtr<FJsonObject>* CastData=nullptr;
-    if(!Dead&&!Sitting&&!Moving&&(*Row)->TryGetObjectField(TEXT("spell_cast"),CastData)){
+    if(!Dead&&!Mounted&&!Sitting&&!Moving&&(*Row)->TryGetObjectField(TEXT("spell_cast"),CastData)){
         auto C=*CastData;FString Phase;C->TryGetStringField(TEXT("phase"),Phase);const double Age=PoseNum(C,TEXT("age_ms"))/1000.+(LastSnapshot>0?FMath::Max(0.,Now-LastSnapshot):0.);const double Duration=PoseNum(C,TEXT("duration_ms"))/1000.;SpellSeq=int64(PoseNum(C,TEXT("seq")));
         const TArray<TSharedPtr<FJsonValue>>* Names=nullptr;C->TryGetArrayField(TEXT("anims"),Names);
         auto CastingClip=[&](int32 I,const FString& Fallback){FString K=Names&&Names->IsValidIndex(I)&&(*Names)[I]->Type==EJson::String?(*Names)[I]->AsString():Fallback;return Clip(K)?K:Fallback;};
@@ -75,9 +76,10 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
         }else if(SpellSeq>0&&Age>=0&&Phase==TEXT("released")&&!PoseFlag(C,TEXT("instant"))){SpellKey=CastingClip(2,TEXT("cast_end"));if(auto* End=Clip(SpellKey)){SpellPose=Age<End->GetPlayLength();SpellAt=Age;}}
     }
     if(SpellPose){Pose.ActionClip.Empty();Pose.ActionUntil=0;Pose.Transition.Empty();Pose.TransitionUntil=0;}
-    const bool Action=!Dead&&!Pose.ActionClip.IsEmpty()&&Pose.ActionUntil>Now;
+    const bool Action=!Dead&&!Mounted&&!Pose.ActionClip.IsEmpty()&&Pose.ActionUntil>Now;
     FString Key=Requested;bool Loop=true,Reverse=false;
     if(Dead){Key=TEXT("death");Loop=false;}
+    else if(Mounted){Key=TEXT("ride_horse");Pose.ActionClip.Empty();Pose.ActionUntil=0;Pose.Transition.Empty();Pose.TransitionUntil=0;}
     else if(SpellPose){Key=SpellKey;Loop=SpellLoop;}
     else if(Action){Key=Pose.ActionClip;Loop=false;}
     else if(!Pose.Transition.IsEmpty()){Reverse=Pose.Transition==TEXT("sit_down_reverse");Key=TEXT("sit_down");Loop=false;}

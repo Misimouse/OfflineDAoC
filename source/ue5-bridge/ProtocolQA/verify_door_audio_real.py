@@ -23,11 +23,17 @@ parser.add_argument('--server-sounds',action='store_true')
 parser.add_argument('--water-motion',action='store_true')
 parser.add_argument('--water-regression',action='store_true')
 parser.add_argument('--target-tracking',action='store_true')
+parser.add_argument('--live-riding',action='store_true')
+parser.add_argument('--riding-full-route',action='store_true')
+parser.add_argument('--riding-space',action='store_true')
 parser.add_argument('--keys-candidate',action='store_true')
 parser.add_argument('--movement-keys',action='store_true')
 parser.add_argument('--jump-landing',action='store_true')
 parser.add_argument('--jump-candidate',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
+assert not args.riding_space or (args.live_riding and not args.riding_full_route)
+assert not args.riding_full_route or args.live_riding
+assert not args.live_riding or (args.native and not any([args.target_tracking,args.crossing,args.water_motion,args.water_regression,args.server_sounds,args.footsteps,args.jump_landing,args.jump_candidate,args.movement_keys,args.keys_candidate]))
 assert not args.target_tracking or (args.native and not any([args.crossing,args.water_motion,args.water_regression,args.server_sounds,args.footsteps,args.jump_landing,args.jump_candidate,args.movement_keys,args.keys_candidate]))
 assert not args.keys_candidate or (args.native and (args.water_motion or args.water_regression))
 assert not args.movement_keys or (args.native and not any([args.crossing,args.water_motion,args.water_regression,args.server_sounds,args.footsteps,args.jump_landing,args.jump_candidate]))
@@ -41,7 +47,7 @@ assert not args.footsteps or (args.native and args.crossing)
 os.environ['DAOC_INSTALL']=str(args.install.resolve());sys.path.insert(0,str(workspace/'ProtocolQA'))
 from qa_runtime import ROOT,RUN,SERVER,DB,env,dotnet,ENGINE
 assert ROOT.resolve()==workspace and DB.is_relative_to(RUN) and RUN.is_relative_to(workspace/'ProtocolQA')
-output=workspace/('Reports/target_tracking_real_protocol' if args.target_tracking else 'Reports/movement_keys_real_protocol' if args.movement_keys else 'Reports/jump_landing_real_protocol' if args.jump_landing else 'Reports/water_door_regression' if args.water_regression else 'Reports/water_movement_real_protocol' if args.water_motion else 'Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
+output=workspace/('Reports/live_riding_real_protocol' if args.live_riding else 'Reports/target_tracking_real_protocol' if args.target_tracking else 'Reports/movement_keys_real_protocol' if args.movement_keys else 'Reports/jump_landing_real_protocol' if args.jump_landing else 'Reports/water_door_regression' if args.water_regression else 'Reports/water_movement_real_protocol' if args.water_motion else 'Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
 result={'passed':False,'disposable_only':True,'checks':{},'errors':[]};server=client=peer=relay=None;logs=[];backed=False
 session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[];sound_trace=[]
 config=RUN/'bridge_config.json';config_before=config.read_bytes()
@@ -68,9 +74,9 @@ def pump():
         if value.get('type')=='hello':session=value['session']
         if value.get('type')=='snapshot':
             snapshot=value
-            if (args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking) and relay:
+            if (args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking or args.live_riding) and relay:
                 current=relay.read_report()
-                if (current.get('door_auto_test') or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking) and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
+                if (current.get('door_auto_test') or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking or args.live_riding) and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
             for event in value.get('server_sound_audio',[]):
                 if not any(row['seq']==event['seq'] for row in sound_trace):sound_trace.append(event)
             for event in value.get('combat_audio',[]):
@@ -108,6 +114,26 @@ try:
             names=list(witness);db.execute('INSERT INTO Mob ('+','.join('"'+n+'"' for n in names)+') VALUES ('+','.join('?' for _ in names)+')',[witness[n] for n in names])
             outdoor=dict(witness, Mob_ID=witness['Mob_ID']+'_outdoor',Name='Codex Outdoor Witness',Y=round(1257.6*40)+51*8192)
             db.execute('INSERT INTO Mob ('+','.join('"'+n+'"' for n in names)+') VALUES ('+','.join('?' for _ in names)+')',[outdoor[n] for n in names])
+        if args.live_riding:
+            # Copy public game definitions only into the marked private fixture.
+            normal_db=args.install.resolve()/'runtime/data/opendaoc.sqlite3.db'
+            with closing(sqlite3.connect('file:'+normal_db.as_posix()+'?mode=ro',uri=True)) as reference:
+                reference.row_factory=sqlite3.Row;reference.execute('PRAGMA query_only=ON')
+                stable=dict(reference.execute("SELECT * FROM Mob WHERE Name='Carsten' AND Region=200 AND ClassType LIKE '%Stable%' LIMIT 1").fetchone())
+                ticket='HR_TirNaNog_DruimLigen';item=dict(reference.execute('SELECT * FROM ItemTemplate WHERE Id_nb=?',(ticket,)).fetchone())
+                path=dict(reference.execute('SELECT * FROM Path WHERE PathID=?',(ticket,)).fetchone());points=[dict(row) for row in reference.execute('SELECT * FROM PathPoints WHERE PathID=? ORDER BY Step',(ticket,))]
+                merchants=[dict(row) for row in reference.execute('SELECT * FROM MerchantItem WHERE ItemListID=?',(stable['ItemsListTemplateID'],))]
+                route_items=[dict(reference.execute('SELECT * FROM ItemTemplate WHERE Id_nb=?',(r['ItemTemplateID'],)).fetchone()) for r in merchants]
+                template=dict(reference.execute('SELECT * FROM NpcTemplate WHERE TemplateId=?',(item['Color'],)).fetchone())
+            assert points and all(35*8192<=row['X']<43*8192 and 51*8192<=row['Y']<59*8192 for row in points)
+            stable['Mob_ID']='codex_riding_stable_'+hashlib.sha256(RUN.name.encode()).hexdigest()[:12]
+            stable['ItemsListTemplateID']=stable['Mob_ID']
+            for i,merchant in enumerate(merchants):merchant['ItemListID']=stable['ItemsListTemplateID'];merchant['MerchantItem_ID']=stable['Mob_ID']+'_'+str(i)
+            for table,rows in [('Mob',[stable]),('ItemTemplate',route_items),('Path',[path]),('PathPoints',points),('MerchantItem',merchants),('NpcTemplate',[template])]:
+                for row in rows:
+                    names=list(row);db.execute('INSERT OR REPLACE INTO "'+table+'" ('+','.join('"'+n+'"' for n in names)+') VALUES ('+','.join('?' for _ in names)+')',[row[n] for n in names])
+            start=[(stable['X']-35*8192)*.025,stable['Z']*.025,(stable['Y']-51*8192)*.025+2]
+            db.execute("UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Gold=5 WHERE Name='Codexdruid'",(round(start[0]*40)+35*8192,round(start[2]*40)+51*8192,round(start[1]*40)))
         db.commit()
     cfg=json.loads(config_before);cfg['initial_spawn_m']=start;config.write_text(json.dumps(cfg),encoding='utf-8')
     for p in source.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
@@ -125,6 +151,7 @@ try:
     (RUN/'Reports/live/logout.request').unlink(missing_ok=True)
     log=(output/'client.log').open('w',encoding='utf-8');logs.append(log)
     command=[str(args.install/'new-client/tools/godot_net/Godot_v4.7.2-stable_mono_win64_console.exe'),'--headless','--path',str(RUN/'LobbyProject'),'--script',str(RUN/'Godot/gateway_main.gd'),'--','--server=127.0.0.1','--server-port=10351','--account='+account,'--password='+password,'--no-world','--bridge-character=Codexdruid','--bridge-door-audio-catalog='+str(workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json')]
+    if args.live_riding:command.append('--bridge-travel-catalog='+str(workspace/'LiveRidingLab/travel_routes.json'))
     if args.server_sounds:command.append('--bridge-server-sound-catalog='+str(workspace/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json'))
     client=subprocess.Popen(command,cwd=RUN,env=ce,stdout=log,stderr=subprocess.STDOUT,creationflags=subprocess.CREATE_NO_WINDOW)
     end=time.monotonic()+45
@@ -143,9 +170,9 @@ try:
             witness_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Tracking Witness');ids.append(witness_id)
             wait(lambda:any(row.get('name')=='Codex Outdoor Witness' for row in snapshot['entities']),'Private outdoor witness spawns')
             outdoor_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Outdoor Witness');ids.append(outdoor_id)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=90 if args.target_tracking else 60,entity_ids=ids,render=True,native_profile='target_tracking' if args.target_tracking else ('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=180 if args.live_riding and args.riding_full_route else 120 if args.live_riding else 90 if args.target_tracking else 60,entity_ids=None if args.live_riding else ids,render=True,native_profile='live_riding' if args.live_riding else 'target_tracking' if args.target_tracking else ('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
-        if args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
+        if args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking or args.live_riding:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
     door=207033603
     if args.crossing:
@@ -164,7 +191,7 @@ try:
         assert sum(row['event']=='open' for row in trace)>=2 and sum(row['event']=='close' for row in trace)>=2
         result['checks']['native_closed_collision_crossing_return']=True
         result['crossing']={'plane_m':plane,'closed_outside_samples':len(outside),'closed_inside_samples':len(inside),'samples':len(motion)}
-    if not args.crossing and not args.water_motion and not args.jump_landing and not args.movement_keys and not args.target_tracking:
+    if not args.crossing and not args.water_motion and not args.jump_landing and not args.movement_keys and not args.target_tracking and not args.live_riding:
         # Manual packet checks are separate from the native movement itinerary.
         send('door',door_id=door,open=False)
         wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Closed baseline acknowledged')
@@ -180,6 +207,54 @@ try:
         assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
         result['checks']['real_close_acknowledged_and_anchored']=True
         settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
+    if args.live_riding:
+        wait(lambda:any(row.get('name')=='Carsten' for row in snapshot['entities']),'Original stable master fixture spawns')
+        stable_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Carsten')
+        send('target',entity_id=stable_id);settle(.3);send('interact',entity_id=stable_id)
+        wait(lambda:bool(snapshot.get('interaction',{}).get('merchant',{}).get('pages')),'Original merchant window receives real route ticket')
+        shop=snapshot['interaction']['merchant'];offers=[(int(page),row) for page,rows in shop['pages'].items() for row in rows if row.get('name')==item['Name']]
+        assert len(offers)==1;page,offer=offers[0]
+        unavailable=[(int(p),r) for p,rows in shop['pages'].items() for r in rows if r.get('travel_available') is False]
+        assert unavailable,'Original shop must include its unsupported destinations'
+        blocked_page,blocked=unavailable[0];money_before=snapshot['inventory']['money'];items_before=snapshot['inventory']['items']
+        send('merchant_buy',merchant_id=stable_id,merchant_revision=shop['catalog_revision'],inventory_revision=snapshot['inventory']['state_revision'],page=blocked_page,index=blocked['index'],count=1)
+        wait(lambda:'not available in the loaded world' in snapshot.get('inventory',{}).get('feedback',''),'Unsupported route rejected before original BuyItem')
+        settle(.5);assert snapshot['inventory']['money']==money_before and snapshot['inventory']['items']==items_before and not snapshot['inventory']['pending'] and not snapshot['riding']['mounted']
+        result['checks']['unsupported_route_no_charge_no_item_no_mount']=True
+
+        send('merchant_buy',merchant_id=stable_id,merchant_revision=shop['catalog_revision'],inventory_revision=snapshot['inventory']['state_revision'],page=page,index=offer['index'],count=1)
+        wait(lambda:snapshot.get('riding',{}).get('mounted',False),'Original server confirms ticket purchase and mount',15)
+        wait(lambda:relay.read_report().get('riding',{}).get('seat_ready',False),'Native resolves actual server mount saddle',15)
+        native=relay.read_report();origin=native['position_m'];assert native.get('local_animation')=='ride_horse',native.get('local_animation')
+        result['checks']['original_ticket_buy_mount_ack_and_pose']=True
+        wait(lambda:((relay.read_report()['position_m'][0]-origin[0])**2+(relay.read_report()['position_m'][2]-origin[2])**2)**.5>8,'Actual server horse carries native rider',20)
+        assert snapshot['riding']['state_flags']==0x18 and any(row.get('speed_mps',0)>10 for row in relay.movement_forwarded)
+        result['checks']['actual_server_route_movement']=True
+        wait(lambda:relay.read_report().get('spell_audio',{}).get('riding_hoof_pcm_consumed_bytes',0)>0,'Original hoof PCM consumed during actual server travel',15)
+        result['checks']['original_gallop_pcm_consumed_during_real_route']=True
+
+        if args.riding_full_route:
+            wait(lambda:not snapshot.get('riding',{}).get('mounted',True),'Original server ends full route and acknowledges dismount',200)
+            expected=[(points[-1]['X']-35*8192)*.025,points[-1]['Z']*.025,(points[-1]['Y']-51*8192)*.025]
+            actual=relay.read_report()['position_m'];distance=((actual[0]-expected[0])**2+(actual[2]-expected[2])**2)**.5
+            assert distance<12,(actual,expected,distance)
+            result['checks']['original_route_reaches_final_path_point']=True
+            result['route_end_error_m']=distance
+        elif args.riding_space:
+            (output/'Space.request').write_text('Press and release Space via native input',encoding='utf-8')
+            wait(lambda:relay.read_report().get('riding',{}).get('qa_space_key_sent',False),'Actual native Space input injected',10)
+            wait(lambda:not snapshot.get('riding',{}).get('mounted',True),'Original server acknowledges native Space dismount',15)
+            result['checks']['actual_space_key_dismount_request_and_ack']=True
+        else:
+            send('chat',text='/dismount')
+            wait(lambda:not snapshot.get('riding',{}).get('mounted',True),'Original server acknowledges dismount',15)
+        wait(lambda:not relay.read_report().get('riding',{}).get('mounted',True) and relay.read_report().get('character_grounded',False),'Native restores grounded character collision',15)
+        result['checks']['actual_dismount_ack_and_grounded_collision']=True
+        settle(1);hoof_before=relay.read_report().get('spell_audio',{}).get('riding_hoof_clips',0);assert hoof_before>0
+        settle(1);assert relay.read_report().get('spell_audio',{}).get('riding_hoof_clips',0)==hoof_before
+        result['checks']['no_new_hoof_sounds_after_dismount']=True
+
+        result['route_ticket']=ticket;result['mounted_origin']=origin;result['end_position']=relay.read_report()['position_m'];result['native_move_commands']=relay.movement_forwarded
     if args.target_tracking:
         send('chat',text='/follow');settle(.5)
         assert any('You must select a target to follow!' in row.get('text','') for row in snapshot.get('chat',{}).get('entries',[]))
@@ -288,17 +363,21 @@ try:
         wait(lambda:relay.read_report()['spell_audio']['pcm_consumed_bytes']>server_pcm_before,'Actual server event PCM consumed',15)
         result['server_sound_pcm_bytes']=relay.read_report()['spell_audio']['pcm_consumed_bytes']-server_pcm_before
     if relay:
-        if not args.jump_landing and not args.movement_keys:wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
+        if not args.jump_landing and not args.movement_keys and not args.live_riding:wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
         wait(lambda:relay.read_report().get('spell_audio',{}).get('played_clips',0)>=len(trace),'Native consumes every actual door transition',10)
-        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0)+audio.get('server_sound_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
+        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0)+audio.get('server_sound_clips',0)+audio.get('riding_hoof_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
         if args.footsteps or args.water_motion:
             steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
             result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
-        result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=not (args.jump_landing or args.movement_keys)
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('TargetTrackingLab/native_build.json' if args.target_tracking else 'MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=not (args.jump_landing or args.movement_keys or args.live_riding)
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('LiveRidingLab/native_build.json' if args.live_riding else 'TargetTrackingLab/native_build.json' if args.target_tracking else 'MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
     if args.movement_keys or args.keys_candidate:
         catalog=workspace/'MovementKeysLab/movement.json';result['native_inputs'][str(catalog)]=digest(catalog)
+    if args.live_riding:
+        for path in [workspace/'LiveRidingLab'/name for name in ['riding.json','models.json','travel_routes.json','audio_resources.json']]:result['native_inputs'][str(path)]=digest(path)
+        riding_audio=json.loads((workspace/'LiveRidingLab/audio_resources.json').read_text(encoding='utf-8-sig'))
+        for path in [riding_audio['catalog']]+list(riding_audio['files']):result['native_inputs'][path]=digest(Path(path))
     if args.water_motion or args.water_regression:
         approved=relay.read_report()['approved_environment']['bindings'];assert len(approved)==1
         layer=approved[0];assert layer['loaded'] and layer['references']==1 and layer['old_water_hidden'] and layer['visible_components']>0,layer
