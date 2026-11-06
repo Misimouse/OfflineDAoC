@@ -8,6 +8,7 @@ class NativeSightRelay:
   assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=180
   folder.mkdir(parents=True,exist_ok=True)
   self.native_profile=native_profile
+  self.geometry_gate=native_profile=='door_crossing'
   self.audio_forwarded=[]
   self.entity_ids=set(entity_ids) if entity_ids is not None else None
   self.backend=backend;self.root=root;self.session=session;self.ue=None;self.bbuf=b'';self.ubuf=b'';self.answers=[];self.questions={};self.probes=[];self.probe=None;self.probe_result=None;self.probe_serial=0;self.report=folder/'live_native_current.json';self.report.unlink(missing_ok=True)
@@ -68,6 +69,11 @@ class NativeSightRelay:
   if value.get('combat_audio') and len(self.audio_forwarded)<32:self.audio_forwarded.append({'snapshot_seq':value.get('seq'),'events':value['combat_audio']})
   if self.entity_ids is None:return value
   native=dict(value);native['entities']=[e for e in value.get('entities',[]) if e['id'] in self.entity_ids]
+  if self.geometry_gate:
+   report=self.read_report()
+   ready=report.get('navigation_ready') and report.get('door_groups',0)>=2 and report.get('structure_colliders',0)>=11 and report.get('terrain_colliders',0)>=1
+   if ready:self.geometry_gate=False
+   else:native['entities']=[]
   # Limit the observer to the tested actors; the real backend/player still
   # receives the entire world. This never manufactures a visibility reply.
   native.pop('qa_skill_audit',None)

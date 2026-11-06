@@ -109,6 +109,7 @@ try:
         spec=importlib.util.spec_from_file_location('door_native_relay',relay_source);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
         relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
+        if args.crossing:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
     door=207033603
     if args.crossing:
@@ -127,24 +128,26 @@ try:
         assert sum(row['event']=='open' for row in trace)>=2 and sum(row['event']=='close' for row in trace)>=2
         result['checks']['native_closed_collision_crossing_return']=True
         result['crossing']={'plane_m':plane,'closed_outside_samples':len(outside),'closed_inside_samples':len(inside),'samples':len(motion)}
-    # Establish a server-confirmed closed baseline, then listen only to transitions.
-    send('door',door_id=door,open=False)
-    wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Closed baseline acknowledged')
-    settle(1);baseline=len(trace)
-    send('door',door_id=door,open=True)
-    wait(lambda:len(trace)>baseline and trace[-1]['event']=='open','Server opening produces original door sound')
-    opening=dict(trace[-1]);assert opening['set']==1 and opening['owner']=='door:'+str(door)
-    result['checks']['real_open_acknowledged']=True
-    send('door',door_id=door,open=True);settle(1)
-    assert len(trace)==baseline+1;result['checks']['repeated_open_silent']=True
-    send('door',door_id=door,open=False)
-    wait(lambda:len(trace)>baseline+1 and trace[-1]['event']=='close','Server closing produces original door sound')
-    assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
-    result['checks']['real_close_acknowledged_and_anchored']=True
-    settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
+    if not args.crossing:
+        # Manual packet checks are separate from the native movement itinerary.
+        send('door',door_id=door,open=False)
+        wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Closed baseline acknowledged')
+        settle(1);baseline=len(trace)
+        send('door',door_id=door,open=True)
+        wait(lambda:any(row['event']=='open' for row in trace[baseline:]),'Server opening produces original door sound')
+        opening=next(row for row in trace[baseline:] if row['event']=='open');assert opening['set']==1 and opening['owner']=='door:'+str(door)
+        result['checks']['real_open_acknowledged']=True
+        send('door',door_id=door,open=True);settle(1)
+        assert len(trace)==baseline+1;result['checks']['repeated_open_silent']=True
+        send('door',door_id=door,open=False)
+        wait(lambda:any(row['event']=='close' for row in trace[baseline+1:]),'Server closing produces original door sound')
+        assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
+        result['checks']['real_close_acknowledged_and_anchored']=True
+        settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
     if relay:
         wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
-        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==baseline+2 and audio['invalid_resources']==audio['unresolved_references']==0,audio
+        wait(lambda:relay.read_report().get('spell_audio',{}).get('played_clips',0)>=len(trace),'Native consumes every actual door transition',10)
+        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace) and audio['invalid_resources']==audio['unresolved_references']==0,audio
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=True
         result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/'DoorAudioLab/native_build.json',workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)

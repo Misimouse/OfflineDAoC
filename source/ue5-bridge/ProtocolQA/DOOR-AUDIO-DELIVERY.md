@@ -13,3 +13,9 @@ Evidence in the local bridge workspace:
 Additional traversal regression is **not accepted**: `Reports/door_audio_real_protocol/20261106-123035-685570/verified.json` failed its inside-door collision witness. The current cleaned map's test trajectory reached 2.79 m and was deflected sideways instead of crossing the 3.17 m doorway plane. Real opening/closing and their sounds passed separately. This failure remains visible and requires a dedicated current-map collision/fixture investigation; it is not reported as a completed traversal test. The old successful crossing proof used the earlier map/character and does not certify the current one.
 
 Owner checks: open both Ardee door types at close range, hear opening and automatic server closing, repeat clicks without duplicated sound, then verify the route through each doorway. Master/Effects volume controls should affect these sounds too. Owner listening and traversal acceptance remain pending.
+
+## Traversal follow-up
+
+The failed witness above was a test startup race: movement began while streamed structure collision was still absent. The private relay now withholds the local test pawn until terrain, both door groups and all eleven structure colliders report ready. No collision geometry or movement rule was changed.
+
+`Reports/door_audio_real_protocol/20261106-125700-249393/verified.json` passed on the same native DLL as the installed client: closed leaves block outside and inside, opening permits crossing beyond six metres, return reaches the starting point, four actual server transitions produce four native clips and 245,500 consumed PCM bytes, then client/server close normally and the disposable database is restored. Historical failures remain intact. This supersedes the automatic traversal limitation above; owner listening and in-game acceptance still remain pending.
