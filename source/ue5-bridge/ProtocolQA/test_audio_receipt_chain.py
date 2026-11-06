@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -126,6 +126,29 @@ def verify(workspace):
         door['files'][0]['before_sha256']=previous_native;put(door_path,door)
         door_wave=targets[-1];saved=door_wave.read_bytes();door_wave.write_bytes(b'corrupt door WAV');rejected();checks+=1;door_wave.write_bytes(saved)
         wave.write_bytes(b'tampered old combat wave after doors');rejected();checks+=1;wave.write_bytes(before)
+        library=w/'FootstepAudioLab/OriginalFootstepAudio_v01';library.mkdir(parents=True);files={}
+        for i in range(16):
+            p=library/('files/'+str(i)+'.wav');p.parent.mkdir(exist_ok=True);p.write_bytes(b'original step '+str(i).encode());files[str(p)]=digest(p)
+        catalog=library/'sounds.json';catalog.write_text('synthetic original foot contacts')
+        resources_path=w/'FootstepAudioLab/resources.json';put(resources_path,{'catalog':str(catalog),'catalog_sha256':digest(catalog),'files':files})
+        step_rows=[];previous_native=digest(binary)
+        targets=[plugin/name for name in FOOTSTEP_NATIVE_TARGETS]+[plugin/'Content/OriginalFootstepAudio_v01'/Path(p).relative_to(library) for p in list(files)+[str(catalog)]]
+        new_native=plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeFootsteps.cpp'
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target in [plugin/name for name in FOOTSTEP_NATIVE_TARGETS] and target!=new_native:target.write_bytes(b'old step predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new step '+str(target).encode())
+            if target.is_relative_to(plugin/'Content/OriginalFootstepAudio_v01'):target.write_bytes((library/target.relative_to(plugin/'Content/OriginalFootstepAudio_v01')).read_bytes())
+            step_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        step_path=w/'FootstepAudioLab/installed.json';step={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(door_path),'resources_receipt_sha256':digest(resources_path),
+            'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':step_rows}
+        put(step_path,step);assert verify_files(w)['footstep_audio_installed'];checks+=1
+        step['predecessor_receipt_sha256']='0'*64;put(step_path,step);rejected();checks+=1
+        step['predecessor_receipt_sha256']=digest(door_path);step['files'][0]['before_sha256']='0'*64;put(step_path,step);rejected();checks+=1
+        step['files'][0]['before_sha256']=previous_native;put(step_path,step)
+        saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt step WAV');rejected();checks+=1;targets[-1].write_bytes(saved)
+        wave.write_bytes(b'corrupt original combat WAV after steps');rejected();checks+=1;wave.write_bytes(before)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

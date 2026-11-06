@@ -33,8 +33,8 @@ class FBridgeSpellAudio {
     struct FPending {J Row;FString Owner,Phase;double At=0;FString Root;FVector Position=FVector::ZeroVector;bool Anchored=false;};
     struct FVoice {TWeakObjectPtr<UAudioComponent> Component;TWeakObjectPtr<USoundWaveProcedural> Wave;FString Owner,Phase;double Until=0;int32 Remaining=0;bool Anchored=false;float BaseGain=1.f;};
     UDAoCBridgeSubsystem* S;
-    J Index,Effects,CombatIndex,DoorIndex;
-    FString Folder,CombatFolder,DoorFolder,Session,LastName,LastFile;
+    J Index,Effects,CombatIndex,DoorIndex,FootstepIndex;
+    FString Folder,CombatFolder,DoorFolder,FootstepFolder,Session,LastName,LastFile;
     FVector Anchor=FVector::ZeroVector;
     bool Anchored=false;
     TMap<FString,FPCM> Cache;
@@ -42,8 +42,9 @@ class FBridgeSpellAudio {
     TMap<FString,double> Bursts;
     TArray<FPending> Pending;
     TArray<FVoice> Voices;
-    int64 LastSequence=0,LastCombatSequence=0,CacheBytes=0,Consumed=0;
+    int64 LastSequence=0,LastCombatSequence=0,CacheBytes=0,Consumed=0,FootstepConsumed=0;
     int32 CombatSeen=0;
+    int32 FootstepClips=0;
     int32 CombatReceived=0,CombatStale=0,CombatRejected=0;
     int32 Seen=0,Played=0,Culled=0,Duplicates=0,Quiet=0,Missing=0,Invalid=0;
     float GainScale=1;
@@ -132,6 +133,7 @@ class FBridgeSpellAudio {
         if(!Component){++Invalid;return;}
         Voices.Add({Component,Wave,Job.Owner,Job.Phase,FPlatformTime::Seconds()+Data->Seconds/Pitch+.1,Data->Bytes.Num(),Job.Anchored,Gain*GainScale});
         ++Played;LastName=String(Job.Row,TEXT("name"));LastFile=File;
+        if(Job.Phase==TEXT("footstep"))++FootstepClips;
     }
 public:
     explicit FBridgeSpellAudio(UDAoCBridgeSubsystem* Owner):S(Owner){
@@ -145,10 +147,21 @@ public:
         FString DoorPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalDoorAudio_v01/sounds.json");
         FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeDoorSoundCatalog="),DoorPath);
         DoorFolder=FPaths::GetPath(DoorPath);DoorIndex=SpellAudioData::Read(DoorPath);
+        FString FootstepPath=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/OriginalFootstepAudio_v01/sounds.json");
+        FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeFootstepSoundCatalog="),FootstepPath);
+        FootstepFolder=FPaths::GetPath(FootstepPath);FootstepIndex=SpellAudioData::Read(FootstepPath);
         Effects=SpellAudioData::Read(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/SpellVisuals_v01/catalog.json"));
         FString Test;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeSpellAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeCombatAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsAudioTest="),Test)||FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeDoorAudioTest="),Test))GainScale=.03f;
     }
     void Clear(){for(auto& V:Voices)StopVoice(V);Voices.Empty();Pending.Empty();Casts.Empty();Bursts.Empty();LastSequence=0;LastCombatSequence=0;Session.Empty();}
+    void Step(int32 Model){
+        using namespace SpellAudioData;
+        if(!FootstepIndex)return;
+        const auto Mapping=Object(Object(FootstepIndex,TEXT("local_player_models")),*FString::FromInt(Model));
+        const auto Row=Object(Object(FootstepIndex,TEXT("creatures")),*FString::FromInt(int32(Number(Mapping,TEXT("sound_set")))));
+        TGuardValue<J> IndexGuard(Index,FootstepIndex);TGuardValue<FString> FolderGuard(Folder,FootstepFolder);
+        Structure(String(Row,TEXT("move_dirt")),TEXT("player:local"),TEXT("footstep"),0);
+    }
     void Apply(const J& Snapshot){
         using namespace SpellAudioData;
         if(!Index||!Effects)return;
@@ -207,7 +220,7 @@ public:
     void Tick(){
         const double Now=FPlatformTime::Seconds();
         for(int32 I=Voices.Num()-1;I>=0;--I){
-            auto& V=Voices[I];if(V.Component.IsValid())V.Component->SetVolumeMultiplier(V.BaseGain*S->AudioMasterVolume*S->AudioEffectsVolume);if(V.Wave.IsValid()){const int32 Left=V.Wave->GetAvailableAudioByteCount();Consumed+=FMath::Max(0,V.Remaining-Left);V.Remaining=Left;}
+            auto& V=Voices[I];if(V.Component.IsValid())V.Component->SetVolumeMultiplier(V.BaseGain*S->AudioMasterVolume*S->AudioEffectsVolume);if(V.Wave.IsValid()){const int32 Left=V.Wave->GetAvailableAudioByteCount();const int32 Used=FMath::Max(0,V.Remaining-Left);Consumed+=Used;if(V.Phase==TEXT("footstep"))FootstepConsumed+=Used;V.Remaining=Left;}
             auto* Owner=Actor(V.Owner);
             if(!V.Component.IsValid()||(!Owner&&!V.Anchored)||Now>=V.Until){StopVoice(V);Voices.RemoveAt(I);}else if(!V.Anchored)V.Component->SetWorldLocation(Owner->GetActorLocation());
         }
@@ -220,6 +233,9 @@ public:
         Out->SetNumberField(TEXT("max_voice_volume"),MaxVoice);Out->SetNumberField(TEXT("master_volume"),S->AudioMasterVolume);Out->SetNumberField(TEXT("effects_volume"),S->AudioEffectsVolume);
         Out->SetBoolField(TEXT("combat_ready"),CombatIndex.IsValid());Out->SetNumberField(TEXT("combat_events_seen"),CombatSeen);
         Out->SetBoolField(TEXT("door_ready"),DoorIndex.IsValid());
+        Out->SetBoolField(TEXT("footstep_ready"),FootstepIndex.IsValid());
+        Out->SetNumberField(TEXT("footstep_clips"),FootstepClips);
+        Out->SetNumberField(TEXT("footstep_pcm_consumed_bytes"),double(FootstepConsumed));
         Out->SetNumberField(TEXT("combat_events_received"),CombatReceived);Out->SetNumberField(TEXT("combat_events_stale"),CombatStale);Out->SetNumberField(TEXT("combat_events_rejected"),CombatRejected);
         Out->SetNumberField(TEXT("events_seen"),Seen);Out->SetNumberField(TEXT("played_clips"),Played);Out->SetNumberField(TEXT("active_voices"),Voices.Num());Out->SetNumberField(TEXT("pending_clips"),Pending.Num());
         int32 Gather=0;for(const auto& V:Voices)Gather+=V.Phase==TEXT("gather");for(const auto& V:Pending)Gather+=V.Phase==TEXT("gather");Out->SetNumberField(TEXT("active_gather"),Gather);
@@ -232,3 +248,4 @@ void UDAoCBridgeSubsystem::ApplySpellAudio(const TSharedPtr<FJsonObject>& Snapsh
 void UDAoCBridgeSubsystem::TickSpellAudio(){if(SpellAudio)SpellAudio->Tick();}
 void UDAoCBridgeSubsystem::ClearSpellAudio(){if(SpellAudio)SpellAudio->Clear();}
 TSharedPtr<FJsonObject> UDAoCBridgeSubsystem::SpellAudioReport()const{return SpellAudio?SpellAudio->Report():MakeShared<FJsonObject>();}
+void UDAoCBridgeSubsystem::PlayLocalFootstep(int32 Model){if(!SpellAudio)SpellAudio=MakeShared<FBridgeSpellAudio>(this);SpellAudio->Step(Model);}

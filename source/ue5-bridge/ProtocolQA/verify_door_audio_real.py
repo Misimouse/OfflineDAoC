@@ -18,12 +18,14 @@ parser=argparse.ArgumentParser(description=__doc__)
 for key in ['workspace','install']:parser.add_argument('--'+key,type=Path,required=True)
 parser.add_argument('--native',action='store_true')
 parser.add_argument('--crossing',action='store_true')
+parser.add_argument('--footsteps',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
 assert not args.crossing or args.native
+assert not args.footsteps or (args.native and args.crossing)
 os.environ['DAOC_INSTALL']=str(args.install.resolve());sys.path.insert(0,str(workspace/'ProtocolQA'))
 from qa_runtime import ROOT,RUN,SERVER,DB,env,dotnet,ENGINE
 assert ROOT.resolve()==workspace and DB.is_relative_to(RUN) and RUN.is_relative_to(workspace/'ProtocolQA')
-output=workspace/'Reports/door_audio_real_protocol'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
+output=workspace/('Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
 result={'passed':False,'disposable_only':True,'checks':{},'errors':[]};server=client=peer=relay=None;logs=[];backed=False
 session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[]
 config=RUN/'bridge_config.json';config_before=config.read_bytes()
@@ -107,7 +109,7 @@ try:
         import importlib.util
         relay_source=repo/'source/ue5-bridge/pet_sight_relay.py'
         spec=importlib.util.spec_from_file_location('door_native_relay',relay_source);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='door_crossing' if args.crossing else 'door_audio');peer=relay
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
         if args.crossing:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
@@ -147,9 +149,12 @@ try:
     if relay:
         wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
         wait(lambda:relay.read_report().get('spell_audio',{}).get('played_clips',0)>=len(trace),'Native consumes every actual door transition',10)
-        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace) and audio['invalid_resources']==audio['unresolved_references']==0,audio
+        audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
+        if args.footsteps:
+            steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
+            result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=True
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/'DoorAudioLab/native_build.json',workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
     assert all(digest(Path(path))==sha for path,sha in inputs.items())
     result['checks']['source_unchanged']=True;result['passed']=True

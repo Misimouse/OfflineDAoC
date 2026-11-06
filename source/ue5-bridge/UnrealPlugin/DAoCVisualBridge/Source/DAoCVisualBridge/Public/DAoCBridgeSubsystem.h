@@ -64,6 +64,13 @@ private:
     bool TickCombatAudioAcceptance();
     bool TickDoorAudioAcceptance();
     TSharedPtr<FJsonObject> SpellAudioReport() const;
+    friend class FBridgeFootsteps;
+    TSharedPtr<FBridgeFootsteps> Footsteps;
+    void TickFootsteps();
+    void ClearFootsteps();
+    void PlayLocalFootstep(int32 Model);
+    TSharedPtr<FJsonObject> FootstepReport() const;
+    bool TickFootstepAcceptance();
     TSharedPtr<SWidget> OptionsOverlay;
     bool bOptionsOpen=false,bAudioSettingsLoaded=false;
     float AudioMasterVolume=1.f,AudioEffectsVolume=1.f;
