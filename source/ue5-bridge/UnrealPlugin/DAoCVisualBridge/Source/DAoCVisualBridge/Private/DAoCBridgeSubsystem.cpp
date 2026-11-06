@@ -144,7 +144,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){RemoveCharacterLobby();ClearSpellVisuals();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -281,6 +281,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     for(auto& Id:Gone){if(IsValid(Entities[Id]))Entities[Id]->Destroy();Entities.Remove(Id);EntityModels.Remove(Id);RemoteMotion.Remove(Id);EntityRows.Remove(Id);NameplateVisibility.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);}
     if(!Seen.Contains(TEXT("player:local")))bLocalAvailable=false;
     ApplySpellVisuals(M);
+    ApplySpellAudio(M);
     AnswerLineOfSightQueries(M);
 }
 float UDAoCBridgeSubsystem::GroundHeight(float X,float Y) const {
@@ -450,6 +451,7 @@ void UDAoCBridgeSubsystem::WriteReport(){
     O->SetArrayField(TEXT("position_m"),JsonPoint(PlayerPosition));O->SetNumberField(TEXT("fps"),1.0/FMath::Max(FApp::GetDeltaTime(),.0001));
     O->SetNumberField(TEXT("modeled_entities_created"),ModeledEntities);O->SetNumberField(TEXT("moved_metres"),(PlayerPosition-StartPosition).Size()/100);
     O->SetObjectField(TEXT("spell_visuals"),SpellVisualReport());
+    O->SetObjectField(TEXT("spell_audio"),SpellAudioReport());
     O->SetNumberField(TEXT("travelled_metres"),TravelledMetres);O->SetNumberField(TEXT("camera_yaw"),CameraYaw);O->SetNumberField(TEXT("camera_pitch"),CameraPitch);
     O->SetBoolField(TEXT("mouse_captured"),bMouseLook);O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);
     O->SetBoolField(TEXT("character_grounded"),IsValid(PlayerPawn)&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround());
@@ -574,6 +576,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickArmourAcceptance())return;
     if(TickEquipmentAcceptance())return;
     if(TickSpellVisualAcceptance())return;
+    if(TickSpellAudioAcceptance())return;
     if(TickTrainingPlacement())return;
     if(TickPoseAcceptance())return;
     if(TickPlayerStatusAcceptance())return;
@@ -611,7 +614,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
         }else if(State==SCS_ConnectionError||Now>RetryAt+2){Disconnect();}
     }
     TickRemoteMotion(Dt);
-    NetworkFrameMs=(FPlatformTime::Seconds()-NetworkBegan)*1000;UpdateControls(Dt);const double GearBegan=FPlatformTime::Seconds();UpdateLocalEquipment();UpdateRemoteEquipment();TickEquipmentAnimations();EquipmentFrameMs=(FPlatformTime::Seconds()-GearBegan)*1000;TickSpellVisuals(Dt);const double ClassicBegan=FPlatformTime::Seconds();TickClassicUI();ClassicFrameMs=(FPlatformTime::Seconds()-ClassicBegan)*1000;
+    NetworkFrameMs=(FPlatformTime::Seconds()-NetworkBegan)*1000;UpdateControls(Dt);const double GearBegan=FPlatformTime::Seconds();UpdateLocalEquipment();UpdateRemoteEquipment();TickEquipmentAnimations();EquipmentFrameMs=(FPlatformTime::Seconds()-GearBegan)*1000;TickSpellVisuals(Dt);TickSpellAudio();const double ClassicBegan=FPlatformTime::Seconds();TickClassicUI();ClassicFrameMs=(FPlatformTime::Seconds()-ClassicBegan)*1000;
     if(PlayerStartedAt>0&&Now-PlayerStartedAt>15)ProbeNavigation();
     ApplyQuality();
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0){MaximumGameplayFrameMs=FMath::Max(MaximumGameplayFrameMs,WallMs);if(WallMs>=2000)++GameplayStalls;}

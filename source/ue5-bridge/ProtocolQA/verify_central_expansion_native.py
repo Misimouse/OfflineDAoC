@@ -8,13 +8,24 @@ import shutil
 import subprocess
 
 
-def verify(workspace, engine, installed=False):
+def verify(workspace, engine, installed=False, audio_candidate=False):
     lab = workspace/'ExpansionRaceLab'
     delivery = lab/'CentralDelivery'
     output = delivery/('NativeInstalledAcceptance' if installed else 'NativeAcceptance')
     output.mkdir(exist_ok=True)
     project = lab/'CentralDeliveryHost/CentralDeliveryHost.uproject'
     catalogs = {name: delivery/(name+'.json') for name in ['models', 'equipment', 'appearance', 'tasks', 'lore']}
+    if audio_candidate:
+        assert not installed, 'Use the separate audio candidate host without overwriting installed proof hosts'
+        build = json.loads((workspace/'SpellAudioLab/native_build.json').read_text())
+        assert build['passed'] and not build['normal_binary_modified']
+        project = Path(build['project'])
+        output = workspace/'SpellAudioLab/CharacterRegression'
+        output.mkdir(exist_ok=True)
+        manifest = json.loads((delivery/'manifest.json').read_text())
+        catalogs = {name: Path(row['target']) for name, row in manifest['catalogs'].items()}
+        for name, sha in build['binaries_sha256'].items():
+            assert hashlib.sha256((project.parent/'Plugins/DAoCVisualBridge/Binaries/Win64'/name).read_bytes()).hexdigest() == sha
     if installed:
         receipt = json.loads((delivery/'installed_client.json').read_text())
         assert receipt['installed'] and receipt['client_only'] and not receipt['normal_database_modified']
@@ -104,6 +115,7 @@ def verify(workspace, engine, installed=False):
     assert hashes == {str(path): digest(path) for path in inputs}
     result = {'passed': True, 'normal_installation_modified': False, 'inputs': hashes,
               'installed_client_resources_only': installed,
+              'audio_candidate': audio_candidate,
               'native_appearance_checks': appearance['checks'], 'full_appearance_passed': False,
               'known_source_geometry_failure': known, 'material_isolation_passed': True,
               'partial_override_inherits_central_hair': True, 'lobby': screens,
@@ -117,5 +129,6 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--installed', action='store_true')
+    parser.add_argument('--audio-candidate', action='store_true')
     args = parser.parse_args()
-    verify(args.workspace.resolve(), args.engine.resolve(), args.installed)
+    verify(args.workspace.resolve(), args.engine.resolve(), args.installed, args.audio_candidate)

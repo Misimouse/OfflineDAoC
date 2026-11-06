@@ -12,6 +12,7 @@ parser.add_argument('--vampiir-bolt',action='store_true')
 parser.add_argument('--bainshee-form-cycle',action='store_true')
 parser.add_argument('--native-form-probe',action='store_true')
 parser.add_argument('--central-installed-native',action='store_true')
+parser.add_argument('--audio-native-candidate',action='store_true')
 parser.add_argument('--bainshee-race',type=int,choices=[9,11,12],default=9)
 parser.add_argument('--bainshee-promotion',action='store_true')
 parser.add_argument('--vampiir-promotion',action='store_true')
@@ -54,6 +55,7 @@ assert level!=6 or class_id==58, 'The level-six boundary fixture is specific to 
 assert not args.combined_data or args.combined_expansions
 assert not args.native_form_probe or (args.bainshee_form_cycle and args.combined_expansions)
 assert not args.central_installed_native or args.native_form_probe
+assert not args.audio_native_candidate or (args.native_form_probe and not args.central_installed_native)
 assert not args.bainshee_form_cycle or (class_id==39 and level==5),'Form cycle requires the scoped level-five Bainshee probe'
 assert not args.bainshee_promotion or (class_id==39 and level==5 and args.server_source),'Promotion requires the explicit level-five candidate server'
 assert not args.vampiir_promotion or (class_id==58 and level==5 and args.server_source and args.candidate_build and args.career_proposal and not training_mode and not native_combat_mode and not args.expansion_power),'Vampiir promotion requires the sealed level-five candidate and original career data'
@@ -74,6 +76,7 @@ if args.combined_expansions:D=ROOT/'Reports/combined_expansions/starting_spells'
 if args.native_form_probe:D=D.parent/(D.name+'_native');D.mkdir(parents=True,exist_ok=True)
 if args.combined_data:D=D.parent/(D.name+'_preloaded');D.mkdir(parents=True,exist_ok=True)
 if args.central_installed_native:D=ROOT/'Reports/central_bainshee_forms'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
+if args.audio_native_candidate:D=ROOT/'Reports/spell_audio_real_protocol'/('race_'+str(args.bainshee_race));D.mkdir(parents=True,exist_ok=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_GODOT',str(ROOT/'Godot')))
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[]}
 server=client=sock=None;logs=[];session='';snapshot={};buffer=b'';serial=0;backed=False
@@ -522,8 +525,11 @@ try:
    if args.central_installed_native:
     native_inputs=[ROOT/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',ROOT/'models.json',ROOT/'equipment_catalog_v01.json',ROOT/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/Pregame/appearance_catalog.json']
     result['native_uses_installed_central_assets']=True
+   if args.audio_native_candidate:
+    native_inputs=[ROOT/'SpellAudioLab/NativeHost/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',ROOT/'models.json',ROOT/'equipment_catalog_v01.json',ROOT/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/Pregame/appearance_catalog.json',ROOT/'SpellAudioLab/OriginalAudio_v01/sounds.json']
    result['native_form_inputs']={str(path):hashlib.sha256(path.read_bytes()).hexdigest() for path in native_inputs}
-   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=100,entity_ids=['player:local'],render=True,native_profile='central_expansion_forms' if args.central_installed_native else 'expansion_forms');sock=relay
+   native_profile='spell_audio' if args.audio_native_candidate else ('central_expansion_forms' if args.central_installed_native else 'expansion_forms')
+   relay=observer.NativeSightRelay(sock,ROOT,session,snapshot,output=D,duration=100,entity_ids=['player:local'],render=True,native_profile=native_profile);sock=relay
    wait(lambda:bool(relay.read_report().get('player_visual',{}).get('body_asset')) and bool(relay.read_report().get('player_visual',{}).get('portrait_asset')),'Native original body and inventory portrait actually rendered',90)
    native_before=relay.read_report()['player_visual']
    assert native_before['body_visible'] and native_before['body_asset']
@@ -545,7 +551,7 @@ try:
   wait(lambda:local_player().get('morphed') and local_player().get('model_id')==form_model,'Original offensive CastFinished transforms Bainshee',20)
   changed_at=time.monotonic()
   if args.native_form_probe:
-   catalogue=json.loads((ROOT/'models.json' if args.central_installed_native else ROOT/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
+   catalogue=json.loads((ROOT/'models.json' if args.central_installed_native or args.audio_native_candidate else ROOT/'ExpansionRaceLab/MinotaurOwnerReview/models.json').read_text())
    expected_asset=catalogue[str(form_model)]['asset']
    wait(lambda:relay.read_report().get('player_visual',{}).get('body_asset')==expected_asset and relay.read_report().get('player_visual',{}).get('portrait_asset')==expected_asset,'Native body and portrait follow real server transformation',12)
    visual=relay.read_report()['player_visual']
@@ -570,6 +576,12 @@ try:
    assert visual.get('portrait_asset')==native_before.get('portrait_asset')
    (D/'native_restored.json').write_text(json.dumps(relay.read_report(),indent=2),encoding='utf-8')
    result['checks']['live_native_original_body_and_equipment_restored']=True
+   if args.audio_native_candidate:
+    audio=relay.read_report().get('spell_audio',{})
+    assert audio.get('ready') and audio.get('played_clips',0)>=2 and audio.get('pcm_consumed_bytes',0)>0
+    assert audio.get('invalid_resources',-1)==0
+    result['native_spell_audio']=audio
+    result['checks']['original_real_server_spell_audio_consumed_by_engine']=True
    assert all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==value for path,value in result['native_form_inputs'].items())
    result['checks']['native_form_inputs_unchanged']=True
    sock=relay.backend;sock.settimeout(.1)

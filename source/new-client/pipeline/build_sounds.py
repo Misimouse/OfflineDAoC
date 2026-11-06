@@ -16,15 +16,27 @@ Zone audio: zones/zoneNNN/sounds.dat, [SoundRegionNN] sections:
 Writes godot/content/sounds/sounds.json (id -> file + playback ranges) and files/<file> (copied as-is), and returns
 the zone audio block that build_zone.py stores in zone.json.
 """
-import csv, io, json, re, shutil, struct, sys
+import csv, io, json, os, re, shutil, struct, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from assets_pipeline import CLIENT, ROOT
+# Audio conversion needs no image-processing dependencies. Keep the same
+# DAOC_CLIENT/default paths as assets_pipeline without importing Pillow/NumPy.
+ROOT = HERE.parent
+CLIENT = Path(os.environ.get('DAOC_CLIENT', str(ROOT / 'external/old_project/runtime/client-opendaoc/app')))
 from daoc_mpk import read_mpk
 
 SOUND_DIR = CLIENT / 'sounds'
+
+# The original cc_spells table writes "Missile", while cc_sounds and the three
+# original WAV filenames write "Missle". These exact aliases link the same
+# Magic Missile phases; they never substitute another spell's sound.
+SPELL_NAME_ALIASES = {
+    's_spellmagicmissile_cast': 's_spellmagicmissle_cast',
+    's_spellmagicmissile_gather': 's_spellmagicmissle_gather',
+    's_spellmagicmissile_hit': 's_spellmagicmissle_hit',
+}
 
 # sounds.dat ids with no cc_sounds row (silent in the real client), mapped to client rows by NAME.
 # OWNER-APPROVED ONLY: add an entry here only when the owner OKs it (rule: no substitutes without the OK).
@@ -103,6 +115,9 @@ def sound_tables():
             if row['id']:
                 by_id[row['id']] = row
             by_name.setdefault(row['name'].lower(), row)
+    for alias, original in SPELL_NAME_ALIASES.items():
+        if alias not in by_name and original in by_name:
+            by_name[alias] = by_name[original]
     return by_id, by_name
 
 
@@ -473,6 +488,14 @@ def export(used_ids, used_mp3s, extra_ids=(), creature_set_ids=(), weapon_set_id
                 if not dst.exists() or dst.stat().st_mtime < src.stat().st_mtime or _is_adpcm(dst):
                     _write_wav(src, dst)
                 index['named'][row['name'].lower()] = dict(row, file=f'files/{dst.name}')
+    aliases = {}
+    for alias, original in SPELL_NAME_ALIASES.items():
+        if original in index['named'] and alias not in index['named']:
+            index['named'][alias] = dict(index['named'][original])
+        if original in index['named'] and index['named'].get(alias) == index['named'][original]:
+            aliases[alias] = original
+    if aliases:
+        index['original_name_aliases'] = aliases
     index_path.write_text(json.dumps(index, indent=1), encoding='utf-8')
     return missing
 

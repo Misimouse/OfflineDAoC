@@ -16,7 +16,7 @@ class NativeSightRelay:
   if not render:cmd.remove('-d3d11');cmd.extend(['-nullrhi','-ExecCmds=t.IdleWhenNotForeground 0'])
   elif output is not None:cmd.append('-RenderOffscreen')
   if native_profile is not None:
-   assert native_profile in ['expansion_forms','central_expansion_forms'] and render and output is not None
+   assert native_profile in ['expansion_forms','central_expansion_forms','spell_audio'] and render and output is not None
    host=root/'ExpansionRaceLab/FormLiveHost/FormLiveHost.uproject'
    assert host.exists()
    review=root/'ExpansionRaceLab/MinotaurOwnerReview'
@@ -29,13 +29,21 @@ class NativeSightRelay:
     assert (host.parent/'Plugins/DAoCVisualBridge/Content').is_junction() and (host.parent/'Plugins/DAoCVisualBridge/Content').resolve()==(plugin/'Content').resolve()
     for name in ['UnrealEditor-DAoCVisualBridge.dll','UnrealEditor.modules']:
      assert digest(host.parent/'Plugins/DAoCVisualBridge/Binaries/Win64'/name)==digest(plugin/'Binaries/Win64'/name)
+   if native_profile=='spell_audio':
+    host=root/'SpellAudioLab/NativeHost/SpellAudioHost.uproject'
+    assert host.exists()
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}
    appearance=review/'appearance_catalog.json'
-   if native_profile=='central_expansion_forms':
+   if native_profile in ['central_expansion_forms','spell_audio']:
+    plugin=root/'Client/Plugins/DAoCVisualBridge'
     replacements={'-DaocBridgeCatalog=':root/'models.json','-DaocBridgeEquipmentCatalog=':root/'equipment_catalog_v01.json'}
     appearance=plugin/'Content/ClassicUI/Pregame/appearance_catalog.json'
+   if native_profile=='spell_audio':
+    cmd.remove('-nosound')
+    cmd.append('-AudioMixer')
+    cmd.append('-DaocBridgeSoundCatalog='+str(root/'SpellAudioLab/OriginalAudio_v01/sounds.json'))
    for i,value in enumerate(cmd):
     for flag,path in replacements.items():
      if value.startswith(flag):cmd[i]=flag+str(path)
@@ -47,7 +55,7 @@ class NativeSightRelay:
   # Limit the observer to the tested actors; the real backend/player still
   # receives the entire world. This never manufactures a visibility reply.
   native.pop('qa_skill_audit',None)
-  if self.native_profile not in ['expansion_forms','central_expansion_forms']:native.pop('classic_ui',None)
+  if self.native_profile not in ['expansion_forms','central_expansion_forms','spell_audio']:native.pop('classic_ui',None)
   return native
  def sendall(self,data):self.backend.sendall(data)
  def settimeout(self,value):self.backend.settimeout(value)

@@ -1,0 +1,54 @@
+"""Build the audio candidate privately; central editor/plugin binaries remain untouched."""
+import argparse
+import json
+from pathlib import Path
+import shutil
+import subprocess
+
+from prepare_combined_expansion_data import digest
+
+
+def build(workspace, engine):
+    repo=Path(__file__).resolve().parents[3]
+    root=workspace/'SpellAudioLab'
+    host=root/'NativeHost'
+    plugin=host/'Plugins/DAoCVisualBridge'
+    plugin.mkdir(parents=True,exist_ok=True)
+    central=workspace/'Client/Plugins/DAoCVisualBridge'
+    normal_binary=central/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
+    normal_hash=digest(normal_binary)
+    quote=lambda p:"'"+str(p).replace("'","''")+"'"
+    for target,source in [(host/'Content',workspace.parent/'DAoC-Enhanced-Unreal/Content'),(plugin/'Content',central/'Content')]:
+        if target.exists():assert target.is_junction() and target.resolve()==source.resolve()
+        else:subprocess.run(['powershell.exe','-NoProfile','-Command','New-Item -ItemType Junction -Path '+quote(target)+' -Target '+quote(source)+' | Out-Null'],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
+    shutil.copy2(central/'DAoCVisualBridge.uplugin',plugin/'DAoCVisualBridge.uplugin')
+    project=host/'SpellAudioHost.uproject'
+    project.write_text(json.dumps({'FileVersion':3,'EngineAssociation':'5.8','Plugins':[{'Name':'DAoCVisualBridge','Enabled':True}]}),encoding='utf-8')
+    build_host=workspace/'ExpansionRaceLab/StarterNativeBuild/HostProject'
+    build_plugin=build_host/'Plugins/DAoCVisualBridge'
+    assert build_plugin.resolve().is_relative_to(workspace/'ExpansionRaceLab')
+    source=repo/'source/ue5-bridge/UnrealPlugin/DAoCVisualBridge/Source'
+    hashes={str(p.relative_to(source)):digest(p) for p in source.rglob('*') if p.is_file()}
+    shutil.copytree(source,build_plugin/'Source',dirs_exist_ok=True)
+    command=[str(engine/'Build/BatchFiles/Build.bat'),'UnrealEditor','Win64','Development',
+        '-Project='+str(build_host/'HostProject.uproject'),'-Plugin='+str(build_plugin/'DAoCVisualBridge.uplugin'),
+        '-WaitMutex','-NoHotReload','-DisableLiveCoding']
+    with (root/'native_build.log').open('w',encoding='utf-8') as log:
+        result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,timeout=600,creationflags=subprocess.CREATE_NO_WINDOW)
+    assert result.returncode==0,'See SpellAudioLab/native_build.log'
+    assert all(digest(source/path)==sha and digest(build_plugin/'Source'/path)==sha for path,sha in hashes.items())
+    binary=plugin/'Binaries/Win64'
+    binary.mkdir(parents=True,exist_ok=True)
+    for name in ['UnrealEditor-DAoCVisualBridge.dll','UnrealEditor.modules']:shutil.copy2(build_plugin/'Binaries/Win64'/name,binary/name)
+    assert digest(normal_binary)==normal_hash
+    receipt={'passed':True,'normal_binary_modified':False,'normal_binary_sha256':normal_hash,'project':str(project),
+        'source_sha256':hashes,'binaries_sha256':{name:digest(binary/name) for name in ['UnrealEditor-DAoCVisualBridge.dll','UnrealEditor.modules']}}
+    (root/'native_build.json').write_text(json.dumps(receipt,indent=2),encoding='utf-8')
+    return {k:v for k,v in receipt.items() if k not in ['source_sha256','binaries_sha256']}
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser(description=__doc__)
+    for key in ['workspace','engine']:parser.add_argument('--'+key,type=Path,required=True)
+    args=parser.parse_args()
+    print(json.dumps(build(args.workspace.resolve(),args.engine.resolve())))

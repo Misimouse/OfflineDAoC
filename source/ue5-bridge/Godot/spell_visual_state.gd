@@ -11,12 +11,12 @@ func consume(kind:String,d:Dictionary,me:int,ids:Dictionary,now:int)->void:
     if kind in ["remove","death"]:
         var gone:=identify(int(d.get("oid",0)),me,ids)
         active.erase(gone)
-        if not gone.is_empty():append({"kind":"cancel","caster":gone},now)
+        if not gone.is_empty():append({"kind":"cancel","caster":gone,"reason":kind},now)
         return
     if kind not in ["cast","spell_effect","interrupt"]:return
     var caster:=identify(int(d.get("caster",0)),me,ids)
     if caster.is_empty():return
-    if kind=="interrupt":active.erase(caster);append({"kind":"cancel","caster":caster},now);return
+    if kind=="interrupt":active.erase(caster);append({"kind":"cancel","caster":caster,"reason":"interrupt"},now);return
     var effect:=int(d.get("spell",0))
     if effect<=0:return
     if kind=="cast":
@@ -29,7 +29,7 @@ func consume(kind:String,d:Dictionary,me:int,ids:Dictionary,now:int)->void:
         var was_cast:=active.has(caster)
         active.erase(caster)
         if not was_cast and caster=="player:local" and target==caster and now-entered_at<3000:return
-        append({"kind":"release","caster":caster,"target":target,"effect_id":effect,"resisted":int(d.get("success",1))==0,"bolt":int(d.get("bolt",0))},now)
+        append({"kind":"release","caster":caster,"target":target,"effect_id":effect,"resisted":int(d.get("success",1))==0,"bolt":int(d.get("bolt",0)),"no_sound":int(d.get("no_sound",0))!=0},now)
 func append(row:Dictionary,now:int)->void:
     sequence+=1;row["seq"]=sequence;row["at_ms"]=now;events.append(row)
     if events.size()>96:events.pop_front()
