@@ -20,6 +20,16 @@ def verify_files(workspace):
         assert successor['plan_sha256']==digest(plan_path)
         plan=json.loads(plan_path.read_text())
         assert successor['rules_after_sha256']==plan['rules_after_sha256']
+    shar_path=base/'SharActivation/installed.json'
+    shar=json.loads(shar_path.read_text()) if shar_path.exists() else None
+    if shar and not shar.get('installed'):shar=None
+    if shar:
+        assert successor and shar['phase']=='complete' and shar['only_race_enabled']==18
+        assert shar['predecessor_receipt_sha256']==digest(successor_path)
+        assert shar['rules_before_sha256']==successor['rules_after_sha256'] and shar['rules_target']==successor['rules_target']
+        shar_plan_path=base/'SharActivation/plan.json';assert shar['plan_sha256']==digest(shar_plan_path)
+        shar_plan=json.loads(shar_plan_path.read_text())
+        assert shar['rules_after_sha256']==shar_plan['rules_after_sha256']
     combat_path=workspace/'CombatAudioLab/installed.json'
     combat=json.loads(combat_path.read_text()) if combat_path.exists() else None
     if combat and not combat.get('installed'):combat=None
@@ -84,6 +94,7 @@ def verify_files(workspace):
             assert expected==successor['rules_before_sha256']
             expected=successor['rules_after_sha256']
             replaced+=1
+            if shar:expected=shar['rules_after_sha256']
         if str(path) in replacements:
             changed=replacements[str(path)]
             assert changed['before_sha256']==expected
@@ -97,4 +108,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'verified_files':len(original['files'])}

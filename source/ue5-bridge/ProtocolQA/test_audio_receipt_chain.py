@@ -83,6 +83,28 @@ def verify(workspace):
         selection['files'][0]['before_sha256']='0'*64;put(selection_path,selection);rejected();checks+=1
         selection['files'][0]['before_sha256']=selection['native_before_sha256'];put(selection_path,selection)
         binary.write_bytes(b'tampered installed selection');rejected();checks+=1
+        # Independent minimal eligibility chain: Shar may succeed the exact
+        # accepted spell-class policy, never an arbitrary rules replacement.
+        sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
+        sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
+        put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})
+        rules.write_text('spellclass rules');middle=digest(rules)
+        previous=sb/'SpellClassActivation/installed.json';previous_plan=previous.parent/'plan.json'
+        put(previous_plan,{'rules_after_sha256':middle})
+        put(previous,{'installed':True,'phase':'complete','minotaur_receipt_sha256':digest(original),'classes_enabled':[39,58],
+            'races_changed':False,'plan_sha256':digest(previous_plan),'rules_before_sha256':old_rules,'rules_after_sha256':middle,'rules_target':str(rules)})
+        rules.write_text('shar rules');shar_plan=sb/'SharActivation/plan.json';put(shar_plan,{'rules_after_sha256':digest(rules)})
+        shar_path=shar_plan.parent/'installed.json';shar={'installed':True,'phase':'complete','only_race_enabled':18,
+            'predecessor_receipt_sha256':digest(previous),'rules_before_sha256':middle,'rules_after_sha256':digest(rules),'rules_target':str(rules),'plan_sha256':digest(shar_plan)}
+        put(shar_path,shar);assert verify_files(sw)['shar_installed'];checks+=1
+        shar['predecessor_receipt_sha256']='0'*64;put(shar_path,shar)
+        try:verify_files(sw)
+        except AssertionError:checks+=1
+        else:raise AssertionError('Unrelated Shar predecessor accepted')
+        shar['predecessor_receipt_sha256']=digest(previous);shar['rules_before_sha256']='0'*64;put(shar_path,shar)
+        try:verify_files(sw)
+        except AssertionError:checks+=1
+        else:raise AssertionError('Incorrect previous Shar rules accepted')
     return {'passed':True,'checks':checks,'synthetic_only':True,'normal_installation_modified':False}
 
 
