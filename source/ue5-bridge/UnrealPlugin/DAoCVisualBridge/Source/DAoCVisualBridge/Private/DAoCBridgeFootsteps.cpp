@@ -63,10 +63,10 @@ public:
         auto* Mesh=Actor->GetSkeletalMeshComponent();auto* Instance=Mesh->GetSingleNodeInstance();
         auto* Animation=Instance?Cast<UAnimSequence>(Instance->GetCurrentAsset()):nullptr;
         const FString Clip=S->AnimationStates.FindRef(TEXT("player:local"));
-        const bool Locomotion=Clip==TEXT("walk")||Clip==TEXT("run")||Clip==TEXT("walk_back")||Clip==TEXT("strafe_left")||Clip==TEXT("strafe_right");
-        const bool Moving=Locomotion&&Pawn->GetCharacterMovement()->IsMovingOnGround()&&Pawn->GetVelocity().Size2D()>5.f;
+        const bool Locomotion=Clip==TEXT("walk")||Clip==TEXT("run")||Clip==TEXT("walk_back")||Clip==TEXT("strafe_left")||Clip==TEXT("strafe_right")||Clip==TEXT("swim");
+        const bool Moving=Locomotion&&((Clip==TEXT("swim")&&S->bLocalSwimming)||(Pawn->GetCharacterMovement()->IsMovingOnGround()&&Pawn->GetVelocity().Size2D()>5.f));
         const int32 Model=(*Row)->GetIntegerField(TEXT("model_id"));
-        if(Advance(Model,Clip,Animation,Instance?Instance->GetCurrentTime():0,Moving))S->PlayLocalFootstep(Model);
+        if(Advance(Model,Clip,Animation,Instance?Instance->GetCurrentTime():0,Moving))S->PlayLocalFootstep(Model,S->LocalGroundSurface);
     }
     TSharedPtr<FJsonObject> Report()const{auto Out=MakeShared<FJsonObject>();Out->SetNumberField(TEXT("contacts_crossed"),Steps);Out->SetNumberField(TEXT("clips_sampled"),Sampled);return Out;}
 };

@@ -16,6 +16,7 @@ var combat_audio:RefCounted
 var weapon_mode_audio:RefCounted
 var door_audio:RefCounted
 var server_sound:RefCounted
+var movement_flags:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
 var concentration:RefCounted
@@ -91,6 +92,7 @@ func _ready()->void:
     weapon_mode_audio=load(folder.path_join("weapon_mode_audio_state.gd")).new()
     door_audio=load(folder.path_join("door_audio_state.gd")).new()
     server_sound=load(folder.path_join("server_sound_state.gd")).new()
+    movement_flags=load(folder.path_join("movement_flags_state.gd")).new()
     var server_sound_path:=folder.path_join("../Client/Plugins/DAoCVisualBridge/Content/OriginalServerSoundAudio_v01/sounds.json")
     for arg in OS.get_cmdline_user_args():
         if arg.begins_with("--bridge-server-sound-catalog="):server_sound_path=arg.trim_prefix("--bridge-server-sound-catalog=")
@@ -203,6 +205,7 @@ func enter_character(chosen:Dictionary)->void:
     server.enter_world(chosen)
 
 func apply_entry(entry:Dictionary)->void:
+    movement_flags.reset()
     entry_revision+=1
     if int(entry.get("zone",-1))!=207 and adapter!=null:adapter.clear_world()
     if int(entry.get("zone",-1))==207:
@@ -327,6 +330,7 @@ func command(value:Dictionary)->void:
         if next.distance_to(position)>maxf(5.0,limit*elapsed+1.0):move_rejected+=1;return
         if limit<=0 and next.distance_to(position)>.1:move_rejected+=1;return
         if player_state.ready and int(player_state.vitals.get("health_pct",0))<=0:return
+        if not movement_flags.consume(value):return
         position=next
         move_commands+=1
         var yaw:=atan2(-float(f[0]),float(f[1]));heading=int(round(yaw*4096.0/TAU))&4095
@@ -403,6 +407,7 @@ func request_logout(exit_application:bool=true)->void:
 func return_to_character_menu(data:Dictionary)->void:
     # Invoked only after the original server confirms Quit (saved session).
     world_event("quit",data)
+    movement_flags.reset()
     adapter.clear_world()
     entered=false;leaving=false;home_jump_requested=false;local_model_id=0
     test_return_attempts=0;test_return_at=-10000;door_states.clear()
@@ -543,7 +548,7 @@ func sync_attack_visibility()->void:
     var now:=Time.get_ticks_msec();var visible:=target_visible(now)
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var oid:=int(interaction.selected_id.get_slice(":",1)) if not interaction.selected_id.is_empty() else 0
-    server.client.Heading(heading,oid,0x30 if visible else 0,0x10 if sitting else 0)
+    server.client.Heading(heading,oid,0x30 if visible else 0,movement_flags.state(sitting))
     attack_visibility_syncs+=1
     last_attack_visibility={"target":interaction.selected_id,"native_target":target_sight_id,"visible":visible,"age_ms":now-target_sight_at,"at_ms":now}
 
@@ -552,7 +557,7 @@ func send_position(speed:float)->void:
     var flags:=0x30 if valid else 0
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var health:=int(player_state.vitals.get("health_pct",100)) if player_state.ready else 100
-    server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,0,207,0x10 if sitting else 0,true,heading,flags,health,server.me_oid)
+    server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,movement_flags.vertical_speed_mps/.025,207,movement_flags.state(sitting),movement_flags.on_ground,heading,flags,health,server.me_oid)
 
 func sync_inventory(now:int)->void:
     last_inventory_sync=now

@@ -20,14 +20,18 @@ parser.add_argument('--native',action='store_true')
 parser.add_argument('--crossing',action='store_true')
 parser.add_argument('--footsteps',action='store_true')
 parser.add_argument('--server-sounds',action='store_true')
+parser.add_argument('--water-motion',action='store_true')
+parser.add_argument('--water-regression',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
 assert not args.server_sounds or (args.native and not args.crossing and not args.footsteps)
+assert not args.water_regression or (args.native and args.crossing and not args.water_motion and not args.server_sounds and not args.footsteps)
+assert not args.water_motion or (args.native and not args.crossing and not args.footsteps and not args.server_sounds)
 assert not args.crossing or args.native
 assert not args.footsteps or (args.native and args.crossing)
 os.environ['DAOC_INSTALL']=str(args.install.resolve());sys.path.insert(0,str(workspace/'ProtocolQA'))
 from qa_runtime import ROOT,RUN,SERVER,DB,env,dotnet,ENGINE
 assert ROOT.resolve()==workspace and DB.is_relative_to(RUN) and RUN.is_relative_to(workspace/'ProtocolQA')
-output=workspace/('Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
+output=workspace/('Reports/water_door_regression' if args.water_regression else 'Reports/water_movement_real_protocol' if args.water_motion else 'Reports/server_sound_audio_real_protocol' if args.server_sounds else 'Reports/footstep_audio_real_protocol' if args.footsteps else 'Reports/door_audio_real_protocol')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True)
 result={'passed':False,'disposable_only':True,'checks':{},'errors':[]};server=client=peer=relay=None;logs=[];backed=False
 session='';snapshot={};buffer=b'';serial=0;trace=[];states=[];motion=[];sound_trace=[]
 config=RUN/'bridge_config.json';config_before=config.read_bytes()
@@ -54,9 +58,9 @@ def pump():
         if value.get('type')=='hello':session=value['session']
         if value.get('type')=='snapshot':
             snapshot=value
-            if args.crossing and relay:
+            if (args.crossing or args.water_motion) and relay:
                 current=relay.read_report()
-                if current.get('door_auto_test') and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
+                if (current.get('door_auto_test') or args.water_motion) and (not motion or current.get('test_elapsed')!=motion[-1].get('test_elapsed')):motion.append(current)
             for event in value.get('server_sound_audio',[]):
                 if not any(row['seq']==event['seq'] for row in sound_trace):sound_trace.append(event)
             for event in value.get('combat_audio',[]):
@@ -84,9 +88,10 @@ try:
         backed=True;char=db.execute("SELECT * FROM DOLCharacters WHERE Name='Codexdruid'").fetchone();assert char
         db.execute('UPDATE Account SET PrivLevel=3,Realm=3 WHERE Name=?',(char['AccountName'],))
         # Fixture only. This does not relocate or change an owner character.
-        db.execute("UPDATE DOLCharacters SET Class=53,Level=5,Region=200,Xpos=?,Ypos=?,Zpos=?,Health=200,DeathTime=0,HasGravestone=0 WHERE Name='Codexdruid'",(round(1375.4*40)+35*8192,round(1250.6*40)+51*8192,5200))
+        start=[1470.4,118.3,1091.2] if args.water_motion else [1375.4,130,1250.6]
+        db.execute("UPDATE DOLCharacters SET Class=53,Level=5,Region=200,Xpos=?,Ypos=?,Zpos=?,Health=200,DeathTime=0,HasGravestone=0 WHERE Name='Codexdruid'",(round(start[0]*40)+35*8192,round(start[2]*40)+51*8192,round(start[1]*40)))
         db.commit()
-    cfg=json.loads(config_before);cfg['initial_spawn_m']=[1375.4,130,1250.6];config.write_text(json.dumps(cfg),encoding='utf-8')
+    cfg=json.loads(config_before);cfg['initial_spawn_m']=start;config.write_text(json.dumps(cfg),encoding='utf-8')
     for p in source.glob('*.gd'):shutil.copy2(p,RUN/'Godot'/p.name)
     p=RUN/'Godot/visual_bridge.gd';p.write_text(p.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = 19737'),encoding='utf-8')
     log=(output/'server.log').open('w',encoding='utf-8');logs.append(log)
@@ -114,9 +119,9 @@ try:
         import importlib.util
         relay_source=repo/'source/ue5-bridge/pet_sight_relay.py'
         spec=importlib.util.spec_from_file_location('door_native_relay',relay_source);module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=60,entity_ids=['player:local'],render=True,native_profile='water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
-        if args.crossing:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
+        if args.crossing or args.water_motion:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
     door=207033603
     if args.crossing:
@@ -135,7 +140,7 @@ try:
         assert sum(row['event']=='open' for row in trace)>=2 and sum(row['event']=='close' for row in trace)>=2
         result['checks']['native_closed_collision_crossing_return']=True
         result['crossing']={'plane_m':plane,'closed_outside_samples':len(outside),'closed_inside_samples':len(inside),'samples':len(motion)}
-    if not args.crossing:
+    if not args.crossing and not args.water_motion:
         # Manual packet checks are separate from the native movement itinerary.
         send('door',door_id=door,open=False)
         wait(lambda:any(row['id']==door and not row['open'] for row in snapshot.get('doors',[])),'Closed baseline acknowledged')
@@ -151,6 +156,32 @@ try:
         assert trace[-1]['set']==1 and trace[-1]['position_m']==opening['position_m']
         result['checks']['real_close_acknowledged_and_anchored']=True
         settle(2);assert len(trace)==baseline+2;result['checks']['snapshot_repetition_silent']=True
+    if args.water_motion:
+        wait(lambda:motion and motion[-1].get('test_elapsed',0)>29,'Native enters deep water, stops, and returns to shore',40)
+        swim=[row for row in motion if row.get('water_movement',{}).get('swimming')]
+        assert swim,'No actual surface swimming recorded'
+        stable=[row for row in swim if row['test_elapsed']>12.5 and row['test_elapsed']<16]
+        assert stable,'No stationary swim witness'
+        assert all(not row['water_movement']['on_ground'] for row in stable)
+        assert all(abs(row['water_movement']['feet_m'][1]-116.95)<.4 for row in stable)
+        assert any(row['water_movement']['animation']=='swim' for row in swim)
+        assert max(row['water_movement']['speed_mps'] for row in stable)<.3
+        assert any(row.get('water_movement',{}).get('surface')=='water' for row in motion)
+        assert not motion[-1]['water_movement']['swimming']
+        assert abs(motion[-1]['position_m'][0]-start[0])<1
+        assert relay.read_report()['spell_audio'].get('swim_step_clips',0)>0
+        moves=relay.movement_forwarded;assert any(row.get('swimming') and not row.get('on_ground') for row in moves)
+        result['checks']['actual_surface_swim_pose_buoyancy_and_return']=True
+        result['water_swim_samples']=len(swim);result['water_stationary_samples']=len(stable)
+        result['native_move_commands']=moves
+        # Actual original Elf Bridge, above the same river mask: standing on its
+        # deck must remain ordinary grounded movement, not surface swimming.
+        send('chat',text='/jump to %d %d %d 200'%(round(1206.4*40)+35*8192,round(742.4*40)+51*8192,round(140*40)))
+        wait(lambda:relay.read_report().get('position_m') and abs(relay.read_report()['position_m'][0]-1206.4)<3 and abs(relay.read_report()['position_m'][2]-742.4)<3,'Native reaches the actual river bridge',20)
+        wait(lambda:relay.read_report().get('water_movement',{}).get('on_ground') and not relay.read_report()['water_movement']['swimming'] and relay.read_report()['water_movement']['feet_m'][1]>117.3,'Native lands on the bridge deck above the original river',18)
+        bridge=relay.read_report()['water_movement']
+        assert bridge['on_ground'] and not bridge['swimming'] and bridge['feet_m'][1]>117.3,bridge
+        result['bridge_water_witness']=bridge;result['checks']['actual_river_bridge_remains_grounded']=True
     if args.server_sounds:
         wait(lambda:relay.read_report().get('spell_audio',{}).get('active_voices',-1)==0,'Earlier door voices finish before event PCM witness',15)
         server_pcm_before=relay.read_report()['spell_audio']['pcm_consumed_bytes']
@@ -166,12 +197,26 @@ try:
         wait(lambda:relay.read_report().get('spell_audio',{}).get('pcm_consumed_bytes',0)>0,'Actual server door samples consumed by UE audio',15)
         wait(lambda:relay.read_report().get('spell_audio',{}).get('played_clips',0)>=len(trace),'Native consumes every actual door transition',10)
         audio=relay.read_report()['spell_audio'];assert audio['played_clips']==len(trace)+audio.get('footstep_clips',0)+audio.get('server_sound_clips',0) and audio['invalid_resources']==audio['unresolved_references']==0,audio
-        if args.footsteps:
+        if args.footsteps or args.water_motion:
             steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
             result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=True
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
+    if args.water_motion or args.water_regression:
+        approved=relay.read_report()['approved_environment']['bindings'];assert len(approved)==1
+        layer=approved[0];assert layer['loaded'] and layer['references']==1 and layer['old_water_hidden'] and layer['visible_components']>0,layer
+        result['approved_environment']=approved;result['checks']['approved_river_layer_active']=True
+        # Preserve the newer shared ground-cover material; the environment
+        # binding deliberately refuses to replace a different authored material.
+        terrain=workspace/'WaterMovementLab/terrain_inspection.json'
+        observed=json.loads(terrain.read_text(encoding='utf-8-sig'))
+        saved=[row for row in observed if row['mesh'].endswith('/Connacht_Terrain_Original_257.Connacht_Terrain_Original_257')]
+        assert len(saved)==1 and saved[0]['materials']==['/Game/DAoC/Connacht_Ground_Cover_v02/Materials/M_Connacht_Ground_v02.M_Connacht_Ground_v02']
+        result['preserved_newer_terrain_material']=saved[0];result['checks']['shared_terrain_material_preserved']=True
+        result['native_inputs'][str(terrain)]=digest(terrain)
+        for path in [workspace/'environment_catalog.json',workspace/'WaterMovementLab/NativeHost/Config/DefaultEngine.ini']:result['native_inputs'][str(path)]=digest(path)
+        catalog=workspace/'WaterMovementLab/water_field.json';result['native_inputs'][str(catalog)]=digest(catalog)
     if args.server_sounds:
         catalog=workspace/'ServerSoundAudioLab/OriginalServerSoundAudio_v01/sounds.json';result['native_inputs'][str(catalog)]=digest(catalog)
     assert all(digest(Path(path))==sha for path,sha in inputs.items())

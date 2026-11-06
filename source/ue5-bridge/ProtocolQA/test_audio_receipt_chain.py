@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 
@@ -173,6 +173,28 @@ def verify(workspace):
         event['files'][0]['before_sha256']=previous_native;put(event_path,event)
         saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt event WAV');rejected();checks+=1;targets[-1].write_bytes(saved)
         wave.write_bytes(b'corrupt original combat WAV after events');rejected();checks+=1;wave.write_bytes(before)
+        water_library=w/'WaterMovementLab';water_library.mkdir();water_catalog=water_library/'water_field.json';water_catalog.write_text('original water mask')
+        water_resources=water_library/'resources.json';put(water_resources,{'catalog':str(water_catalog),'catalog_sha256':digest(water_catalog)})
+        water_rows=[];previous_native=digest(binary)
+        native_targets=[plugin/name for name in WATER_NATIVE_TARGETS]
+        targets=native_targets+[w/'Godot'/name for name in ['live_gateway.gd','movement_flags_state.gd']]+[plugin/'Content/WaterMovement_v01/water_field.json']
+        new_names=['DAoCBridgeWaterData.h','DAoCBridgeWaterMovement.cpp','DAoCBridgeWaterAcceptance.cpp','movement_flags_state.gd','water_field.json']
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in new_names:target.write_bytes(b'old water predecessor')
+            previous=digest(target) if target.exists() else None;target.write_bytes(b'new water '+str(target).encode())
+            if target.name=='water_field.json':target.write_bytes(water_catalog.read_bytes())
+            water_rows.append({'target':str(target),'before_sha256':previous,'after_sha256':digest(target)})
+        water_path=water_library/'installed.json';water={'installed':True,'phase':'complete','database_modified':False,
+            'predecessor_receipt_sha256':digest(event_path),'resources_receipt_sha256':digest(water_resources),
+            'native_before_sha256':previous_native,'native_after_sha256':digest(binary),'files':water_rows}
+        put(water_path,water);assert verify_files(w)['water_movement_installed'];checks+=1
+        water['predecessor_receipt_sha256']='0'*64;put(water_path,water);rejected();checks+=1
+        water['predecessor_receipt_sha256']=digest(event_path);water['files'][0]['before_sha256']='0'*64;put(water_path,water);rejected();checks+=1
+        water['files'][0]['before_sha256']=previous_native;put(water_path,water)
+        saved=targets[-1].read_bytes();targets[-1].write_bytes(b'corrupt water mask');rejected();checks+=1;targets[-1].write_bytes(saved)
+        wave.write_bytes(b'corrupt original combat WAV after water');rejected();checks+=1;wave.write_bytes(before)
+        gateway=w/'Godot/live_gateway.gd';entry=next(row for row in water_rows if row['target']==str(gateway));old_gateway=entry['before_sha256'];entry['before_sha256']='0'*64;put(water_path,water);rejected();checks+=1;entry['before_sha256']=old_gateway;put(water_path,water)
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

@@ -28,7 +28,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
     const bool Dead=Local?(Ready?PoseNum(Vitals,TEXT("health_pct"))<=0:Pose.Dead):Requested==TEXT("dead");
     const bool Sitting=Ready&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
-    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run");
+    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim");
     auto Clip=[&](const FString& Key)->UAnimSequenceBase*{FString Path;return (*Entry)->TryGetStringField(Key,Path)?LoadObject<UAnimSequenceBase>(nullptr,*Path):nullptr;};
     if(Dead){
         if(!Pose.Dead){
