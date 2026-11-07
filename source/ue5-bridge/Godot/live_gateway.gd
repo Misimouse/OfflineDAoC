@@ -27,6 +27,7 @@ var pet:RefCounted
 var trainer:RefCounted
 var journal:RefCounted
 var party:RefCounted
+var emblem_picker:RefCounted
 var guild_state:RefCounted
 var line_of_sight:RefCounted
 var spell_visuals:RefCounted
@@ -126,6 +127,7 @@ func _ready()->void:
     journal=load(folder.path_join("journal_state.gd")).new()
     party=load(folder.path_join("party_state.gd")).new()
     guild_state=load(folder.path_join("guild_state.gd")).new()
+    emblem_picker=load(folder.path_join("emblem_picker_state.gd")).new()
     line_of_sight=load(folder.path_join("line_of_sight.gd")).new()
     spell_visuals=load(folder.path_join("spell_visual_state.gd")).new()
     spell_cast=load(folder.path_join("spell_cast_state.gd")).new()
@@ -287,6 +289,9 @@ func world_event(kind:String,data:Dictionary)->void:
             server.command("/gmstealth on")
     if kind=="jump":apply_entry(server.entry)
     if guild_state!=null:guild_state.consume(kind,data,server,Time.get_ticks_msec())
+    if emblem_picker!=null and kind in ["emblem_dialog","you","quit"]:
+        emblem_picker.sync(server,character_name)
+        emblem_picker.consume(kind,data,server,inventory.snapshot().get("items",[]) if kind=="emblem_dialog" and inventory!=null else [])
     var routed:bool=chat_state.observe(kind,data,adapter.entities,interaction.conversation_id,position,Time.get_ticks_msec()) if chat_state!=null else false
     if kind=="message":
         message_count+=1;var text:=String(data.get("text",""))
@@ -317,6 +322,8 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if emblem_picker!=null and action in emblem_picker.ACTIONS:
+        emblem_picker.sync(server,character_name);emblem_picker.request(value,server);return
     if guild_state!=null and action in guild_state.ACTIONS:
         guild_state.sync(server,character_name,Time.get_ticks_msec());guild_state.request(value,server,Time.get_ticks_msec());return
     if action in exchange.ACTIONS:
@@ -555,6 +562,8 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["exchange"]=exchange.snapshot()
         guild_state.sync(server,character_name,now)
         transport.snapshot_metadata["guild"]=guild_state.snapshot()
+        emblem_picker.sync(server,character_name)
+        transport.snapshot_metadata["emblem_picker"]=emblem_picker.snapshot()
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states

@@ -5,8 +5,9 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
-def verify(workspace,engine,installed=False):
-    root=workspace/'GuildWindowLab';bp=root/'native_build.json';build=read(bp);assert build['passed']
+def verify(workspace,engine,installed=False,lab_name="GuildWindowLab"):
+    assert lab_name in ["GuildWindowLab","EmblemWindowLab"]
+    root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll';expected=build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll'] if installed else build['normal_binary_sha256']
@@ -17,7 +18,7 @@ def verify(workspace,engine,installed=False):
     out=root/('InstalledGuildAcceptance' if installed else 'GuildAcceptance')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True);report=out/'guild.json'
     project=str(workspace/'Client/DAoCBridgeClient.uproject') if installed else build['project']
     args=[str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'),project,'/Engine/Maps/Entry','-game','-DaocBridge','-DaocBridgeReadOnly',
-      '-DaocBridgeGuildTest='+str(report),'-DaocBridgeGuildRadio='+str(root/'Resources/GuildUI_v01/radiobutton1.png'),'-DaocBridgeDisplaySettings='+str(out/'display.ini'),'-DaocBridgeKeyConfiguration='+str(out/'keys.ini'),
+      '-DaocBridgeGuildTest='+str(report),'-DaocBridgeGuildRadio='+str(workspace/'GuildWindowLab/Resources/GuildUI_v01/radiobutton1.png'),'-DaocBridgeDisplaySettings='+str(out/'display.ini'),'-DaocBridgeKeyConfiguration='+str(out/'keys.ini'),
       '-DaocBridgeControlsSettings='+str(out/'camera.json'),'-DaocBridgeAudioSettings='+str(out/'audio.ini'),
       '-nosound','-unattended','-nosplash','-d3d11','-RenderOffscreen','-windowed','-ResX=1280','-ResY=720','-abslog='+str(out/'engine.log')]
     if installed:args=[v for v in args if not v.startswith('-DaocBridgeGuildRadio=')]

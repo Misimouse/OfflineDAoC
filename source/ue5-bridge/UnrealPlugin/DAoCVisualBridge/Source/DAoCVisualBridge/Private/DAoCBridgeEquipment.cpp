@@ -66,6 +66,12 @@ void UDAoCBridgeSubsystem::LoadEquipmentCatalog(){
     FString Path;EquipmentDyePalette.Reset();EquipmentEmblemCatalog.Reset();if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeEquipmentCatalog="),Path))return;
     FString Text;TSharedPtr<FJsonObject> Root;if(FFileHelper::LoadFileToString(Text,*Path)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Root)&&GearNum(Root,TEXT("version"))==1){EquipmentCatalog=GearObj(Root,TEXT("models"));ArmourCatalog=GearObj(Root,TEXT("armour"));EquipmentDyePalette=GearObj(Root,TEXT("dyes"));EquipmentEmblemCatalog=GearObj(Root,TEXT("emblems"));}
 }
+bool UDAoCBridgeSubsystem::BuildEmblemPickerShield(UStaticMeshComponent* Component,int32 Value){
+    auto Row=GearObj(EquipmentCatalog,TEXT("60"));if(!Component||!Row||Value<512||Value>131071)return false;
+    auto* Mesh=LoadObject<UStaticMesh>(nullptr,*GearStr(Row,TEXT("asset")));if(!Mesh)return false;
+    if(Component->GetStaticMesh()!=Mesh)Component->SetStaticMesh(Mesh);
+    return ApplyOriginalEmblem(Component,GearObj(Row,TEXT("info")),Value)>0;
+}
 void UDAoCBridgeSubsystem::ClearLocalEquipment(){
     for(auto& Pair:LocalEquipment)if(Pair.Value.Component.IsValid())Pair.Value.Component->DestroyComponent();
     LocalEquipment.Empty();EquipmentActor.Reset();EquipmentFingerprint.Empty();EquipmentMissingModels=0;EquipmentMissingBones=0;

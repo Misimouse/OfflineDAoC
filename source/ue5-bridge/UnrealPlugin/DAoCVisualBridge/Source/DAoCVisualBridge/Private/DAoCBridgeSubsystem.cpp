@@ -238,6 +238,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     ApplyChat(M);
     const TSharedPtr<FJsonObject>* Exchange=nullptr;if(M->TryGetObjectField(TEXT("exchange"),Exchange))ApplyExchange(*Exchange);
     const TSharedPtr<FJsonObject>* Guild=nullptr;if(M->TryGetObjectField(TEXT("guild"),Guild))ApplyGuild(*Guild);
+        const TSharedPtr<FJsonObject>* EmblemPicker=nullptr;if(M->TryGetObjectField(TEXT("emblem_picker"),EmblemPicker))ApplyEmblemPicker(*EmblemPicker);
     }
     ApplyZoneLights(M);
     Sequence=static_cast<int64>(Seq);LastSnapshot=FPlatformTime::Seconds();TSet<FString> Seen;NpcCount=0;
@@ -609,9 +610,11 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    if(TickEmblemPickerAcceptance())return;
     if(TickGuildAcceptance())return;
     if(TickDisplaySettingsAcceptance())return;
     TickDisplaySettings();
+    UpdateEmblemPickerPreview();
     if(TickLiveRidingAssetAcceptance())return;
     if(TickTargetTrackingAcceptance())return;
     if(TickMovementKeysAcceptance())return;

@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -332,6 +332,21 @@ def verify(workspace):
             old=target.read_bytes();target.write_bytes(b'tampered guild or protected predecessor');rejected();checks+=1;target.write_bytes(old)
         guild['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(guild_path,guild);rejected();checks+=1;guild['files'].pop();put(guild_path,guild)
         assert verify_files(w)['guild_window_installed'];checks+=1
+        prior=digest(binary);emblem_rows=[]
+        targets=[plugin/r for r in EMBLEM_NATIVE_TARGETS+EMBLEM_UI_TARGETS]+[w/'Godot'/r for r in EMBLEM_GODOT_TARGETS]
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in EMBLEM_NEW_NAMES:target.write_bytes(b'old emblem predecessor')
+            old=None if target.name in EMBLEM_NEW_NAMES else digest(target)
+            target.write_bytes(b'new emblem '+str(target).encode());emblem_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        emblem_path=w/'EmblemWindowLab/installed.json';emblem=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(guild_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=emblem_rows)
+        put(emblem_path,emblem);assert verify_files(w)['emblem_window_installed'];checks+=1
+        emblem['predecessor_receipt_sha256']='0'*64;put(emblem_path,emblem);rejected();checks+=1;emblem['predecessor_receipt_sha256']=digest(guild_path)
+        emblem['files'][0]['before_sha256']='0'*64;put(emblem_path,emblem);rejected();checks+=1;emblem['files'][0]['before_sha256']=prior;put(emblem_path,emblem)
+        for target in [binary,w/'Godot/emblem_picker_state.gd',plugin/'Content/EmblemUI_v01/picker.json',plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeEmblemPreview.cpp',Path(server_rows[0]['target']),wave]:
+            old=target.read_bytes();target.write_bytes(b'tampered emblem or protected predecessor');rejected();checks+=1;target.write_bytes(old)
+        emblem['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(emblem_path,emblem);rejected();checks+=1;emblem['files'].pop();put(emblem_path,emblem)
+        assert verify_files(w)['emblem_window_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})
