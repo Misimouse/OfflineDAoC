@@ -7,6 +7,8 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES
+
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(value),encoding='utf-8')
@@ -294,6 +296,20 @@ def verify(workspace):
             saved=target.read_bytes();target.write_bytes(b'tampered UI keys or protected predecessor');rejected();checks+=1;target.write_bytes(saved)
         interface['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(interface_path,interface);rejected();checks+=1;interface['files'].pop();put(interface_path,interface)
         assert verify_files(w)['interface_keys_installed'];checks+=1
+        prior=digest(binary);display_rows=[]
+        for relative in DISPLAY_NATIVE_TARGETS:
+            target=plugin/relative;target.parent.mkdir(parents=True,exist_ok=True)
+            old=None if target.name in DISPLAY_NEW_NAMES else digest(target)
+            target.write_bytes(b'new display settings '+relative.encode());display_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        display_path=w/'DisplaySettingsLab/installed.json';display=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,
+            predecessor_receipt_sha256=digest(interface_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=display_rows)
+        put(display_path,display);assert verify_files(w)['display_settings_installed'];checks+=1
+        display['predecessor_receipt_sha256']='0'*64;put(display_path,display);rejected();checks+=1;display['predecessor_receipt_sha256']=digest(interface_path)
+        display['files'][0]['before_sha256']='0'*64;put(display_path,display);rejected();checks+=1;display['files'][0]['before_sha256']=prior;put(display_path,display)
+        for target in [binary,plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeDisplaySettings.cpp',content[0],wave]:
+            saved=target.read_bytes();target.write_bytes(b'tampered display or protected predecessor');rejected();checks+=1;target.write_bytes(saved)
+        display['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(display_path,display);rejected();checks+=1;display['files'].pop();put(display_path,display)
+        assert verify_files(w)['display_settings_installed'];checks+=1
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)

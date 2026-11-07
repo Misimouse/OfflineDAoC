@@ -608,6 +608,8 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    if(TickDisplaySettingsAcceptance())return;
+    TickDisplaySettings();
     if(TickLiveRidingAssetAcceptance())return;
     if(TickTargetTrackingAcceptance())return;
     if(TickMovementKeysAcceptance())return;

@@ -72,6 +72,14 @@ INTERFACE_KEYS_NATIVE_TARGETS=KEY_CONFIGURATION_NATIVE_TARGETS+[
     'Source/DAoCVisualBridge/Private/DAoCBridgeInteraction.cpp']
 
 
+DISPLAY_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeDisplaySettings.h',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeDisplaySettings.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeDisplayOptions.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeDisplaySettingsAcceptance.cpp']
+DISPLAY_NEW_NAMES={'DAoCBridgeDisplaySettings.h','DAoCBridgeDisplaySettings.cpp','DAoCBridgeDisplayOptions.cpp','DAoCBridgeDisplaySettingsAcceptance.cpp'}
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -153,6 +161,25 @@ def verify_files(workspace):
     interface=json.loads(interface_path.read_text()) if interface_path.exists() else None
     if interface and not interface.get('installed'):interface=None
     interface_replacements={}
+    display_path=workspace/'DisplaySettingsLab/installed.json'
+    display=json.loads(display_path.read_text()) if display_path.exists() else None
+    if display and not display.get('installed'):display=None
+    display_replacements={}
+    if display:
+        assert interface and display['phase']=='complete' and not display['database_modified'] and not display['server_rules_modified']
+        assert display['predecessor_receipt_sha256']==digest(interface_path) and display['native_before_sha256']==interface['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';display_replacements={row['target']:row for row in display['files']}
+        expected={str(plugin/p) for p in DISPLAY_NATIVE_TARGETS}
+        assert len(display_replacements)==len(display['files'])==len(expected) and set(display_replacements)==expected
+        for row in display['files']:
+            assert (row['before_sha256'] is None)==(Path(row['target']).name in DISPLAY_NEW_NAMES)
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=display_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==display['native_before_sha256'] and binary['after_sha256']==display['native_after_sha256']
+    def latest_display(row,expected):
+        changed=display_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if interface:
         assert configuration and interface['phase']=='complete' and not interface['database_modified'] and not interface['server_rules_modified']
         assert interface['predecessor_receipt_sha256']==digest(configuration_path) and interface['native_before_sha256']==configuration['native_after_sha256']
@@ -160,13 +187,13 @@ def verify_files(workspace):
         interface_replacements={row['target']:row for row in interface['files']}
         expected={str(plugin/p) for p in INTERFACE_KEYS_NATIVE_TARGETS}
         assert len(interface_replacements)==len(interface['files'])==len(expected) and set(interface_replacements)==expected
-        for row in interface['files']:assert row['before_sha256'] is not None and digest(Path(row['target']))==row['after_sha256']
+        for row in interface['files']:assert row['before_sha256'] is not None and digest(Path(row['target']))==latest_display(row,row['after_sha256'])
         binary=interface_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==interface['native_before_sha256'] and binary['after_sha256']==interface['native_after_sha256']
     def latest_interface(row,expected):
         changed=interface_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_display(row,expected)
     if configuration:
         assert riding and configuration['phase']=='complete' and not configuration['database_modified'] and not configuration['server_rules_modified']
         assert configuration['predecessor_receipt_sha256']==digest(riding_path) and configuration['native_before_sha256']==riding['native_after_sha256']
@@ -429,4 +456,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'verified_files':len(original['files'])}

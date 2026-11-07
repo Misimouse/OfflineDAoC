@@ -1,5 +1,9 @@
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeKeyConfiguration.h"
+#include "DAoCBridgeDisplaySettings.h"
+#include "Engine/Engine.h"
+#include "GameFramework/GameUserSettings.h"
+#include "Widgets/Input/SComboBox.h"
 #include "DAoCBridgeMovementKeys.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
@@ -63,7 +67,7 @@ void UDAoCBridgeSubsystem::SetAudioVolume(bool Master,float Value){
 }
 void UDAoCBridgeSubsystem::OpenOptions(){
     if(bOptionsOpen||!GetWorld()||!GetWorld()->GetGameViewport())return;
-    LoadAudioSettings();LoadKeyConfiguration();
+    LoadAudioSettings();LoadKeyConfiguration();TickDisplaySettings();
     FString Art=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/options.png");
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsArt="),Art);
     if(!ClassicTextures.Contains(TEXT("options"))){
@@ -78,9 +82,31 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     auto Button=[&](const FString& Text,float X,float Y,float W,TFunction<void()> Click){At(X,Y,W,22,SNew(SButton).IsFocusable(false).ContentPadding(FMargin(2,0)).OnClicked_Lambda([Click](){Click();return FReply::Handled();})[Label(Text,Text==TEXT("CHARACTER SELECT")?8:10)]);};
     At(0,0,384,420,SNew(SImage).Image(ClassicArt(TEXT("options"))));
     At(15,5,330,19,Label(TEXT("OPTIONS"),13));
-    Button(TEXT("SOUND"),18,34,145,[this](){CloseOptions();bControlsOptions=false;OpenOptions();});
-    Button(TEXT("CONTROLS"),190,34,170,[this](){CloseOptions();bControlsOptions=true;OpenOptions();});
-    if(!bControlsOptions){
+    Button(TEXT("SOUND"),15,34,110,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=false;OpenOptions();});
+    Button(TEXT("CONTROLS"),135,34,110,[this](){CloseOptions();bControlsOptions=true;bDisplayOptions=false;OpenOptions();});
+    Button(TEXT("DISPLAY"),255,34,110,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=true;OpenOptions();});
+    if(bDisplayOptions){
+        if(DisplaySettings){
+            auto Choice=[&](float Y,const FString& Name,const TArray<FString>& Values,TFunction<int32()> Selected,TFunction<void(int32)> Change,TFunction<bool()> Enabled){
+                At(20,Y,340,20,Label(Name,11));
+                auto Items=MakeShared<TArray<TSharedPtr<FString>>>();for(const auto& Value:Values)Items->Add(MakeShared<FString>(Value));
+                auto Current=MakeShared<int32>(FMath::Clamp(Selected(),0,Items->Num()-1));
+                At(20,Y+24,340,24,SNew(SComboBox<TSharedPtr<FString>>).OptionsSource(&Items.Get()).InitiallySelectedItem((*Items)[*Current]).IsEnabled_Lambda([Enabled](){return Enabled();})
+                    .OnGenerateWidget_Lambda([Items](TSharedPtr<FString> Item){return SNew(STextBlock).Text(FText::FromString(*Item)).Font(FCoreStyle::GetDefaultFontStyle("Regular",10));})
+                    .OnSelectionChanged_Lambda([Items,Current,Change](TSharedPtr<FString> Item,ESelectInfo::Type){int32 Index=Items->IndexOfByKey(Item);if(Index!=INDEX_NONE){*Current=Index;Change(Index);}})
+                    [SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text_Lambda([Items,Selected](){return FText::FromString(*(*Items)[FMath::Clamp(Selected(),0,Items->Num()-1)]);})]);
+            };
+            FIntPoint Desktop=GEngine->GetGameUserSettings()->GetDesktopResolution();auto Sizes=FBridgeDisplaySettings::Resolutions(Desktop,PendingDisplayResolution);TArray<FString> Names;
+            for(auto Size:Sizes)Names.Add(FString::Printf(TEXT("%d X %d"),Size.X,Size.Y));
+            Choice(75,TEXT("RESOLUTION"),Names,[this,Sizes](){return Sizes.IndexOfByKey(PendingDisplayResolution);},[this,Sizes](int32 I){PendingDisplayResolution=Sizes[I];},[this](){return DisplayConfirmUntil==0&&PendingDisplayMode!=1;});
+            Choice(140,TEXT("WINDOW MODE"),{TEXT("FULLSCREEN"),TEXT("BORDERLESS (DESKTOP)"),TEXT("WINDOWED")},[this](){return PendingDisplayMode;},[this](int32 I){PendingDisplayMode=I;},[this](){return DisplayConfirmUntil==0;});
+            Names.Reset();for(int32 Cap:FBridgeDisplaySettings::Caps())Names.Add(Cap==0?TEXT("MONITOR REFRESH (VSYNC)"):Cap<0?TEXT("UNLIMITED (NO VSYNC)"):FString::Printf(TEXT("%d FPS"),Cap));
+            Choice(205,TEXT("FRAME RATE CAP"),Names,[this](){return FBridgeDisplaySettings::Caps().IndexOfByKey(PendingDisplayCap);},[this](int32 I){PendingDisplayCap=FBridgeDisplaySettings::Caps()[I];},[this](){return DisplayConfirmUntil==0;});
+            At(20,271,340,35,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(TEXT("Positive limits use VSync. Borderless fills the desktop. F11 remains first-person view."))));
+            Button(TEXT("APPLY"),20,310,100,[this](){BeginDisplayChange();});Button(TEXT("KEEP"),140,310,100,[this](){ConfirmDisplayChange(true);});Button(TEXT("REVERT"),260,310,100,[this](){ConfirmDisplayChange(false);CloseOptions();bDisplayOptions=true;OpenOptions();});
+            At(20,345,340,42,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text_Lambda([this](){return FText::FromString(DisplayConfirmUntil>0?FString::Printf(TEXT("Keep these settings? Reverting in %d seconds."),FMath::Max(0,FMath::CeilToInt(DisplayConfirmUntil-FPlatformTime::Seconds()))):DisplayMessage.IsEmpty()?TEXT("Apply, then Keep to save your display settings."):DisplayMessage);}));
+        }else At(20,85,340,55,Label(TEXT("Display settings are unavailable in this test."),10));
+    }else if(!bControlsOptions){
     for(int32 I=0;I<2;++I){const bool Master=I==0;const float Y=85+I*80;
         At(20,Y,300,22,Label(Master?TEXT("MASTER VOLUME"):TEXT("SOUND EFFECTS")));
         At(20,Y+28,275,20,SNew(SSlider).Value_Lambda([this,Master](){return Master?AudioMasterVolume:AudioEffectsVolume;}).OnValueChanged_Lambda([this,Master](float Value){SetAudioVolume(Master,Value);}));
@@ -113,6 +139,7 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     OptionsOverlay=Overlay;GetWorld()->GetGameViewport()->AddViewportWidgetContent(Overlay,90);
 }
 bool UDAoCBridgeSubsystem::CloseOptions(){
+    if(DisplayConfirmUntil>0)ConfirmDisplayChange(false);
     const bool WasOpen=bOptionsOpen;bOptionsOpen=false;
     BindingCaptureAction.Empty();BindingCaptureSlot=-1;if(WasOpen){ChatClosedAt=FPlatformTime::Seconds();if(MovementKeys)MovementKeys->RunLock=false;}
     if(OptionsOverlay&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(OptionsOverlay.ToSharedRef());

@@ -15,4 +15,6 @@ Confirmed gaps or partial surfaces:
 - Guild/emblem and realm-war/siege windows have original sources but no explicit bridge window contract in the current snapshot metadata. Review packets, permissions, original UI and relevant world support together.
 - Quest interface modernization and expansion world-population import remain deferred according to the owner's instructions.
 
-The next bounded package is CLIENT-DISPLAY: compare original boot/settings code and expose resolution, window mode and frame cap with persistence. Retain current rendering choices and inspect launcher overrides. Keep full render-quality tuning separate from basic display controls.
+Basic display settings are now delivered separately: resolution, window mode and original frame caps, confirmed persistence, rollback and launcher-override restart checks. UE borderless uses desktop size. Owner monitor review remains pending. See DISPLAY-SETTINGS-DELIVERY.md. Full render-quality tuning remains separate.
+
+The next bounded package is CLIENT-GUILD: reuse the original guild/alliance roster UI and social packet contract, keeping permissions on the DOL server. Guild emblems and world-population import remain separate.

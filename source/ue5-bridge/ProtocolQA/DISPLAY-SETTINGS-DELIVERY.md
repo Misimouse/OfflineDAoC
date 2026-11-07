@@ -1,0 +1,17 @@
+# Display preferences
+
+Esc > DISPLAY reuses the original options artwork for resolution, fullscreen / borderless desktop / windowed mode and the original monitor-refresh, fixed FPS and unlimited choices. Positive caps retain the original VSync semantics. F11 remains first-person view. This delivery does not apply rendering/scalability presets or change map quality.
+
+The first launch without saved preferences preserves the current window. Confirmed preferences are saved to Saved/DAoCBridgeDisplay.ini and applied before the lobby, overriding the launcher's fixed 1920 x 1080 window arguments. Automated fixtures ignore owner display preferences unless given an explicit private path. Existing key, camera and audio preference files are separate.
+
+Apply starts a fifteen-second Keep / Revert interval; timeout or closing options restores the previous display. Only Keep saves. Invalid persisted dimensions, modes or unsupported caps leave defaults intact. Resolutions are limited by desktop dimensions and include the current size. Unreal borderless fills the desktop, so resolution selection is disabled in that mode; this differs from Godot's arbitrary-size borderless window.
+
+The installed-client trial additionally exposed a preconfigured t.MaxFPS=60 with higher priority than ordinary game settings. The candidate now reproduces that configuration in its private acceptance test and changes only the two display cvars at their current priority. The failed installed trial was rolled back before rebuilding.
+
+Evidence: 47 specific native checks including actual engine VSync/frame-cap values, persistence, malformed input, actual resolution requests, rollback, timeout, close, original window artwork and unchanged scalability. The initial screenshot test ran before the resized viewport had rendered; the corrected fixture waits one second and retains the failed report. The restart trial with 1600 x 900 was limited by the offscreen desktop size. Separate process restarts verify a saved 960 x 540 viewport despite conflicting 1280 x 720 launch arguments. The resolution request uses the narrow API, avoiding GameUserSettings validation which may reload general defaults on first use. Failed trial reports are retained. Monitor-exclusive behavior still requires owner observation on physical displays.
+
+Regression coverage: supported control mappings, movement, jump, tracking, water-data parity and the established sound/interface suite. The installer permits only the nine recorded source/binary targets, links to the exact interface-controls predecessor and backs up existing files. No settings file, database, stock content or WORK map is installed by this package.
+
+Owner checks: Esc > DISPLAY; change windowed resolution, Apply then Keep; restart and check the remembered size. Try Revert or let the timer expire. Try fullscreen and borderless desktop and confirm the interface follows the viewport. Try a fixed cap, monitor refresh and unlimited. Verify F11 still changes viewpoint. This is display configuration, not a promise of higher achievable FPS.
+
+The final corrected candidate lives in DisplaySettingsFixLab; DisplaySettingsLab retains the failed sealed trial and the canonical activation receipt. One controls run reached its 100-second wrapper timeout after a 78-second engine initialization; the successor wrapper permits 180 seconds for that case while retaining every assertion.
