@@ -349,6 +349,18 @@ private:
     FVector2D ClassicMerchantPosition=FVector2D(-1,4);
     void RefreshClassicMerchant();
     void CloseClassicMerchant(bool Notify=true);
+    TSharedPtr<FJsonObject> GuildState,GuildConfirm;
+    TSharedPtr<SWidget> GuildOverlay,GuildPanel;
+    FString GuildSignature,GuildWindowToken,GuildDismissedToken,GuildSelectedToken,GuildSelectedName;
+    FVector2D GuildPosition=FVector2D(-1,80);
+    void ApplyGuild(TSharedPtr<FJsonObject> State);
+    void RefreshGuild();
+    void ToggleGuild();
+    bool CloseGuild(bool Notify=true);
+    void GuildRequest(const FString& Action,TSharedPtr<FJsonObject> Values=nullptr);
+    void GuildMemberAction(const FString& Verb);
+    void CompleteGuildConfirmation(bool Accept);
+    bool TickGuildAcceptance();
     TSharedPtr<FJsonObject> ExchangeState,ExchangeConfirm;
     TSharedPtr<SWidget> ExchangeOverlay,ExchangePanel;
     FString ExchangeSignature,ExchangeWindowToken,ExchangeDismissedToken;

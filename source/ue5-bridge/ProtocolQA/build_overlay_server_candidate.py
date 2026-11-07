@@ -8,9 +8,10 @@ import subprocess
 from xml.sax.saxutils import escape
 
 
-def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=False, minotaur_reference=None):
+def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=False, minotaur_reference=None, guild_roster=False):
     server_source,overlay,workspace,output,dotnet=(p.resolve() for p in (server_source,overlay,workspace,output,dotnet))
     assert output.is_relative_to(workspace) and not output.is_relative_to(server_source)
+    if guild_roster:assert not (output.parent/"installed.json").exists(), "Installed guild delivery is sealed"
     output.mkdir(parents=True,exist_ok=True)
     definition=json.loads((overlay/'overlay-files.json').read_text(encoding='utf-8-sig'))
     files=definition['files']
@@ -38,6 +39,11 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
         variants_report[name]={'original_sha256':hashlib.sha256(original_raw).hexdigest(),
             'candidate_sha256':hashlib.sha256(candidate.read_bytes()).hexdigest(),
             'path':str(candidate),'scope':'Enable the existing Vampiir starting-class rule only in this private build.'+(' Preserve the separately verified Hibernian Minotaur stats variant.' if minotaur_reference else '')}
+    if guild_roster:
+        from prepare_guild_server_variants import variants as guild_variants
+        manifest=guild_variants(server_source,output/'GuildSourceVariants')
+        assert manifest['passed']
+        for name,row in manifest['files'].items():sources[name]=Path(row['path']);variants_report[name]=row
     for name,source in sources.items():
         assert source.is_file() and (source.resolve().is_relative_to(overlay) or source.resolve().is_relative_to(output))
         relative=Path(name).relative_to('GameServer').as_posix()
@@ -64,7 +70,7 @@ def build(server_source, overlay, workspace, output, dotnet, vampiir_creation=Fa
     report={'passed':True,'installed':False,'source_root':str(server_source),'overlay_root':str(overlay),
         'overlay_base_commit':definition['base_commit'],'overlay_source_sha256':{name:hashlib.sha256((overlay/name).read_bytes()).hexdigest() for name in files},
         'compiled_bridge_overlay_verified':True,'libraries':str(libraries),'binaries_sha256':binaries,
-        'candidate_features':(['vampiir_creation'] if vampiir_creation else [])+(['minotaur_creation'] if minotaur_reference else []),'source_variants':variants_report}
+        'candidate_features':(['vampiir_creation'] if vampiir_creation else [])+(['minotaur_creation'] if minotaur_reference else [])+(['guild_roster_cache'] if guild_roster else []),'source_variants':variants_report}
     (output/'build_receipt.json').write_text(json.dumps(report,indent=2),encoding='utf-8')
     return report
 
@@ -74,5 +80,6 @@ if __name__=='__main__':
     for name in ['server-source','overlay','workspace','output','dotnet']:parser.add_argument('--'+name,type=Path,required=True)
     parser.add_argument('--vampiir-creation',action='store_true',help='Private source variant only; never changes normal source or settings')
     parser.add_argument('--minotaur-reference',type=Path,help='Pinned DOL source; private four-class Minotaur candidate only, excluding Mauler')
-    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet,args.vampiir_creation,args.minotaur_reference)
+    parser.add_argument('--guild-roster',action='store_true')
+    args=parser.parse_args();report=build(args.server_source,args.overlay,args.workspace,args.output,args.dotnet,args.vampiir_creation,args.minotaur_reference,args.guild_roster)
     print(json.dumps(report))

@@ -80,6 +80,15 @@ DISPLAY_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Bina
 DISPLAY_NEW_NAMES={'DAoCBridgeDisplaySettings.h','DAoCBridgeDisplaySettings.cpp','DAoCBridgeDisplayOptions.cpp','DAoCBridgeDisplaySettingsAcceptance.cpp'}
 
 
+GUILD_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeWorldPointer.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfigurationAcceptance.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeGuild.inl','Source/DAoCVisualBridge/Private/DAoCBridgeGuildAcceptance.cpp']
+GUILD_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','guild_state.gd']
+GUILD_NEW_NAMES={'DAoCBridgeGuild.inl','DAoCBridgeGuildAcceptance.cpp','guild_state.gd','radiobutton1.png'}
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -165,6 +174,27 @@ def verify_files(workspace):
     display=json.loads(display_path.read_text()) if display_path.exists() else None
     if display and not display.get('installed'):display=None
     display_replacements={}
+    guild_path=workspace/'GuildWindowLab/installed.json'
+    guild=json.loads(guild_path.read_text()) if guild_path.exists() else None
+    if guild and not guild.get('installed'):guild=None
+    guild_replacements={}
+    if guild:
+        assert display and guild['phase']=='complete' and not guild['database_modified'] and not guild['server_rules_modified']
+        assert guild['predecessor_receipt_sha256']==digest(display_path) and guild['native_before_sha256']==display['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';guild_replacements={row['target']:row for row in guild['files']}
+        server_targets={row['target'] for row in original['files'] if Path(row['target']).name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']}
+        assert len(server_targets)==9
+        expected={str(plugin/p) for p in GUILD_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in GUILD_GODOT_TARGETS}|{str(plugin/'Content/GuildUI_v01/radiobutton1.png')}|server_targets
+        assert len(guild_replacements)==len(guild['files'])==len(expected) and set(guild_replacements)==expected
+        for row in guild['files']:
+            assert (row['before_sha256'] is None)==(Path(row['target']).name in GUILD_NEW_NAMES)
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=guild_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==guild['native_before_sha256'] and binary['after_sha256']==guild['native_after_sha256']
+    def latest_guild(row,expected):
+        changed=guild_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     if display:
         assert interface and display['phase']=='complete' and not display['database_modified'] and not display['server_rules_modified']
         assert display['predecessor_receipt_sha256']==digest(interface_path) and display['native_before_sha256']==interface['native_after_sha256']
@@ -173,13 +203,13 @@ def verify_files(workspace):
         assert len(display_replacements)==len(display['files'])==len(expected) and set(display_replacements)==expected
         for row in display['files']:
             assert (row['before_sha256'] is None)==(Path(row['target']).name in DISPLAY_NEW_NAMES)
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_guild(row,row['after_sha256'])
         binary=display_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==display['native_before_sha256'] and binary['after_sha256']==display['native_after_sha256']
     def latest_display(row,expected):
         changed=display_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_guild(row,expected)
     if interface:
         assert configuration and interface['phase']=='complete' and not interface['database_modified'] and not interface['server_rules_modified']
         assert interface['predecessor_receipt_sha256']==digest(configuration_path) and interface['native_before_sha256']==configuration['native_after_sha256']
@@ -456,4 +486,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'verified_files':len(original['files'])}

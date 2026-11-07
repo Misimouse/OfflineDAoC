@@ -5,14 +5,15 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
-def verify(workspace,engine,installed=False):
-    root=workspace/'DisplaySettingsFixLab';bp=root/'native_build.json';build=read(bp);assert build['passed']
+def verify(workspace,engine,installed=False,lab_name="DisplaySettingsFixLab"):
+    assert lab_name in ['DisplaySettingsFixLab','GuildWindowLab']
+    root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll';expected=build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll'] if installed else build['normal_binary_sha256']
     if installed:
         from central_activation_receipts import verify_files
-        assert verify_files(workspace)['display_settings_installed']
+        assert verify_files(workspace)['guild_window_installed' if lab_name=='GuildWindowLab' else 'display_settings_installed']
     assert digest(normal)==expected
     out=root/('InstalledDisplayAcceptance' if installed else 'DisplayAcceptance')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True);report=out/'display.json'
     project=str(workspace/'Client/DAoCBridgeClient.uproject') if installed else build['project']

@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -23,7 +23,12 @@ def verify(workspace):
         gateway=w/'Godot/live_gateway.gd';gateway.parent.mkdir();gateway.write_text('old gateway')
         old_gateway=digest(gateway)
         original=w/'ExpansionRaceLab/CentralDelivery/MinotaurActivation/installed.json'
-        put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(gateway),'after_sha256':old_gateway}]})
+        server_rows=[]
+        for folder in [w/'runtime/server',w/'runtime/server/lib',w/'runtime/server/win-x64']:
+            folder.mkdir(parents=True,exist_ok=True)
+            for name in ['GameServer.dll','CoreBase.dll','CoreDatabase.dll']:
+                target=folder/name;target.write_bytes(b'original synthetic server');server_rows.append(dict(target=str(target),after_sha256=digest(target)))
+        put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(gateway),'after_sha256':old_gateway}]+server_rows})
         binary=w/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
         binary.parent.mkdir(parents=True);binary.write_bytes(b'old synthetic DLL');old_binary=digest(binary)
         wave=w/'Client/Plugins/DAoCVisualBridge/Content/OriginalAudio_v01/files/one.wav'
@@ -312,6 +317,21 @@ def verify(workspace):
         assert verify_files(w)['display_settings_installed'];checks+=1
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
+        prior=digest(binary);guild_rows=[]
+        targets=[plugin/r for r in GUILD_NATIVE_TARGETS]+[w/'Godot'/r for r in GUILD_GODOT_TARGETS]+[plugin/'Content/GuildUI_v01/radiobutton1.png']+[Path(r['target']) for r in server_rows]
+        for target in targets:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in GUILD_NEW_NAMES:target.write_bytes(b'old guild predecessor')
+            old=None if target.name in GUILD_NEW_NAMES else digest(target)
+            target.write_bytes(b'new guild '+str(target).encode());guild_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        guild_path=w/'GuildWindowLab/installed.json';guild=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(display_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=guild_rows)
+        put(guild_path,guild);assert verify_files(w)['guild_window_installed'];checks+=1
+        guild['predecessor_receipt_sha256']='0'*64;put(guild_path,guild);rejected();checks+=1;guild['predecessor_receipt_sha256']=digest(display_path)
+        guild['files'][0]['before_sha256']='0'*64;put(guild_path,guild);rejected();checks+=1;guild['files'][0]['before_sha256']=prior;put(guild_path,guild)
+        for target in [binary,w/'Godot/guild_state.gd',plugin/'Content/GuildUI_v01/radiobutton1.png',Path(server_rows[0]['target']),wave]:
+            old=target.read_bytes();target.write_bytes(b'tampered guild or protected predecessor');rejected();checks+=1;target.write_bytes(old)
+        guild['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(guild_path,guild);rejected();checks+=1;guild['files'].pop();put(guild_path,guild)
+        assert verify_files(w)['guild_window_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})
