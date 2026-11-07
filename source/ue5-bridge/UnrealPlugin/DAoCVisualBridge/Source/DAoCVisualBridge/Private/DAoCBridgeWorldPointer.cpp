@@ -11,12 +11,12 @@
 #include "GameFramework/InputSettings.h"
 namespace {
 class FWorldPointer:public IInputProcessor {
-public:TFunction<void(FKey,bool,FVector2D,bool)> Notify;TFunction<void()> ToggleView;TFunction<bool(float,FVector2D)> Wheel;
-bool HandleKeyDownEvent(FSlateApplication&,const FKeyEvent& E)override{if(E.GetKey()==EKeys::F11){if(!E.IsRepeat()&&ToggleView)ToggleView();return true;}return false;}
+public:TFunction<bool(FKey,bool,bool,bool,bool)> Capture;TFunction<void(FKey,bool,FVector2D,bool)> Notify;TFunction<void()> ToggleView;TFunction<bool(float,FVector2D)> Wheel;
+bool HandleKeyDownEvent(FSlateApplication&,const FKeyEvent& E)override{if(Capture&&Capture(E.GetKey(),E.IsShiftDown(),E.IsControlDown(),E.IsAltDown(),E.IsRepeat()))return true;if(E.GetKey()==EKeys::F11){if(!E.IsRepeat()&&ToggleView)ToggleView();return true;}return false;}
 bool HandleMouseWheelOrGestureEvent(FSlateApplication&,const FPointerEvent& E,const FPointerEvent*)override{return Wheel&&Wheel(E.GetWheelDelta(),E.GetScreenSpacePosition());}
 void Tick(float,FSlateApplication&,TSharedRef<ICursor>)override{}
-bool HandleMouseButtonDownEvent(FSlateApplication&,const FPointerEvent& E)override{Notify(E.GetEffectingButton(),true,E.GetScreenSpacePosition(),false);return false;}
-bool HandleMouseButtonDoubleClickEvent(FSlateApplication&,const FPointerEvent& E)override{Notify(E.GetEffectingButton(),true,E.GetScreenSpacePosition(),false);return false;}
+bool HandleMouseButtonDownEvent(FSlateApplication&,const FPointerEvent& E)override{if(Capture&&Capture(E.GetEffectingButton(),E.IsShiftDown(),E.IsControlDown(),E.IsAltDown(),false))return true;Notify(E.GetEffectingButton(),true,E.GetScreenSpacePosition(),false);return false;}
+bool HandleMouseButtonDoubleClickEvent(FSlateApplication&,const FPointerEvent& E)override{if(Capture&&Capture(E.GetEffectingButton(),E.IsShiftDown(),E.IsControlDown(),E.IsAltDown(),false))return true;Notify(E.GetEffectingButton(),true,E.GetScreenSpacePosition(),false);return false;}
 bool HandleMouseButtonUpEvent(FSlateApplication&,const FPointerEvent& E)override{Notify(E.GetEffectingButton(),false,E.GetScreenSpacePosition(),false);return false;}
 bool HandleMouseMoveEvent(FSlateApplication&,const FPointerEvent& E)override{Notify(FKey(),false,E.GetScreenSpacePosition(),true);return false;}
 };
@@ -24,7 +24,7 @@ bool HandleMouseMoveEvent(FSlateApplication&,const FPointerEvent& E)override{Not
 void UDAoCBridgeSubsystem::InstallWorldPointerInput(){
  if(WorldPointerInput.IsValid()||!FSlateApplication::IsInitialized())return;
  GetMutableDefault<UInputSettings>()->bF11TogglesFullscreen=false;
- auto Input=MakeShared<FWorldPointer>();Input->ToggleView=[this](){ToggleFirstPerson();};Input->Wheel=[this](float Steps,FVector2D Point){if(CharacterLobbyOverlay)return HandleLobbyWheel(Steps,Point);if(!bLocalAvailable||WorldPointerBlocked(Point)||bChatOpen||bExiting)return false;AdjustCameraZoom(Steps);return true;};Input->Notify=[this](FKey K,bool Down,FVector2D P,bool Motion){if(!HandleLobbyPointer(K,Down,P,Motion))HandleWorldPointer(K,Down,P,Motion);};WorldPointerInput=Input;FSlateApplication::Get().RegisterInputPreProcessor(Input);
+ auto Input=MakeShared<FWorldPointer>();Input->Capture=[this](FKey K,bool S,bool C,bool A,bool R){return CaptureControlKey(K,S,C,A,R);};Input->ToggleView=[this](){ToggleFirstPerson();};Input->Wheel=[this](float Steps,FVector2D Point){if(CharacterLobbyOverlay)return HandleLobbyWheel(Steps,Point);if(!bLocalAvailable||WorldPointerBlocked(Point)||bChatOpen||bExiting)return false;AdjustCameraZoom(Steps);return true;};Input->Notify=[this](FKey K,bool Down,FVector2D P,bool Motion){if(!HandleLobbyPointer(K,Down,P,Motion))HandleWorldPointer(K,Down,P,Motion);};WorldPointerInput=Input;FSlateApplication::Get().RegisterInputPreProcessor(Input);
 }
 void UDAoCBridgeSubsystem::RemoveWorldPointerInput(){if(WorldPointerInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(WorldPointerInput);WorldPointerInput.Reset();bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
 bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{

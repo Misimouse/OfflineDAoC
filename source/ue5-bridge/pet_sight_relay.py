@@ -3,9 +3,11 @@ from bridge_paths import ROOT, INSTALL, ENGINE, ART_PROJECT
 import json,socket,select,subprocess,time,hashlib
 from pathlib import Path
 class NativeSightRelay:
- def __init__(self,backend,root,session,snapshot,output=None,duration=120,entity_ids=None,render=True,native_profile=None):
+ def __init__(self,backend,root,session,snapshot,output=None,duration=120,entity_ids=None,render=True,native_profile=None,candidate_lab=None):
   folder=Path(output) if output is not None else root/'Reports/training_staff_fx_pets'
   assert folder.resolve().is_relative_to((root/'Reports').resolve()) and 30<=duration<=(300 if native_profile=='live_riding' else 180)
+  assert candidate_lab in [None,'KeyConfigurationLab']
+  assert candidate_lab is None or native_profile=='live_riding'
   folder.mkdir(parents=True,exist_ok=True)
   keys_candidate=native_profile in ['keys_water_walk','keys_water_crossing']
   if keys_candidate:native_profile=native_profile.removeprefix('keys_')
@@ -75,6 +77,11 @@ class NativeSightRelay:
     cmd.append('-DaocBridgeEnvironmentCatalog='+str(root/'environment_catalog.json'))
    if jump_candidate:host=root/'JumpLandingLab/NativeHost/SpellAudioHost.uproject';assert host.exists()
    if keys_candidate:host=root/'MovementKeysLab/NativeHost/SpellAudioHost.uproject';assert host.exists();cmd.append('-DaocBridgeMovementKeysCatalog='+str(root/'MovementKeysLab/movement.json'))
+   if candidate_lab:
+    build=json.loads((root/candidate_lab/'native_build.json').read_text(encoding='utf-8-sig'));assert build['passed']
+    host=Path(build['project']);assert host.resolve().is_relative_to((root/candidate_lab).resolve())
+    for name,sha in build['binaries_sha256'].items():assert hashlib.sha256((host.parent/'Plugins/DAoCVisualBridge/Binaries/Win64'/name).read_bytes()).hexdigest()==sha
+    cmd.extend(['-DaocBridgeKeyConfiguration='+str(folder/'private_keys.ini'),'-DaocBridgeControlsSettings='+str(folder/'private_camera.json')])
    cmd[1]=str(host);cmd[2]='/Game/DAoC/Connacht_v01/Ardee_Nwiro_Prueba_Limpieza_v01'
    cmd.remove('-DaocBridgeSpellVisualTest')
    replacements={'-DaocBridgeCatalog=':review/'models.json','-DaocBridgeEquipmentCatalog=':review/'equipment_catalog.json'}

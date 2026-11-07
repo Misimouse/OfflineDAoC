@@ -9,7 +9,7 @@ from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
 def verify(workspace,engine,lab_name="WaterMovementLab"):
-    assert lab_name in ["WaterMovementLab","LiveRidingLab"]
+    assert lab_name in ["WaterMovementLab","LiveRidingLab","KeyConfigurationLab"]
     root=workspace/lab_name;build=read(root/'native_build.json');resources=read(workspace/'WaterMovementLab/resources.json')
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     assert build['passed'] and resources['passed'] and digest(normal)==build['normal_binary_sha256']

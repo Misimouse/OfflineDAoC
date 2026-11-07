@@ -59,6 +59,14 @@ LIVE_RIDING_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','inventory_state
 LIVE_RIDING_NEW_NAMES={'DAoCBridgeLiveRiding.h','DAoCBridgeLiveRiding.cpp','DAoCBridgeLiveRidingAcceptance.cpp','DAoCBridgeLiveRidingController.cpp','live_riding_state.gd','live_travel_routes.gd'}
 
 
+KEY_CONFIGURATION_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeWorldPointer.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.h','Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfigurationAcceptance.cpp']
+KEY_CONFIGURATION_NEW_NAMES={'DAoCBridgeKeyConfiguration.h','DAoCBridgeKeyConfiguration.cpp','DAoCBridgeKeyConfigurationAcceptance.cpp'}
+
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -132,6 +140,26 @@ def verify_files(workspace):
     riding=json.loads(riding_path.read_text()) if riding_path.exists() else None
     if riding and not riding.get('installed'):riding=None
     riding_replacements={}
+    configuration_path=workspace/'KeyConfigurationLab/installed.json'
+    configuration=json.loads(configuration_path.read_text()) if configuration_path.exists() else None
+    if configuration and not configuration.get('installed'):configuration=None
+    configuration_replacements={}
+    if configuration:
+        assert riding and configuration['phase']=='complete' and not configuration['database_modified'] and not configuration['server_rules_modified']
+        assert configuration['predecessor_receipt_sha256']==digest(riding_path) and configuration['native_before_sha256']==riding['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+        configuration_replacements={row['target']:row for row in configuration['files']}
+        expected={str(plugin/p) for p in KEY_CONFIGURATION_NATIVE_TARGETS}
+        assert len(configuration_replacements)==len(configuration['files'])==len(expected) and set(configuration_replacements)==expected
+        for row in configuration['files']:
+            assert (row['before_sha256'] is None)==(Path(row['target']).name in KEY_CONFIGURATION_NEW_NAMES)
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=configuration_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==configuration['native_before_sha256'] and binary['after_sha256']==configuration['native_after_sha256']
+    def latest_configuration(row,expected):
+        changed=configuration_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if riding:
         assert tracking and riding['phase']=='complete' and not riding['database_modified'] and not riding['server_rules_modified']
         assert riding['predecessor_receipt_sha256']==digest(tracking_path) and riding['native_before_sha256']==tracking['native_after_sha256']
@@ -144,13 +172,13 @@ def verify_files(workspace):
         assert len(riding_replacements)==len(riding['files'])==len(expected) and set(riding_replacements)==expected
         for row in riding['files']:
             new=row['target'] in content or Path(row['target']).name in LIVE_RIDING_NEW_NAMES
-            assert (row['before_sha256'] is None)==new and digest(Path(row['target']))==row['after_sha256']
+            assert (row['before_sha256'] is None)==new and digest(Path(row['target']))==latest_configuration(row,row['after_sha256'])
         binary=riding_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==riding['native_before_sha256'] and binary['after_sha256']==riding['native_after_sha256']
     def latest_riding(row,expected):
         changed=riding_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_configuration(row,expected)
 
     if tracking:
         assert keys and tracking['phase']=='complete' and not tracking['database_modified']
@@ -378,4 +406,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'verified_files':len(original['files'])}

@@ -1,3 +1,4 @@
+#include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeApprovedEnvironment.h"
 #include "Misc/ScopeExit.h"
@@ -94,9 +95,11 @@ bool UDAoCBridgeSubsystem::ShouldCreateSubsystem(UObject* Outer) const {
 void UDAoCBridgeSubsystem::Initialize(FSubsystemCollectionBase& C) {
     Super::Initialize(C);bAutoInteractionTest=FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoInteractionTest"));Status=TEXT("Waiting for the Godot client...");
     ControlsFile=FPaths::Combine(FPaths::ProjectSavedDir(),TEXT("DAoCControls.json"));
+    FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeControlsSettings="),ControlsFile);
     FString ControlText;TSharedPtr<FJsonObject> ControlSettings;
     if(FFileHelper::LoadFileToString(ControlText,*ControlsFile)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ControlText),ControlSettings)&&ControlSettings.IsValid()){
         double Sensitivity;if(ControlSettings->TryGetNumberField(TEXT("mouse_sensitivity"),Sensitivity)&&FMath::IsFinite(Sensitivity))MouseSensitivity=FMath::Clamp(float(Sensitivity),.05f,1.5f);
+        ControlSettings->TryGetBoolField(TEXT("invert_mouse"),bInvertMouse);
     }
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgePort="),Port);
     bControls=!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeReadOnly"));
@@ -296,7 +299,9 @@ float UDAoCBridgeSubsystem::GroundHeight(float X,float Y) const {
     return ((U+V<=1)?A+U*(B-A)+V*(C-A):D+(1-U)*(C-D)+(1-V)*(B-D))*100-13000;
 }
 void UDAoCBridgeSubsystem::SaveControls(){
-    auto O=MakeShared<FJsonObject>();O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);
+    auto O=MakeShared<FJsonObject>();FString Existing;TSharedPtr<FJsonObject> Previous;
+    if(FFileHelper::LoadFileToString(Existing,*ControlsFile)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Existing),Previous)&&Previous.IsValid())O=Previous.ToSharedRef();
+    O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);O->SetBoolField(TEXT("invert_mouse"),bInvertMouse);
     FString Text;auto W=TJsonWriterFactory<>::Create(&Text);FJsonSerializer::Serialize(O,W);FFileHelper::SaveStringToFile(Text,*ControlsFile);
 }
 void UDAoCBridgeSubsystem::SetMouseLook(bool Enabled){
@@ -318,6 +323,7 @@ void UDAoCBridgeSubsystem::SetMouseLook(bool Enabled){
 }
 void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     if(CharacterLobbyOverlay.IsValid())return;
+    LoadKeyConfiguration();
     APlayerController* PC=GetWorld()->GetFirstPlayerController();if(!PC||!bHavePlayer)return;
     if(!PlayerPawn){
         if(APawn* Old=PC->GetPawn()){
@@ -354,10 +360,10 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     SetMouseLook(!Dead&&!bChatOpen&&!Typing&&bControls&&!bExiting&&Focused&&!ClassicUIHovered()&&!InventoryHovered()&&!PlayerStatusHovered()&&(bMouseLookToggle||(bRightPointerHeld&&bRightPointerDragged)));
     if(bMouseLook){
         float DX=0,DY=0;PC->GetInputMouseDelta(DX,DY);
-        if(!bSkipMouseDelta){CameraYaw=FRotator::NormalizeAxis(CameraYaw+DX*MouseSensitivity);CameraPitch=FMath::Clamp(CameraPitch+DY*MouseSensitivity,-75.f,65.f);}
+        if(!bSkipMouseDelta){CameraYaw=FRotator::NormalizeAxis(CameraYaw+DX*MouseSensitivity);CameraPitch=FMath::Clamp(CameraPitch+DY*MouseSensitivity*(bInvertMouse?-1.f:1.f),-75.f,65.f);}
         bSkipMouseDelta=false;
     }
-    if(PC->WasInputKeyJustPressed(EKeys::F4)||PC->WasInputKeyJustPressed(EKeys::F5)){
+    if(Focused&&!bChatOpen&&!Typing&&(PC->WasInputKeyJustPressed(EKeys::F4)||PC->WasInputKeyJustPressed(EKeys::F5))){
         MouseSensitivity=FMath::Clamp(MouseSensitivity*(PC->WasInputKeyJustPressed(EKeys::F5)?1.25f:.8f),.05f,1.5f);SaveControls();
     }
     UpdateRemoteMotionProbe();
@@ -368,8 +374,8 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     const bool TrackingEnabled=!bLocalMounted&&Focused&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!Dead&&!FacingLocked&&!bChatOpen&&!Typing;
     const bool InputAvailable=TrackingEnabled&&FPlatformTime::Seconds()-ChatClosedAt>.2;
     FBridgeMovementKeys::FFrame Keys;
-    if(!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoMovementKeysTest")))Keys=MovementKeys->Advance(InputAvailable,PC->WasInputKeyJustPressed(EKeys::NumLock),PC->WasInputKeyJustPressed(EKeys::ScrollLock),
-        PC->WasInputKeyJustPressed(EKeys::W),PC->WasInputKeyJustPressed(EKeys::S),PC->IsInputKeyDown(EKeys::W),PC->IsInputKeyDown(EKeys::S),PC->IsInputKeyDown(EKeys::A),PC->IsInputKeyDown(EKeys::D),
+    if(!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoMovementKeysTest")))Keys=MovementKeys->Advance(InputAvailable,KeyConfiguration->Pressed(PC,TEXT("run_lock")),KeyConfiguration->Pressed(PC,TEXT("walk")),
+        KeyConfiguration->Pressed(PC,TEXT("move_forward")),KeyConfiguration->Pressed(PC,TEXT("move_back")),KeyConfiguration->Held(PC,TEXT("move_forward")),KeyConfiguration->Held(PC,TEXT("move_back")),KeyConfiguration->Held(PC,TEXT("strafe_left")),KeyConfiguration->Held(PC,TEXT("strafe_right")),
         PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift),bLeftPointerHeld&&bRightPointerHeld);
     if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoMovementKeysTest"))){
         const double T=FPlatformTime::Seconds()-PlayerStartedAt;
@@ -380,8 +386,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     PlayerPawn->GetCharacterMovement()->MaxWalkSpeed=ServerRunSpeed*Keys.SpeedFactor;
     FVector Desired=FVector::ZeroVector;
     if(bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2){
-        if(InputAvailable&&PC->WasInputKeyJustPressed(EKeys::F))RequestTargetTracking((PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift))?TEXT("follow"):TEXT("face"));
-        if(InputAvailable&&(PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift))&&PC->WasInputKeyJustPressed(EKeys::V))RequestTargetTracking(TEXT("stick"));
+        if(InputAvailable)for(const TCHAR* Action:{TEXT("face"),TEXT("follow"),TEXT("stick")})if(KeyConfiguration->Pressed(PC,Action))RequestTargetTracking(Action);
         float Fwd=Keys.Forward;
         float Right=Keys.Right;
         FRotator Flat(0,CameraYaw,0);Desired=(Flat.Vector()*Fwd+FRotationMatrix(Flat).GetUnitAxis(EAxis::Y)*Right).GetClampedToMaxSize(1);
@@ -393,10 +398,10 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoWaterTest"))){const double T=FPlatformTime::Seconds()-PlayerStartedAt;Desired=T>=8&&T<12?FVector(1,0,0):T>=16&&T<28&&PlayerPosition.X>StartPosition.X+15?FVector(-1,0,0):FVector::ZeroVector;}
         if(bAutoDoorTest)UpdateDoorTest(float(FPlatformTime::Seconds()-PlayerStartedAt),Desired);
         if(!PlayerCanMove()||ServerRunSpeed<=0){Desired=FVector::ZeroVector;PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
-        const bool ManualTrackInput=PC->IsInputKeyDown(EKeys::W)||PC->IsInputKeyDown(EKeys::S)||PC->IsInputKeyDown(EKeys::A)||PC->IsInputKeyDown(EKeys::D)||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock);
+        const bool ManualTrackInput=KeyConfiguration->Held(PC,TEXT("move_forward"))||KeyConfiguration->Held(PC,TEXT("move_back"))||KeyConfiguration->Held(PC,TEXT("strafe_left"))||KeyConfiguration->Held(PC,TEXT("strafe_right"))||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock);
         const bool Tracking=UpdateTargetTracking(TrackingEnabled,ManualTrackInput,Desired);
         if(!Tracking&&!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
-        if(Focused&&PC->WasInputKeyJustPressed(EKeys::SpaceBar)){if(bLocalMounted)RequestDismount();else if(!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();}
+        if(Focused&&KeyConfiguration->Pressed(PC,TEXT("jump"))){if(bLocalMounted)RequestDismount();else if(!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();}
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoJumpTest"))){
             const double T=FPlatformTime::Seconds()-PlayerStartedAt;
             if(T>=8&&T<8.15&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();
@@ -614,6 +619,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     UpdateUILayout();
     UpdateChatInput();
     if(TickExchangeAcceptance())return;
+    if(TickKeyConfigurationAcceptance())return;
     if(TickOptionsAudioAcceptance())return;
     if(TickViewportAcceptance())return;
     if(TickCharacterLobbyAcceptance())return;
@@ -679,6 +685,6 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
         if(Elapsed>40&&Session.IsEmpty()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
     }
     if(GEngine&&!CharacterLobbyOverlay.IsValid())GEngine->AddOnScreenDebugMessage(19727,0,FColor::White,
-        FString::Printf(TEXT("DAoC Enhanced | %s | NPC/Mobs: %d | %.0f FPS\n%s\nWASD: run | Shift: walk | Right drag/F3: camera | F4/F5: sensitivity %.2f | Click: target | Tab: nearby enemy | Right click/E: interact | I: inventory | M: map | C: attack | N: sit | Enter: chat | F1: GM protection | F6: combat test | F2: loc | Esc: quit"),*Character,NpcCount,1./FMath::Max(FApp::GetDeltaTime(),.0001),*Status,MouseSensitivity));
+        FString::Printf(TEXT("DAoC Enhanced | %s | NPC/Mobs: %d | %.0f FPS\n%s\nMovement keys: Esc > Controls | Shift: walk | Right drag/F3: camera | F4/F5: sensitivity %.2f | Click: target | Tab: nearby enemy | Right click/E: interact | I: inventory | M: map | C: attack | N: sit | Enter: chat | F1: GM protection | F6: combat test | F2: loc | Esc: options"),*Character,NpcCount,1./FMath::Max(FApp::GetDeltaTime(),.0001),*Status,MouseSensitivity));
     if(Now-LastReport>1){WriteReport();LastReport=Now;}
 }

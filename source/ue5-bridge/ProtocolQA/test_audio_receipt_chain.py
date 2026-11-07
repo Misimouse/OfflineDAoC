@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
-from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS,LIVE_RIDING_NATIVE_TARGETS,LIVE_RIDING_GODOT_TARGETS,LIVE_RIDING_NEW_NAMES
+from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS,LIVE_RIDING_NATIVE_TARGETS,LIVE_RIDING_GODOT_TARGETS,LIVE_RIDING_NEW_NAMES,KEY_CONFIGURATION_NATIVE_TARGETS,KEY_CONFIGURATION_NEW_NAMES
 from prepare_combined_expansion_data import digest
 
 
@@ -265,6 +265,21 @@ def verify(workspace):
             saved=target.read_bytes();target.write_bytes(b'changed riding file');rejected();checks+=1;target.write_bytes(saved)
         wave.write_bytes(b'changed old audio after riding');rejected();checks+=1;wave.write_bytes(before)
         assert verify_files(w)['live_riding_installed'];checks+=1
+        prior=digest(binary);configuration_rows=[]
+        for relative in KEY_CONFIGURATION_NATIVE_TARGETS:
+            target=plugin/relative;target.parent.mkdir(parents=True,exist_ok=True)
+            if not target.exists() and target.name not in KEY_CONFIGURATION_NEW_NAMES:target.write_bytes(b'old configuration predecessor')
+            old=digest(target) if target.exists() else None;target.write_bytes(b'new controls '+relative.encode())
+            configuration_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        config_path=w/'KeyConfigurationLab/installed.json';config=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,
+            predecessor_receipt_sha256=digest(ride_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=configuration_rows)
+        put(config_path,config);assert verify_files(w)['key_configuration_installed'];checks+=1
+        config['predecessor_receipt_sha256']='0'*64;put(config_path,config);rejected();checks+=1;config['predecessor_receipt_sha256']=digest(ride_path)
+        config['files'][0]['before_sha256']='0'*64;put(config_path,config);rejected();checks+=1;config['files'][0]['before_sha256']=prior;put(config_path,config)
+        for target in [binary,plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.cpp',content[0],wave]:
+            saved=target.read_bytes();target.write_bytes(b'tampered controls or protected predecessor');rejected();checks+=1;target.write_bytes(saved)
+        config['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(config_path,config);rejected();checks+=1;config['files'].pop();put(config_path,config)
+        assert verify_files(w)['key_configuration_installed'];checks+=1
         # Independent minimal eligibility chain: Shar may succeed the exact
         # accepted spell-class policy, never an arbitrary rules replacement.
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
