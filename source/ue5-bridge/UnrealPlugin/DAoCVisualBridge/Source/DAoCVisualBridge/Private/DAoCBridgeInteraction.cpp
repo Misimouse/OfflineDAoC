@@ -1,3 +1,4 @@
+#include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeCharacter.h"
 #include "Dom/JsonObject.h"
@@ -84,7 +85,7 @@ FString UDAoCBridgeSubsystem::TargetAtCursor(bool Cycle,FVector2D ScreenOverride
 void UDAoCBridgeSubsystem::UpdateInteractionInput(){
     auto* PC=GetWorld()->GetFirstPlayerController();bInteractionHovered=InteractionPanel.IsValid()&&InteractionPanel->IsHovered();
     if(!PC||bInteractionHovered||ClassicUIHovered()||InventoryHovered()||PlayerStatusHovered()||bMouseLook)return;
-    if(PC->WasInputKeyJustPressed(EKeys::Tab))SelectEntity(TargetAtCursor(true));
+    LoadKeyConfiguration();if(KeyConfiguration->Pressed(PC,TEXT("target_enemy")))SelectEntity(TargetAtCursor(true));
 
 }
 bool UDAoCBridgeSubsystem::InteractSelected(){

@@ -16,16 +16,40 @@ FBridgeKeyConfiguration::FBridgeKeyConfiguration(){
     Add(TEXT("face"),TEXT("Face"),TEXT("F"));
     Add(TEXT("follow"),TEXT("Follow"),TEXT("Shift+F"));
     Add(TEXT("stick"),TEXT("Stick"),TEXT("Shift+V"));
+    auto UI=[&](const TCHAR* Id,const TCHAR* Label,const TCHAR* Key,const TCHAR* Category=TEXT("Show")){Add(Id,Label,Key);Actions.Last().Category=Category;};
+    UI(TEXT("show_stats"),TEXT("Show Stats"),TEXT("P"));
+    UI(TEXT("show_inventory"),TEXT("Show Inventory"),TEXT("I"));
+    UI(TEXT("show_skills"),TEXT("Show Skills"),TEXT("H"));
+    UI(TEXT("show_spells"),TEXT("Show Spells"),TEXT(""));
+    UI(TEXT("show_combat"),TEXT("Show Combat"),TEXT("J"));
+    UI(TEXT("show_group"),TEXT("Show Group"),TEXT("G"));
+    UI(TEXT("show_map"),TEXT("Map Window"),TEXT("M"));
+    UI(TEXT("show_journal"),TEXT("Quest Journal"),TEXT("L"));
+    UI(TEXT("show_trainer"),TEXT("Training Window"),TEXT("T"));
+    UI(TEXT("target_self"),TEXT("Target Self"),TEXT("F7"),TEXT("Targeting"));
+    UI(TEXT("target_enemy"),TEXT("Nearest Enemy"),TEXT("Tab"),TEXT("Targeting"));
+    UI(TEXT("interact"),TEXT("Interact"),TEXT("E"),TEXT("Targeting"));
+    UI(TEXT("inspect_item"),TEXT("Inspect Item"),TEXT("Shift+I"),TEXT("Targeting"));
+    UI(TEXT("attack_mode"),TEXT("Attack Mode"),TEXT("C"),TEXT("Combat"));
+    UI(TEXT("sit"),TEXT("Sit/Stand"),TEXT("N"),TEXT("Combat"));
+    for(int32 Bar=1;Bar<=3;++Bar)for(int32 Slot=1;Slot<=10;++Slot){
+        const FString Id=FString::Printf(TEXT("qb%d_%d"),Bar,Slot),Label=FString::Printf(TEXT("Quickbar %d Slot %d"),Bar,Slot);
+        const FString Key=FString(Bar==3?TEXT("Ctrl+"):Bar==2?TEXT("Alt+"):TEXT(""))+FString(Slot==10?TEXT("Zero"):Slot==1?TEXT("One"):Slot==2?TEXT("Two"):Slot==3?TEXT("Three"):Slot==4?TEXT("Four"):Slot==5?TEXT("Five"):Slot==6?TEXT("Six"):Slot==7?TEXT("Seven"):Slot==8?TEXT("Eight"):TEXT("Nine"));
+        UI(*Id,*Label,*Key,TEXT("Quickbars"));
+    }
+    for(int32 Bank=1;Bank<=10;++Bank){
+        const FString Id=FString::Printf(TEXT("qbank_%d"),Bank),Label=FString::Printf(TEXT("Quickbar Bank %d"),Bank);
+        const FString Key=TEXT("Shift+")+Find(FString::Printf(TEXT("qb1_%d"),Bank))->Defaults[0];UI(*Id,*Label,*Key,TEXT("Quickbar Banks"));
+    }
 }
 FBridgeKeyConfiguration::FAction* FBridgeKeyConfiguration::Find(const FString& Id){return Actions.FindByPredicate([&](const FAction& A){return A.Id==Id;});}
 const FBridgeKeyConfiguration::FAction* FBridgeKeyConfiguration::Find(const FString& Id)const{return Actions.FindByPredicate([&](const FAction& A){return A.Id==Id;});}
 bool FBridgeKeyConfiguration::Reserved(const FKey& Key){
-    // Protect fixed UI, quickbar, camera, chat, GM, and pointer gestures until their own migration.
-    for(const FKey K:{EKeys::Escape,EKeys::Tab,EKeys::Enter,EKeys::LeftMouseButton,EKeys::RightMouseButton,EKeys::MiddleMouseButton,
+    // Menu, chat, camera/GM keys and pointer gestures remain outside this editable surface.
+    for(const FKey K:{EKeys::Escape,EKeys::Enter,EKeys::LeftMouseButton,EKeys::RightMouseButton,EKeys::MiddleMouseButton,
         EKeys::MouseScrollUp,EKeys::MouseScrollDown,EKeys::LeftShift,EKeys::RightShift,EKeys::LeftControl,EKeys::RightControl,EKeys::LeftAlt,EKeys::RightAlt,
-        EKeys::LeftCommand,EKeys::RightCommand,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::F6,EKeys::F7,EKeys::F8,EKeys::F9,EKeys::F10,EKeys::F11,EKeys::F12,
-        EKeys::I,EKeys::P,EKeys::H,EKeys::M,EKeys::J,EKeys::G,EKeys::L,EKeys::T,EKeys::E,EKeys::C,EKeys::N,
-        EKeys::One,EKeys::Two,EKeys::Three,EKeys::Four,EKeys::Five,EKeys::Six,EKeys::Seven,EKeys::Eight,EKeys::Nine,EKeys::Zero,EKeys::PageUp,EKeys::PageDown})if(Key==K)return true;
+        EKeys::LeftCommand,EKeys::RightCommand,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::F6,EKeys::F8,EKeys::F9,EKeys::F10,EKeys::F11,EKeys::F12,
+        EKeys::PageUp,EKeys::PageDown})if(Key==K)return true;
     return false;
 }
 bool FBridgeKeyConfiguration::Parse(const FString& Text,FChord& Out){

@@ -12,6 +12,8 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "ImageUtils.h"
+#include "SocketSubsystem.h"
+#include "Sockets.h"
 
 bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
     FString Path;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeKeyConfigurationTest="),Path))return false;
@@ -19,9 +21,14 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
     if(Done)return true;auto Check=[&](bool V,const TCHAR* Name){++Checks;if(!V)Failures.Add(Name);};
     if(!Started){
         Started=true;Began=FPlatformTime::Seconds();LoadKeyConfiguration();FString Message;FBridgeKeyConfiguration K;FBridgeKeyConfiguration::FChord Chord;
-        Check(K.Actions.Num()==10,TEXT("bounded ten actions match delivered movement and tracking"));
-        for(const auto& A:K.Actions)Check(A.Bindings==A.Defaults&&FBridgeKeyConfiguration::Parse(A.Bindings[0],Chord),*FString::Printf(TEXT("valid unchanged default %s"),*A.Id));
-        for(const FKey Key:{EKeys::Escape,EKeys::Tab,EKeys::Enter,EKeys::F11,EKeys::I,EKeys::C,EKeys::N,EKeys::One,EKeys::LeftMouseButton})Check(!K.Bind(TEXT("jump"),0,Key.GetFName().ToString(),Message),TEXT("fixed action cannot be shadowed"));
+        if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeMovementBindingsMigrationTest"))){
+            Check(KeyConfiguration->Text(TEXT("move_forward"),0)==TEXT("Q")&&KeyConfiguration->Text(TEXT("jump"),0)==TEXT("SpaceBar"),TEXT("earlier movement-only binding file preserves custom and default movement"));
+            Check(KeyConfiguration->Text(TEXT("show_inventory"),0)==TEXT("I")&&KeyConfiguration->Text(TEXT("qb3_10"),0)==TEXT("Ctrl+Zero"),TEXT("new actions receive defaults without discarding saved movement"));
+            KeyConfiguration->Reset();
+        }
+        Check(K.Actions.Num()==65,TEXT("65 actions extend the ten delivered movement and tracking bindings"));
+        for(const auto& A:K.Actions)Check(A.Bindings==A.Defaults&&(A.Bindings[0].IsEmpty()||FBridgeKeyConfiguration::Parse(A.Bindings[0],Chord)),*FString::Printf(TEXT("valid unchanged default %s"),*A.Id));
+        for(const FKey Key:{EKeys::Escape,EKeys::Enter,EKeys::F11,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::LeftMouseButton})Check(!K.Bind(TEXT("jump"),0,Key.GetFName().ToString(),Message),TEXT("fixed action cannot be shadowed"));
         Check(!K.Bind(TEXT("unknown"),0,TEXT("Q"),Message)&&!K.Bind(TEXT("jump"),2,TEXT("Q"),Message),TEXT("invalid action and slot rejected"));
         Check(!K.Bind(TEXT("jump"),0,TEXT("Ctrl+Ctrl+Q"),Message)&&!K.Bind(TEXT("jump"),0,TEXT("InventedKey"),Message),TEXT("malformed and unknown key rejected"));
         Check(K.Bind(TEXT("jump"),1,TEXT("Ctrl+Q"),Message)&&K.Text(TEXT("jump"),0)==TEXT("SpaceBar"),TEXT("second binding preserves first slot"));
@@ -39,6 +46,35 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
         auto* PC=GetWorld()->GetFirstPlayerController();
         PC->InputKey(FInputKeyEventArgs(nullptr,FInputDeviceId::CreateFromInternalId(0),EKeys::Q,IE_Pressed,FPlatformTime::Cycles64()));PC->PlayerInput->ProcessInputStack({},1.f/60,false);Check(K.Pressed(PC,TEXT("move_forward"))&&K.Held(PC,TEXT("move_forward")),TEXT("actual player input uses remapped forward key"));PC->InputKey(FInputKeyEventArgs(nullptr,FInputDeviceId::CreateFromInternalId(0),EKeys::Q,IE_Released,FPlatformTime::Cycles64()));PC->PlayerInput->ProcessInputStack({},1.f/60,false);Check(!K.Held(PC,TEXT("move_forward")),TEXT("actual release stops remapped held action"));
         Check(!K.Held(nullptr,TEXT("move_forward"))&&!K.Pressed(nullptr,TEXT("jump")),TEXT("missing controller produces no action"));
+        FString FixturePath;
+        if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeInterfaceKeysFixture="),FixturePath)){
+            FString FixtureText;TSharedPtr<FJsonObject> Fixture;
+            Check(FFileHelper::LoadFileToString(FixtureText,*FixturePath)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(FixtureText),Fixture)&&Fixture.IsValid(),TEXT("private original UI fixture loads"));
+            if(Fixture.IsValid()){
+                Fixture->GetObjectField(TEXT("classic_ui"))->SetStringField(TEXT("character"),FString::Printf(TEXT("IsolatedInterfaceKeys%lld"),FDateTime::UtcNow().GetTicks()));
+                ApplyInventory(Fixture->GetObjectField(TEXT("inventory")));ApplyPlayerStatus(Fixture->GetObjectField(TEXT("player_status")));ApplyClassicUI(Fixture->GetObjectField(TEXT("classic_ui")));CloseClassicTrainer();
+                Session=TEXT("isolated-interface-keys");bLocalAvailable=true;Socket=ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->CreateSocket(NAME_Stream,TEXT("Isolated keys capture"),false);Outgoing.Empty();KeyConfiguration->Reset();
+                auto Press=[&](const FString& Binding){PC->PlayerInput->FlushPressedKeys();PC->PlayerInput->ProcessInputStack({},1.f/60,false);FBridgeKeyConfiguration::FChord C;Check(FBridgeKeyConfiguration::Parse(Binding,C),TEXT("native dispatch chord parses"));
+                    auto Down=[&](FKey Key){PC->InputKey(FInputKeyEventArgs(nullptr,FInputDeviceId::CreateFromInternalId(0),Key,IE_Pressed,FPlatformTime::Cycles64()));};
+                    if(C.Shift)Down(EKeys::LeftShift);if(C.Ctrl)Down(EKeys::LeftControl);if(C.Alt)Down(EKeys::LeftAlt);Down(C.Key);PC->PlayerInput->ProcessInputStack({},1.f/60,false);
+                };
+                auto Capture=[&](const TCHAR* Action){Outgoing.Add(0);FString Text=UTF8_TO_TCHAR(reinterpret_cast<const char*>(Outgoing.GetData()));Outgoing.Empty();TSharedPtr<FJsonObject> V;
+                    Check(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),V)&&V.IsValid()&&V->GetStringField(TEXT("action"))==Action,TEXT("exactly one original UI command dispatched"));return V;
+                };
+                for(int32 Bar=0;Bar<3;++Bar)for(int32 Slot=0;Slot<10;++Slot){Press(KeyConfiguration->Text(FString::Printf(TEXT("qb%d_%d"),Bar+1,Slot+1),0));UpdateClassicInput();auto V=Capture(TEXT("ui_use_slot"));if(V)Check(V->GetIntegerField(TEXT("bar"))==Bar&&V->GetIntegerField(TEXT("slot"))==Slot,TEXT("original bar and slot indices preserved"));}
+                for(int32 Bank=0;Bank<10;++Bank){Press(KeyConfiguration->Text(FString::Printf(TEXT("qbank_%d"),Bank+1),0));UpdateClassicInput();auto V=Capture(TEXT("ui_bank"));if(V)Check(V->GetIntegerField(TEXT("bar"))==0&&V->GetIntegerField(TEXT("bank"))==Bank,TEXT("Shift bank does not execute a quickbar action"));}
+                Check(KeyConfiguration->Bind(TEXT("qb2_4"),0,TEXT("Ctrl+Q"),Message),TEXT("quickbar action accepts changed chord"));Press(TEXT("Ctrl+Q"));UpdateClassicInput();auto Changed=Capture(TEXT("ui_use_slot"));if(Changed)Check(Changed->GetIntegerField(TEXT("bar"))==1&&Changed->GetIntegerField(TEXT("slot"))==3,TEXT("remapped chord keeps authoritative quickbar indices"));
+                Press(TEXT("Alt+Four"));UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("former quickbar chord no longer activates"));
+                for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("P"),TEXT("character")},{TEXT("H"),TEXT("skills")},{TEXT("J"),TEXT("combat")},{TEXT("G"),TEXT("group")}}){Press(Pair.Key);UpdateClassicInput();Check(ClassicTab==Pair.Value&&bClassicOpen,TEXT("actual existing window action retains original sheet"));}
+                Check(KeyConfiguration->Bind(TEXT("show_spells"),0,TEXT("B"),Message),TEXT("unassigned magic window accepts optional shortcut"));Press(TEXT("B"));UpdateClassicInput();Check(ClassicTab==TEXT("magic"),TEXT("magic shortcut opens original magic sheet"));
+                Press(TEXT("F7"));UpdateClassicInput();Capture(TEXT("target_self"));
+                Press(TEXT("One"));bChatOpen=true;UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("typing suppresses actual quickbar dispatch"));bChatOpen=false;
+                Press(TEXT("One"));bOptionsOpen=true;UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("options suppresses actual quickbar dispatch"));bOptionsOpen=false;
+                auto Vitals=PlayerState->GetObjectField(TEXT("vitals"));Vitals->SetNumberField(TEXT("health_pct"),0);Press(TEXT("One"));UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("dead character cannot execute ordinary quickbar slot"));
+                auto Slot=ClassicSlot(0,0);if(Slot){Slot->SetStringField(TEXT("kind"),TEXT("macro"));Press(TEXT("One"));UpdateClassicInput();Capture(TEXT("ui_use_slot"));Slot->RemoveField(TEXT("kind"));}Vitals->SetNumberField(TEXT("health_pct"),100);
+                PC->PlayerInput->FlushPressedKeys();KeyConfiguration->Reset();RemoveClassicUI();RemovePlayerStatusUI();RemoveInventoryUI();Outgoing.Empty();Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;Session.Empty();bLocalAvailable=false;
+            }
+        }
         bControlsOptions=true;const int32 Before=Outgoing.Num();OpenOptions();Check(bOptionsOpen&&OptionsOverlay&&ClassicArt(TEXT("options")),TEXT("controls page reuses actual original options artwork"));
         Check(WorldPointerBlocked(FVector2D(10,10))&&!bMouseLook&&!bLeftPointerHeld&&!bRightPointerHeld,TEXT("options disables world gesture and movement input"));
         BindingCaptureAction=TEXT("jump");BindingCaptureSlot=0;

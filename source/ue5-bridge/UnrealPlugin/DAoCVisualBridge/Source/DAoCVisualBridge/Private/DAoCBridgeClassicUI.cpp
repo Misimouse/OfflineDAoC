@@ -1,3 +1,4 @@
+#include "DAoCBridgeKeyConfiguration.h"
 #include "HAL/FileManager.h"
 #include "DAoCBridgeSubsystem.h"
 #include "Dom/JsonObject.h"
@@ -216,7 +217,24 @@ void UDAoCBridgeSubsystem::RefreshClassicBars(){
   ClassicBarBoxes[B]->SetContent(SNew(SClassicMove).Content(C).Move([this,B](FVector2D D){FVector2D S;S=UIViewportSize();S/=ClassicScale();const FVector2D Size=ClassicVertical[B]?FVector2D(33,372):FVector2D(372,33);auto& P=ClassicPositions[B+1];P.X=FMath::Clamp(FMath::Clamp(P.X,0.,FMath::Max(0.,S.X-Size.X))+D.X,0.,FMath::Max(0.,S.X-Size.X));P.Y=FMath::Clamp(FMath::Clamp(P.Y,0.,FMath::Max(0.,S.Y-Size.Y))+D.Y,0.,FMath::Max(0.,S.Y-Size.Y));}).End([this](){SaveClassicLayout();}));
  }
 }
-void UDAoCBridgeSubsystem::UpdateClassicInput(){if(!ClassicState.IsValid()||bChatOpen||ExchangeTyping())return;auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;const FKey Keys[]={EKeys::One,EKeys::Two,EKeys::Three,EKeys::Four,EKeys::Five,EKeys::Six,EKeys::Seven,EKeys::Eight,EKeys::Nine,EKeys::Zero};int32 Bar=(PC->IsInputKeyDown(EKeys::LeftControl)||PC->IsInputKeyDown(EKeys::RightControl))?2:(PC->IsInputKeyDown(EKeys::LeftAlt)||PC->IsInputKeyDown(EKeys::RightAlt))?1:0;for(int32 I=0;I<10;++I)if(PC->WasInputKeyJustPressed(Keys[I])){auto V=MakeShared<FJsonObject>();if(PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift)){V->SetNumberField(TEXT("bar"),0);V->SetNumberField(TEXT("bank"),I);Send(TEXT("ui_bank"),V);}else if(!PlayerIsDead()||CS(ClassicSlot(Bar,I),TEXT("kind"))==TEXT("macro")){V->SetNumberField(TEXT("bar"),Bar);V->SetNumberField(TEXT("slot"),I);Send(TEXT("ui_use_slot"),V);}}if(PC->WasInputKeyJustPressed(EKeys::I)&&(PC->IsInputKeyDown(EKeys::LeftShift)||PC->IsInputKeyDown(EKeys::RightShift))){auto E=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));if(E.IsValid())ClassicInspect(CS(E,TEXT("id")),CS(E,TEXT("token")));}if(PC->WasInputKeyJustPressed(EKeys::F7))SelectEntity(TEXT("player:local"));if(PC->WasInputKeyJustPressed(EKeys::P))SetClassicTab(TEXT("character"));if(PC->WasInputKeyJustPressed(EKeys::H))SetClassicTab(TEXT("skills"));if(PC->WasInputKeyJustPressed(EKeys::M))ToggleZoneMap();if(PC->WasInputKeyJustPressed(EKeys::J))SetClassicTab(TEXT("combat"));if(PC->WasInputKeyJustPressed(EKeys::G))SetClassicTab(TEXT("group"));if(PC->WasInputKeyJustPressed(EKeys::L))ToggleClassicJournal();if(PC->WasInputKeyJustPressed(EKeys::T))ToggleClassicTrainer();}
+void UDAoCBridgeSubsystem::UpdateClassicInput(){
+ if(!ClassicState.IsValid()||bChatOpen||bOptionsOpen||ExchangeTyping()||bExiting)return;
+ auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;LoadKeyConfiguration();
+ for(int32 Bar=0;Bar<3;++Bar)for(int32 Slot=0;Slot<10;++Slot)if(KeyConfiguration->Pressed(PC,FString::Printf(TEXT("qb%d_%d"),Bar+1,Slot+1))&&(!PlayerIsDead()||CS(ClassicSlot(Bar,Slot),TEXT("kind"))==TEXT("macro"))){
+  auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("bar"),Bar);V->SetNumberField(TEXT("slot"),Slot);Send(TEXT("ui_use_slot"),V);
+ }
+ for(int32 Bank=0;Bank<10;++Bank)if(KeyConfiguration->Pressed(PC,FString::Printf(TEXT("qbank_%d"),Bank+1))){auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("bar"),0);V->SetNumberField(TEXT("bank"),Bank);Send(TEXT("ui_bank"),V);}
+ if(KeyConfiguration->Pressed(PC,TEXT("inspect_item"))){auto E=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));if(E.IsValid())ClassicInspect(CS(E,TEXT("id")),CS(E,TEXT("token")));}
+ if(KeyConfiguration->Pressed(PC,TEXT("target_self")))SelectEntity(TEXT("player:local"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_stats")))SetClassicTab(TEXT("character"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_skills")))SetClassicTab(TEXT("skills"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_spells")))SetClassicTab(TEXT("magic"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_combat")))SetClassicTab(TEXT("combat"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_group")))SetClassicTab(TEXT("group"));
+ if(KeyConfiguration->Pressed(PC,TEXT("show_map")))ToggleZoneMap();
+ if(KeyConfiguration->Pressed(PC,TEXT("show_journal")))ToggleClassicJournal();
+ if(KeyConfiguration->Pressed(PC,TEXT("show_trainer")))ToggleClassicTrainer();
+}
 void UDAoCBridgeSubsystem::TickClassicUI(){
  if(ClassicState.IsValid()&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeTrainerVisualTest"))){static bool Selected=false;auto Specs=CA(CO(ClassicState,TEXT("trainer")),TEXT("specs"));if(!Selected&&!Specs.IsEmpty()&&Specs[0]->Type==EJson::Object){Selected=true;ClassicTrainingKind=TEXT("spec");ClassicTrainingIndex=int32(CN(Specs[0]->AsObject(),TEXT("index"),-1));ClassicTrainingToken=CS(Specs[0]->AsObject(),TEXT("token"));RefreshClassicTrainer();}}
 

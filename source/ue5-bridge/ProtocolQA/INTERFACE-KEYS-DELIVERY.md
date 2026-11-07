@@ -1,0 +1,13 @@
+# Interface and quickbar controls
+
+This successor extends the same English Esc > CONTROLS surface from ten movement actions to 65 supported actions. It adds existing character/inventory/skills/combat/group/magic windows, zone map, journal, trainer, self/enemy targeting, interaction, item inspection, attack, sit/stand, thirty quickbar slots and ten quickbar banks. Magic has no initial key, preserving the previous default; it can now receive a shortcut. Existing gameplay dispatch, indices, server validation and macro handling while dead remain unchanged.
+
+Reference audit: original keybinds.gd/options_window.gd, original key-label catalog and already implemented bridge dispatch. This is not all original client actions or complete RPG/FPS/MMO presets. Chat/menu/camera/GM gestures remain reserved. An old movement-only binding file loads custom movement and supplies the new actions' defaults without discarding saved bindings. Restore Defaults now applies to this complete supported set; no reset happens automatically on upgrade.
+
+Native evidence checks every default and category, exact modifiers, saved-map migration, actual UE input for all thirty slots and ten banks, remapped quickbar indices, removal of old chord, original window selection, optional magic shortcut, self-target, chat/options suppression and dead-character macro exception. The first artificial test reused modifier press/release in one processing cycle; its failures were retained and the fixture now processes release before the next press. Production binding semantics were not weakened to pass the fixture.
+
+Regression coverage includes original classic UI/player-state fixtures, established audio/interface checks, movement/jump/tracking/water and a real disposable-server horse movement/Space-dismount trial. The exact twelve-file successor is checked through the previous controls and all earlier receipts; no owner database, character progression, world map or original content archive is part of this delivery.
+
+Owner checks after installation: change an inventory/window shortcut, assign Show Spells if desired, assign a second quickbar key and verify the correct slot/bar, use Alt and Ctrl bars and Shift banks, type numbers in chat without activating skills, restart to check saved keys and try Restore Defaults. Keep the earlier accepted movement and horse tests recorded separately.
+
+Current evidence: 256 specific native checks; original classic UI 68 and player state 68; established audio/interface 265; movement 53, jump 9, tracking 35 and water 65,559. Real server riding/dismount and normal shutdown/restoration passed. Receipt-chain synthetic checks: 85. Owner acceptance of this new editable surface remains pending.

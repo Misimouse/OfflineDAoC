@@ -3,13 +3,15 @@ import argparse,json,shutil,socket
 from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
-from central_activation_receipts import verify_files,KEY_CONFIGURATION_NATIVE_TARGETS,KEY_CONFIGURATION_NEW_NAMES
+from central_activation_receipts import verify_files,KEY_CONFIGURATION_NATIVE_TARGETS,KEY_CONFIGURATION_NEW_NAMES,INTERFACE_KEYS_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
 def read(p):return json.loads(p.read_text(encoding='utf-8-sig'))
 def latest(p):return sorted(p.glob('*/verified.json'))[-1]
-def install(workspace,apply=False,rollback=False):
-    root=workspace/'KeyConfigurationLab';rp=root/'installed.json';plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+def install(workspace,apply=False,rollback=False,lab_name="KeyConfigurationLab"):
+    assert lab_name in ["KeyConfigurationLab","InterfaceKeysLab"]
+    interface=lab_name=="InterfaceKeysLab"
+    root=workspace/lab_name;rp=root/'installed.json';plugin=workspace/'Client/Plugins/DAoCVisualBridge'
     if rp.exists() and read(rp).get('installed') and not rollback:
         verify_files(workspace);return dict(passed=True,already_current=True)
     verify_files(workspace)
@@ -17,12 +19,17 @@ def install(workspace,apply=False,rollback=False):
         receipt=read(rp);assert receipt['installed'] and receipt['phase']=='complete';rows=receipt['files']
     else:
         bp=root/'native_build.json';build=read(bp);assert build['passed']
-        prior=workspace/'LiveRidingLab/installed.json';assert read(prior)['native_after_sha256']==build['normal_binary_sha256']
+        prior=workspace/('KeyConfigurationLab/installed.json' if interface else 'LiveRidingLab/installed.json');assert read(prior)['native_after_sha256']==build['normal_binary_sha256']
         evidence=[bp,latest(root/'Acceptance'),latest(root/'NativeAcceptance'),root/'movement_regressions.json']
-        specific=read(evidence[1]);assert specific['passed'] and specific['checks']>=51 and not specific['failures'] and specific['build_receipt_sha256']==digest(bp)
+        specific=read(evidence[1]);assert specific['passed'] and specific['checks']>=(256 if interface else 51) and not specific['failures'] and specific['build_receipt_sha256']==digest(bp)
         native=read(evidence[2]);assert native['passed'] and native['build_receipt_sha256']==digest(bp)
         for name,n in [('server_sound',40),('footstep',149),('door',15),('options',17),('selection',15),('combat',14),('spell',15)]:
             proof=native['reports'][name];assert proof['passed'] and proof['checks']>=n and not proof['failures']
+        if interface:
+            ui_path=latest(root/'UIRegression');ui=read(ui_path);assert ui['passed'] and ui['build_receipt_sha256']==digest(bp)
+            for case in ['classic','player']:assert ui['reports'][case]['passed'] and ui['reports'][case]['checks']>=68
+            assert all(digest(Path(p))==h for p,h in ui['input_hashes'].items());evidence.append(ui_path)
+            audit_path=root/'reference_audit.json';audit=read(audit_path);assert audit['passed'] and len(audit['rows'])==55;evidence.append(audit_path)
         movement=read(evidence[3]);assert movement['passed'] and movement['build_receipt_sha256']==digest(bp)
         for name,n in [('movement',53),('jump',9),('tracking',35),('water',65550)]:
             case=movement['results'][name];assert case['passed'] and case['checks']>=n
@@ -39,10 +46,16 @@ def install(workspace,apply=False,rollback=False):
         repo=Path(__file__).resolve().parents[3];source=repo/'source/ue5-bridge/UnrealPlugin/DAoCVisualBridge'
         assert all(digest(source/'Source'/p)==h for p,h in build['source_sha256'].items())
         candidate=Path(build['project']).parent/'Plugins/DAoCVisualBridge';rows=[]
-        for rel in KEY_CONFIGURATION_NATIVE_TARGETS:
+        preceding_source={}
+        if interface:
+            prior_build=workspace/'KeyConfigurationLab/native_build.json'
+            assert digest(prior_build)==read(prior)['evidence'][str(prior_build)]
+            preceding_source={Path(p).as_posix():h for p,h in read(prior_build)['source_sha256'].items()}
+        for rel in (INTERFACE_KEYS_NATIVE_TARGETS if interface else KEY_CONFIGURATION_NATIVE_TARGETS):
             origin=(candidate if rel.startswith('Binaries/') else source)/rel;target=plugin/rel
             assert target.resolve().is_relative_to(workspace.resolve())
-            old=digest(target) if target.exists() else None;assert (old is None)==(target.name in KEY_CONFIGURATION_NEW_NAMES)
+            old=digest(target) if target.exists() else None;assert (old is None)==(not interface and target.name in KEY_CONFIGURATION_NEW_NAMES)
+            if interface and rel.startswith('Source/'):assert old==preceding_source[rel.removeprefix('Source/')], 'Preceding compiled source was changed: '+str(target)
             if rel.startswith('Binaries/'):assert digest(origin)==build['binaries_sha256'][target.name]
             rows.append(dict(source=str(origin),target=str(target),before_sha256=old,after_sha256=digest(origin)))
         receipt=dict(installed=False,phase='planned',database_modified=False,server_rules_modified=False,owner_gameplay_accepted=False,
@@ -62,7 +75,7 @@ def install(workspace,apply=False,rollback=False):
                 if row['before_sha256'] is None:Path(row['target']).unlink()
                 else:shutil.copy2(row['backup'],row['target'])
             receipt.update(installed=False,phase='rolled_back');rp.write_text(json.dumps(receipt,indent=2));verify_files(workspace);return dict(passed=True,rolled_back=True)
-        backup=workspace/'Backups'/('KeyConfiguration_'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));backup.mkdir()
+        backup=workspace/'Backups'/(lab_name+'_'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));backup.mkdir()
         for i,row in enumerate(rows):
             target=Path(row['target']);assert (digest(target) if target.exists() else None)==row['before_sha256'] and digest(Path(row['source']))==row['after_sha256']
             if row['before_sha256'] is not None:
@@ -81,5 +94,5 @@ def install(workspace,apply=False,rollback=False):
     return dict(passed=True,installed=True,files=len(rows),backup_directory=str(backup),database_modified=False)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--workspace',type=Path,required=True);p.add_argument('--apply',action='store_true');p.add_argument('--rollback',action='store_true');a=p.parse_args()
-    print(json.dumps(install(a.workspace.resolve(),a.apply,a.rollback)))
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--workspace',type=Path,required=True);p.add_argument('--apply',action='store_true');p.add_argument('--rollback',action='store_true');p.add_argument('--interface-keys',action='store_true');a=p.parse_args()
+    print(json.dumps(install(a.workspace.resolve(),a.apply,a.rollback,'InterfaceKeysLab' if a.interface_keys else 'KeyConfigurationLab')))

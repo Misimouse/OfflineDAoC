@@ -66,6 +66,11 @@ KEY_CONFIGURATION_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.
     'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfigurationAcceptance.cpp']
 KEY_CONFIGURATION_NEW_NAMES={'DAoCBridgeKeyConfiguration.h','DAoCBridgeKeyConfiguration.cpp','DAoCBridgeKeyConfigurationAcceptance.cpp'}
 
+INTERFACE_KEYS_NATIVE_TARGETS=KEY_CONFIGURATION_NATIVE_TARGETS+[
+    'Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgePlayerStatus.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeInteraction.cpp']
+
 
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
@@ -144,6 +149,24 @@ def verify_files(workspace):
     configuration=json.loads(configuration_path.read_text()) if configuration_path.exists() else None
     if configuration and not configuration.get('installed'):configuration=None
     configuration_replacements={}
+    interface_path=workspace/'InterfaceKeysLab/installed.json'
+    interface=json.loads(interface_path.read_text()) if interface_path.exists() else None
+    if interface and not interface.get('installed'):interface=None
+    interface_replacements={}
+    if interface:
+        assert configuration and interface['phase']=='complete' and not interface['database_modified'] and not interface['server_rules_modified']
+        assert interface['predecessor_receipt_sha256']==digest(configuration_path) and interface['native_before_sha256']==configuration['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+        interface_replacements={row['target']:row for row in interface['files']}
+        expected={str(plugin/p) for p in INTERFACE_KEYS_NATIVE_TARGETS}
+        assert len(interface_replacements)==len(interface['files'])==len(expected) and set(interface_replacements)==expected
+        for row in interface['files']:assert row['before_sha256'] is not None and digest(Path(row['target']))==row['after_sha256']
+        binary=interface_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==interface['native_before_sha256'] and binary['after_sha256']==interface['native_after_sha256']
+    def latest_interface(row,expected):
+        changed=interface_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
+        return expected
     if configuration:
         assert riding and configuration['phase']=='complete' and not configuration['database_modified'] and not configuration['server_rules_modified']
         assert configuration['predecessor_receipt_sha256']==digest(riding_path) and configuration['native_before_sha256']==riding['native_after_sha256']
@@ -153,13 +176,13 @@ def verify_files(workspace):
         assert len(configuration_replacements)==len(configuration['files'])==len(expected) and set(configuration_replacements)==expected
         for row in configuration['files']:
             assert (row['before_sha256'] is None)==(Path(row['target']).name in KEY_CONFIGURATION_NEW_NAMES)
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_interface(row,row['after_sha256'])
         binary=configuration_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==configuration['native_before_sha256'] and binary['after_sha256']==configuration['native_after_sha256']
     def latest_configuration(row,expected):
         changed=configuration_replacements.get(row['target'])
-        if changed:assert changed['before_sha256']==expected;return changed['after_sha256']
-        return expected
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return latest_interface(row,expected)
     if riding:
         assert tracking and riding['phase']=='complete' and not riding['database_modified'] and not riding['server_rules_modified']
         assert riding['predecessor_receipt_sha256']==digest(tracking_path) and riding['native_before_sha256']==tracking['native_after_sha256']
@@ -406,4 +429,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'verified_files':len(original['files'])}

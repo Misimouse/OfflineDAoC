@@ -1,3 +1,4 @@
+#include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeCharacter.h"
 #include "Dom/JsonObject.h"
@@ -57,10 +58,11 @@ void UDAoCBridgeSubsystem::RequestGMMode(bool CombatTest){
     auto V=MakeShared<FJsonObject>();V->SetBoolField(TEXT("on"),CombatTest);V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));Send(TEXT("gm_test_mode"),V);
 }
 void UDAoCBridgeSubsystem::UpdatePlayerStatusInput(){
+    if(bChatOpen||bOptionsOpen||ExchangeTyping()||bExiting)return;LoadKeyConfiguration();
     auto* PC=GetWorld()->GetFirstPlayerController();if(!PC)return;
     if(PC->WasInputKeyJustPressed(EKeys::F6)){const TSharedPtr<FJsonObject>* GM=nullptr;const bool Combat=PlayerState.IsValid()&&PlayerState->TryGetObjectField(TEXT("gm_mode"),GM)&&PlayerFlag(*GM,TEXT("combat_test"));RequestGMMode(!Combat);}
-    if(PC->WasInputKeyJustPressed(EKeys::C))RequestAttack(!(PlayerFlag(PlayerState,TEXT("attack_on"))||PlayerFlag(PlayerState,TEXT("attack_pending"))||PlayerFlag(PlayerState,TEXT("attack_uncertain"))));
-    if(PC->WasInputKeyJustPressed(EKeys::N))RequestSit(!(PlayerFlag(PlayerVitals(PlayerState),TEXT("sitting"))||PlayerFlag(PlayerState,TEXT("posture_pending"))||PlayerFlag(PlayerState,TEXT("posture_uncertain"))));
+    if(KeyConfiguration->Pressed(PC,TEXT("attack_mode")))RequestAttack(!(PlayerFlag(PlayerState,TEXT("attack_on"))||PlayerFlag(PlayerState,TEXT("attack_pending"))||PlayerFlag(PlayerState,TEXT("attack_uncertain"))));
+    if(KeyConfiguration->Pressed(PC,TEXT("sit")))RequestSit(!(PlayerFlag(PlayerVitals(PlayerState),TEXT("sitting"))||PlayerFlag(PlayerState,TEXT("posture_pending"))||PlayerFlag(PlayerState,TEXT("posture_uncertain"))));
 }
 bool UDAoCBridgeSubsystem::PlayerSeesTarget() const{
     const FString Id=CurrentTarget();const auto* Target=Entities.Find(Id);if(Id.IsEmpty()||Id==TEXT("player:local")||!Target||!IsValid(*Target))return false;

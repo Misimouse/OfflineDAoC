@@ -27,11 +27,14 @@ parser.add_argument('--live-riding',action='store_true')
 parser.add_argument('--riding-full-route',action='store_true')
 parser.add_argument('--riding-space',action='store_true')
 parser.add_argument('--key-configuration-candidate',action='store_true')
+parser.add_argument('--interface-keys-candidate',action='store_true')
 parser.add_argument('--keys-candidate',action='store_true')
 parser.add_argument('--movement-keys',action='store_true')
 parser.add_argument('--jump-landing',action='store_true')
 parser.add_argument('--jump-candidate',action='store_true')
 args=parser.parse_args();workspace=args.workspace.resolve();repo=Path(__file__).resolve().parents[3]
+assert not (args.key_configuration_candidate and args.interface_keys_candidate)
+assert not args.interface_keys_candidate or (args.native and args.live_riding)
 assert not args.key_configuration_candidate or (args.native and args.live_riding)
 assert not args.riding_space or (args.live_riding and not args.riding_full_route)
 assert not args.riding_full_route or args.live_riding
@@ -172,7 +175,7 @@ try:
             witness_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Tracking Witness');ids.append(witness_id)
             wait(lambda:any(row.get('name')=='Codex Outdoor Witness' for row in snapshot['entities']),'Private outdoor witness spawns')
             outdoor_id=next(row['id'] for row in snapshot['entities'] if row.get('name')=='Codex Outdoor Witness');ids.append(outdoor_id)
-        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=180 if args.live_riding and args.riding_full_route else 120 if args.live_riding else 90 if args.target_tracking else 60,entity_ids=None if args.live_riding else ids,render=True,candidate_lab='KeyConfigurationLab' if args.key_configuration_candidate else None,native_profile='live_riding' if args.live_riding else 'target_tracking' if args.target_tracking else ('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
+        relay=module.NativeSightRelay(peer,workspace,session,snapshot,output=output,duration=180 if args.live_riding and args.riding_full_route else 120 if args.live_riding else 90 if args.target_tracking else 60,entity_ids=None if args.live_riding else ids,render=True,candidate_lab='InterfaceKeysLab' if args.interface_keys_candidate else 'KeyConfigurationLab' if args.key_configuration_candidate else None,native_profile='live_riding' if args.live_riding else 'target_tracking' if args.target_tracking else ('keys_water_crossing' if args.water_regression else 'keys_water_walk') if args.keys_candidate else 'movement_keys' if args.movement_keys else ('jump_water_crossing' if args.water_regression else 'jump_water_walk') if args.jump_candidate else 'jump_landing' if args.jump_landing else 'water_crossing' if args.water_regression else 'water_walk' if args.water_motion else 'server_sound' if args.server_sounds else 'footstep_walk' if args.footsteps else 'door_crossing' if args.crossing else 'door_audio');peer=relay
         wait(lambda:relay.read_report().get('spell_audio',{}).get('door_ready'),'Native original door catalog ready',90);settle(3)
         if args.crossing or args.water_motion or args.jump_landing or args.movement_keys or args.target_tracking or args.live_riding:wait(lambda:not relay.geometry_gate and relay.read_report().get('test_elapsed',0)>0,'Current-map terrain and both door groups loaded before movement',100)
     result['checks']['initial_hydration_silent']=not trace;assert not trace
@@ -372,7 +375,7 @@ try:
             steps=relay.read_report()['footsteps'];assert steps['contacts_crossed']>=4 and audio['footstep_clips']>=4 and audio['footstep_pcm_consumed_bytes']>0
             result['footsteps']=steps;result['checks']['actual_native_local_steps_and_pcm']=True
         result['native_audio']=audio;result['checks']['real_server_door_pcm_consumed_by_engine']=not (args.jump_landing or args.movement_keys or args.live_riding)
-        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('KeyConfigurationLab/native_build.json' if args.key_configuration_candidate else 'LiveRidingLab/native_build.json' if args.live_riding else 'TargetTrackingLab/native_build.json' if args.target_tracking else 'MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
+        result['native_inputs']={str(p):digest(p) for p in [relay_source,workspace/('InterfaceKeysLab/native_build.json' if args.interface_keys_candidate else 'KeyConfigurationLab/native_build.json' if args.key_configuration_candidate else 'LiveRidingLab/native_build.json' if args.live_riding else 'TargetTrackingLab/native_build.json' if args.target_tracking else 'MovementKeysLab/native_build.json' if args.movement_keys or args.keys_candidate else 'JumpLandingLab/native_build.json' if args.jump_landing or args.jump_candidate else 'WaterMovementLab/native_build.json' if args.water_motion or args.water_regression else 'ServerSoundAudioLab/native_build.json' if args.server_sounds else 'FootstepAudioLab/native_build.json' if args.footsteps else 'DoorAudioLab/native_build.json'),workspace/'DoorAudioLab/OriginalDoorAudio_v01/sounds.json']}
         peer=relay.backend;peer.settimeout(.1)
     if args.movement_keys or args.keys_candidate:
         catalog=workspace/'MovementKeysLab/movement.json';result['native_inputs'][str(catalog)]=digest(catalog)

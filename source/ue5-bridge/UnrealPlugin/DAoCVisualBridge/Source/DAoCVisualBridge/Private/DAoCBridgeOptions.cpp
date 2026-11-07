@@ -94,13 +94,15 @@ void UDAoCBridgeSubsystem::OpenOptions(){
         List->AddSlot().AutoHeight().Padding(0,4)[SNew(SSlider).MinValue(.05f).MaxValue(1.5f).Value_Lambda([this](){return MouseSensitivity;}).OnValueChanged_Lambda([this](float V){if(FMath::IsFinite(V)){MouseSensitivity=FMath::Clamp(V,.05f,1.5f);SaveControls();}})];
         List->AddSlot().AutoHeight().Padding(0,4)[SNew(SCheckBox).IsChecked_Lambda([this](){return bInvertMouse?ECheckBoxState::Checked:ECheckBoxState::Unchecked;}).OnCheckStateChanged_Lambda([this](ECheckBoxState V){bInvertMouse=V==ECheckBoxState::Checked;SaveControls();})[Label(TEXT("INVERT MOUSE"),10)]];
         List->AddSlot().AutoHeight().Padding(0,6)[Label(TEXT("KEY CONFIGURATION"),12)];
+        FString Category;
         for(const auto& Action:KeyConfiguration->Actions){
+            if(Category!=Action.Category){Category=Action.Category;List->AddSlot().AutoHeight().Padding(0,5)[Label(Category.ToUpper(),11)];}
             const FString Id=Action.Id;auto Row=SNew(SHorizontalBox);Row->AddSlot().FillWidth(1).VAlign(VAlign_Center)[Label(Action.Label,10)];
             for(int32 Slot=0;Slot<2;++Slot)Row->AddSlot().AutoWidth().Padding(2,1)[SNew(SBox).WidthOverride(83).HeightOverride(23)[SNew(SButton).IsFocusable(false).ContentPadding(FMargin(1)).OnClicked_Lambda([this,Id,Slot](){BindingCaptureAction=Id;BindingCaptureSlot=Slot;BindingMessage=TEXT("Press a key. Esc cancels; right-click clears.");return FReply::Handled();})[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text_Lambda([this,Id,Slot](){return FText::FromString(BindingCaptureAction==Id&&BindingCaptureSlot==Slot?TEXT("PRESS A KEY"):KeyConfiguration->Text(Id,Slot));})]]];
             List->AddSlot().AutoHeight()[Row];
         }
-        List->AddSlot().AutoHeight().Padding(0,7)[SNew(SButton).IsFocusable(false).OnClicked_Lambda([this](){KeyConfiguration->Reset();BindingCaptureAction.Empty();BindingCaptureSlot=-1;BindingMessage=KeyConfiguration->Save()?TEXT("Default movement keys restored."):TEXT("Could not save the key configuration.");return FReply::Handled();})[Label(TEXT("RESTORE MOVEMENT DEFAULTS"),10)]];
-        List->AddSlot().AutoHeight().Padding(0,5)[SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(TEXT("Shift: walk while held. Other controls keep their current keys. Click a key to change it; Mouse 4 / 5 also work.")))];
+        List->AddSlot().AutoHeight().Padding(0,7)[SNew(SButton).IsFocusable(false).OnClicked_Lambda([this](){KeyConfiguration->Reset();BindingCaptureAction.Empty();BindingCaptureSlot=-1;BindingMessage=KeyConfiguration->Save()?TEXT("Default keys restored."):TEXT("Could not save the key configuration.");return FReply::Handled();})[Label(TEXT("RESTORE DEFAULTS"),10)]];
+        List->AddSlot().AutoHeight().Padding(0,5)[SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(TEXT("Shift: walk while held. Chat, menu, camera and GM keys remain reserved. Click a key to change it; Mouse 4 / 5 also work.")))];
         At(15,66,354,277,SNew(SScrollBox)+SScrollBox::Slot()[List]);
         At(18,348,345,40,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text_Lambda([this](){return FText::FromString(BindingMessage.IsEmpty()?TEXT("Changes are saved automatically."):BindingMessage);}));
     }

@@ -413,10 +413,10 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(PC->WasInputKeyJustPressed(EKeys::F1))RequestGMMode(false);
         if(PC->WasInputKeyJustPressed(EKeys::F2)){auto V=MakeShared<FJsonObject>();V->SetStringField(TEXT("text"),TEXT("/loc"));Send(TEXT("chat"),V);}
         UpdateInteractionInput();
-        if(PC->WasInputKeyJustPressed(EKeys::I)&&!PC->IsInputKeyDown(EKeys::LeftShift)&&!PC->IsInputKeyDown(EKeys::RightShift))ToggleInventory();
+        if(KeyConfiguration->Pressed(PC,TEXT("show_inventory")))ToggleInventory();
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeOpenInventory"))&&!bInventoryOpen&&!(ClassicState.IsValid()&&bClassicOpen&&ClassicTab==TEXT("inventory"))&&FPlatformTime::Seconds()-PlayerStartedAt>15)ToggleInventory();
         if(bAutoInteractionTest)UpdateInteractionTest(float(FPlatformTime::Seconds()-PlayerStartedAt));
-        if(PC->WasInputKeyJustPressed(EKeys::E)&&!InteractSelected()&&!InteractDoor()){
+        if(KeyConfiguration->Pressed(PC,TEXT("interact"))&&!InteractSelected()&&!InteractDoor()){
             FString BestId;double Best=600;for(auto& Pair:Entities){FVector Aim;if(!Pair.Key.StartsWith(TEXT("npc:"))||!CanSelect(Pair.Key,Aim))continue;double Distance=FVector::Dist(Pair.Value->GetActorLocation(),PlayerPosition);if(Distance<Best){Best=Distance;BestId=Pair.Key;}}
             if(!BestId.IsEmpty())SelectEntity(BestId,true);
         }

@@ -6,7 +6,7 @@ class APlayerController;
 // Movement/target-tracking subset. Defaults preserve the delivered bridge controls.
 // Original reference: game/ui/keybinds.gd and options_window.gd (two slots, exact press modifiers).
 struct FBridgeKeyConfiguration {
-    struct FAction { FString Id, Label; TArray<FString> Defaults, Bindings; bool Held=false; };
+    struct FAction { FString Id, Label; TArray<FString> Defaults, Bindings; bool Held=false; FString Category=TEXT("Movement"); };
     struct FChord { FKey Key; bool Shift=false,Ctrl=false,Alt=false; };
     TArray<FAction> Actions;
     FString Path;
