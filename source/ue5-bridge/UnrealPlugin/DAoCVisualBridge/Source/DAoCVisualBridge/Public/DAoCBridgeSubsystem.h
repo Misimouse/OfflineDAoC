@@ -474,6 +474,8 @@ private:
     bool InventoryHovered() const;
     TSharedPtr<FJsonObject> InventoryItem(int32 Slot) const;
     void InventorySlotClicked(int32 Slot);
+    void GiveInventoryItemAtCursor(int32 Slot,const FString& ItemToken,FVector2D Absolute);
+    bool TickItemHandoverAcceptance();
     void SendItemAction(const FString& Action,int32 Slot,int32 ToSlot=-1);
     void BuyMerchantItem(int32 Page,int32 Index,const FString& MerchantId,int64 CatalogRevision);
     bool TickInventoryAcceptance();

@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -347,6 +347,24 @@ def verify(workspace):
             old=target.read_bytes();target.write_bytes(b'tampered emblem or protected predecessor');rejected();checks+=1;target.write_bytes(old)
         emblem['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(emblem_path,emblem);rejected();checks+=1;emblem['files'].pop();put(emblem_path,emblem)
         assert verify_files(w)['emblem_window_installed'];checks+=1
+        # Inventory was not changed by the emblem UI delivery. Anchor its old
+        # bytes to that delivery's already-sealed source evidence as well.
+        inventory_proof=w/'EmblemWindowLab/prior_inventory_source.json';put(inventory_proof,{'source_inputs':{str(w/'source/inventory_state.gd'):digest(w/'Godot/inventory_state.gd')}})
+        emblem['evidence']={str(inventory_proof):digest(inventory_proof)};put(emblem_path,emblem)
+        prior=digest(binary);handover_rows=[]
+        for target in [plugin/r for r in HANDOVER_NATIVE_TARGETS]+[w/'Godot'/r for r in HANDOVER_GODOT_TARGETS]:
+            target.parent.mkdir(parents=True,exist_ok=True)
+            old=None if target.name in HANDOVER_NEW_NAMES else digest(target)
+            target.write_bytes(b'new item handover '+str(target).encode());handover_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        handover_path=w/'ItemHandoverLab/installed.json';handover=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(emblem_path),native_before_sha256=prior,native_after_sha256=digest(binary),inventory_predecessor_proof=str(inventory_proof),files=handover_rows)
+        put(handover_path,handover);assert verify_files(w)['item_handover_installed'];checks+=1
+        handover['predecessor_receipt_sha256']='0'*64;put(handover_path,handover);rejected();checks+=1;handover['predecessor_receipt_sha256']=digest(emblem_path)
+        handover['files'][0]['before_sha256']='0'*64;put(handover_path,handover);rejected();checks+=1;handover['files'][0]['before_sha256']=prior;put(handover_path,handover)
+        for target in [binary,w/'Godot/inventory_state.gd',plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeItemHandover.cpp',plugin/'Content/EmblemUI_v01/picker.json',inventory_proof,Path(server_rows[0]['target']),wave]:
+            old=target.read_bytes();target.write_bytes(b'tampered item handover or protected predecessor');rejected();checks+=1;target.write_bytes(old)
+        row=next(r for r in handover['files'] if r['target']==str(w/'Godot/inventory_state.gd'));saved=row['before_sha256'];row['before_sha256']='0'*64;put(handover_path,handover);rejected();checks+=1;row['before_sha256']=saved;put(handover_path,handover)
+        handover['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(handover_path,handover);rejected();checks+=1;handover['files'].pop();put(handover_path,handover)
+        assert verify_files(w)['item_handover_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

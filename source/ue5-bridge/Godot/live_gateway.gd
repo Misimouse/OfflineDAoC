@@ -379,7 +379,8 @@ func command(value:Dictionary)->void:
         last_position_send=Time.get_ticks_msec()
     elif action in ["target","interact","keyword","dialog_response","dismiss_interaction"]:
         interaction.execute(value,server.client,adapter.entities,position)
-    elif action in ["inventory_move","inventory_equip","inventory_unequip","merchant_buy","merchant_sell"]:
+    elif action in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:
+        if action=="inventory_give" and (not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0):inventory.fail("You cannot hand over items right now.");return
         if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
         sync_inventory(Time.get_ticks_msec())
         inventory.execute(value,server.client,interaction,adapter.entities,position,Time.get_ticks_msec())

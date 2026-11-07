@@ -50,6 +50,10 @@ func sync(rows:Array,coins:Dictionary,appearance:Dictionary,weapons:String,carri
         items=next;money=normalized;gear=appearance.duplicate(true);weapon_set=weapons;weight_now=carried;weight_max=capacity;fingerprint=key;state_revision+=1;revision+=1
         if not pending.is_empty() and inventory_events>int(pending.inventory_events):
             pending.clear();feedback="Inventory updated by the server.";revision+=1
+    # NPC services also return an unchanged slot when refusing an item or opening
+    # a confirmation. This is a refresh, not proof that the NPC accepted it.
+    if pending.get("action","")=="inventory_give" and inventory_events>int(pending.inventory_events):
+        pending.clear();feedback="Inventory refreshed. Check the NPC's response.";revision+=1
     if not pending.is_empty() and now>=int(pending.until_ms):
         pending.clear();feedback="No confirmation received. Check inventory before repeating the operation.";revision+=1
 
@@ -86,7 +90,7 @@ func input_integer(value:Dictionary,key:String,fallback:int=-1)->int:
 
 func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictionary,pos:Vector3,now:int)->bool:
     var action:=String(value.get("action",""))
-    if action not in ["inventory_move","inventory_equip","inventory_unequip","merchant_buy","merchant_sell"]:return false
+    if action not in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:return false
     if inventory_events==0 or fingerprint.is_empty():return fail("The server is still sending inventory.")
     if not pending.is_empty():return fail("Wait for the server's response to the previous operation.")
     if input_integer(value,"inventory_revision")!=state_revision:return fail("The inventory has changed. Select the item again.")
@@ -96,7 +100,23 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
         if not items.has(source) or String(value.get("item_token",""))!=String(items[source].token):return fail("That item is no longer in this slot.")
         count=int(items[source].get("count",1))
         if count<1 or count>65535:return fail("Invalid item quantity.")
-    if action in ["inventory_move","inventory_equip","inventory_unequip"]:
+    if action=="inventory_give":
+        if source not in EQUIPMENT and (source<40 or source>79):return fail("Select a carried item.")
+        var id:=String(value.get("entity_id",""))
+        var part:=id.trim_prefix("npc:")
+        if not id.begins_with("npc:") or not part.is_valid_int():return fail("Drop the item onto a nearby NPC.")
+        var oid:=int(part)
+        if oid<1 or oid>64535 or id!="npc:%d"%oid:return fail("That NPC is no longer available.")
+        var row:Dictionary=entities.get(id,{})
+        if row.get("kind","")!="npc" or not interaction._valid(row):return fail("That NPC is no longer available.")
+        if input_integer(value,"target_model")<0 or int(row.get("model_id",-1))<0 or not value.get("target_name") is String or value.target_name!=String(row.get("name","")) or input_integer(value,"target_model")!=int(row.get("model_id",-1)):return fail("The NPC has changed. Select it again.")
+        var distance:float=interaction._distance(row,pos)
+        if not is_finite(distance) or distance>3.2001:return fail("Move closer to hand the item to that NPC.")
+        if client==null:return fail("The server connection is unavailable.")
+        # Original PlayerMoveItem: object ID + 1000. DOL alone decides whether a
+        # service accepts backpack/equipped items, asks confirmation or charges.
+        client.call("MoveItem",source,1000+oid,count)
+    elif action in ["inventory_move","inventory_equip","inventory_unequip"]:
         if action=="inventory_move":destination=input_integer(value,"to_slot")
         elif action=="inventory_equip":
             if source<40 or source>79:return fail("Select a backpack item.")
