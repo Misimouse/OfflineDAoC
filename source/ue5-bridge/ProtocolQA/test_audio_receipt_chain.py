@@ -376,6 +376,17 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered poison or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         poison['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(poison_path,poison);rejected();checks+=1;poison['files'].pop();put(poison_path,poison)
         assert verify_files(w)['weapon_poison_installed'];checks+=1
+        before=digest(target);target.write_text('equipment refusal synthetic inventory')
+        refusal_proof=w/'EquipmentRefusalLab/proof.json';put(refusal_proof,{'passed':True,'synthetic':True})
+        refusal_path=w/'EquipmentRefusalLab/installed.json';refusal=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(poison_path),native_sha256=digest(binary),files=[dict(target=str(target),before_sha256=before,after_sha256=digest(target))],evidence={str(refusal_proof):digest(refusal_proof)})
+        put(refusal_path,refusal);assert verify_files(w)['equipment_refusals_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_sha256']:
+            old=refusal[field];refusal[field]='0'*64;put(refusal_path,refusal);rejected();checks+=1;refusal[field]=old;put(refusal_path,refusal)
+        refusal['files'][0]['before_sha256']='0'*64;put(refusal_path,refusal);rejected();checks+=1;refusal['files'][0]['before_sha256']=before;put(refusal_path,refusal)
+        for q in [target,refusal_proof,binary,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered refusal or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        refusal['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(refusal_path,refusal);rejected();checks+=1;refusal['files'].pop();put(refusal_path,refusal)
+        assert verify_files(w)['equipment_refusals_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

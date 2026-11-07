@@ -29,7 +29,7 @@ func observe(kind:String,data:Dictionary={})->void:
         var text:=String(data.get("text",""))
         # These exact original server replies reject the outstanding equipment move.
         # Keep items/coins/tokens authoritative; only finish the rejected request.
-        if text in ["You have no skill in wearing this armor type!","You have no skill in using this weapon type!"]:
+        if text in ["You have no skill in wearing this armor type!","You have no skill in using this weapon type!","You cannot equip an item from another realm!","Your class cannot use this item!"]:
             pending.clear();feedback=text;rejected+=1;revision+=1
 
 func sync(rows:Array,coins:Dictionary,appearance:Dictionary,weapons:String,carried:int,capacity:int,now:int,vault_state:Dictionary={})->void:

@@ -202,6 +202,22 @@ def verify_files(workspace):
     poison_path=workspace/'WeaponPoisonLab/installed.json'
     poison=json.loads(poison_path.read_text()) if poison_path.exists() else None
     if poison and not poison.get('installed'):poison=None
+    refusal_path=workspace/'EquipmentRefusalLab/installed.json'
+    refusal=json.loads(refusal_path.read_text()) if refusal_path.exists() else None
+    if refusal and not refusal.get('installed'):refusal=None
+    refusal_replacements={}
+    if refusal:
+        assert poison and refusal['phase']=='complete' and not refusal['database_modified'] and not refusal['server_rules_modified']
+        assert refusal['predecessor_receipt_sha256']==digest(poison_path) and refusal['native_sha256']==poison['native_sha256']
+        target=str(workspace/'Godot/inventory_state.gd');refusal_replacements={row['target']:row for row in refusal['files']}
+        assert len(refusal['files'])==len(refusal_replacements)==1 and set(refusal_replacements)=={target}
+        row=refusal_replacements[target];prior=poison['files'][0]
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert refusal['evidence'] and all(digest(Path(p))==h for p,h in refusal['evidence'].items())
+    def latest_refusal(row,expected):
+        changed=refusal_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     poison_replacements={}
     if poison:
         assert handover and poison['phase']=='complete' and not poison['database_modified'] and not poison['server_rules_modified']
@@ -209,12 +225,12 @@ def verify_files(workspace):
         target=str(workspace/'Godot/inventory_state.gd');poison_replacements={row['target']:row for row in poison['files']}
         assert len(poison['files'])==len(poison_replacements)==1 and set(poison_replacements)=={target}
         row=poison_replacements[target];prior=next(r for r in handover['files'] if r['target']==target)
-        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==latest_refusal(row,row['after_sha256'])
         assert poison['evidence'] and all(digest(Path(p))==h for p,h in poison['evidence'].items())
     def latest_poison(row,expected):
         changed=poison_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_refusal(row,expected)
     handover_replacements={}
     if handover:
         assert emblem and handover['phase']=='complete' and not handover['database_modified'] and not handover['server_rules_modified']
@@ -559,4 +575,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'verified_files':len(original['files'])}

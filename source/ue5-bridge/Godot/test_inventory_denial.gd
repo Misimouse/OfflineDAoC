@@ -36,6 +36,24 @@ func _initialize()->void:
     state.pending={"action":"inventory_move","until_ms":100,"inventory_events":1,"equipment_request":false}
     state.observe("message",{"text":DENIAL})
     check(not state.pending.is_empty(),"class refusal cannot cancel a backpack-only move")
+    state.reset();state.sync(rows,{"copper":50},{},"standard",10,100,0);state.observe("inventory")
+    for text in ["You cannot equip an item from another realm!","Your class cannot use this item!"]:
+        command.inventory_revision=state.state_revision;command.item_token=state.items[40].token
+        check(state.execute(command,client,interaction,{},Vector3.ZERO,3),"original class/realm request remains server-authoritative")
+        state.observe("message",{"text":"NPC says, "+text})
+        check(not state.pending.is_empty(),"quoted refusal is not the transaction result")
+        state.observe("message",{"text":text})
+        check(state.pending.is_empty() and state.feedback==text,"exact original class/realm refusal releases pending equip")
+        check(state.items[40].token==command.item_token and state.money.copper==50,"realm/class refusal preserves authoritative items and money")
+        var rejected_before:int=state.rejected
+        state.observe("message",{"text":text})
+        check(state.rejected==rejected_before,"late class/realm reply cannot reject a finished request")
+    state.pending={"action":"inventory_move","until_ms":100,"inventory_events":1,"equipment_request":false,"item_application":true}
+    state.observe("message",{"text":"Your class cannot use this item!"})
+    check(not state.pending.is_empty(),"equip-only reply cannot cancel a poison application")
+    state.pending={"action":"inventory_give","until_ms":100,"inventory_events":1,"equipment_request":false}
+    state.observe("message",{"text":"You cannot equip an item from another realm!"})
+    check(not state.pending.is_empty(),"equip-only reply cannot cancel an NPC handover")
     client.free()
     var file:=FileAccess.open("res://../Reports/inventory_rejection/godot_tests.json",FileAccess.WRITE)
     file.store_string(JSON.stringify({"passed":failures.is_empty(),"checks":checks,"failures":failures},"  "));file.close()
