@@ -54,6 +54,8 @@ func sync(rows:Array,coins:Dictionary,appearance:Dictionary,weapons:String,carri
     # a confirmation. This is a refresh, not proof that the NPC accepted it.
     if pending.get("action","")=="inventory_give" and inventory_events>int(pending.inventory_events):
         pending.clear();feedback="Inventory refreshed. Check the NPC's response.";revision+=1
+    if bool(pending.get("item_application",false)) and inventory_events>int(pending.inventory_events):
+        pending.clear();feedback="Inventory refreshed. Check the server's response.";revision+=1
     if not pending.is_empty() and now>=int(pending.until_ms):
         pending.clear();feedback="No confirmation received. Check inventory before repeating the operation.";revision+=1
 
@@ -62,6 +64,12 @@ func allowed_slots()->Array:
     if bool(vault.get("valid",false)) and [int(vault.get("first",0)),int(vault.get("count",0))] in [[110,40],[150,100]]:slots.append_array(range(int(vault.first),int(vault.first)+int(vault.count)))
     return slots
 func vault_slot(slot:int)->bool:return bool(vault.get("valid",false)) and slot>=int(vault.get("first",0)) and slot<int(vault.get("first",0))+int(vault.get("count",0))
+func poison_application(source:int,destination:int)->bool:
+    if source<40 or source>79 or not items.has(source) or not items.has(destination) or int(items[source].get("object_type",0))!=46:return false
+    var object_type:=int(items[destination].get("object_type",0))
+    # Original GlobalConstants.IsWeapon includes shields. DOL decides whether
+    # this character can poison that weapon; the bridge never grants a coating.
+    return (object_type>=1 and object_type<=28) or object_type==42
 func first_free()->int:
     for slot in range(40,80):
         if not items.has(slot):return slot
@@ -95,7 +103,7 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
     if not pending.is_empty():return fail("Wait for the server's response to the previous operation.")
     if input_integer(value,"inventory_revision")!=state_revision:return fail("The inventory has changed. Select the item again.")
     if not interaction.dialogs.is_empty():return fail("Answer the pending confirmation first.")
-    var source:=input_integer(value,"slot");var destination:=-1;var count:=1
+    var source:=input_integer(value,"slot");var destination:=-1;var count:=1;var applying_poison:=false
     if action!="merchant_buy":
         if not items.has(source) or String(value.get("item_token",""))!=String(items[source].token):return fail("That item is no longer in this slot.")
         count=int(items[source].get("count",1))
@@ -133,7 +141,8 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
         if source>=110 or destination>=110:
             if action!="inventory_move" or String(value.get("vault_token",""))!=String(vault.get("token","")) or not bool(vault.get("valid",false)):return fail("The vault has changed or is closed.")
             if (not vault_slot(source) and (source<40 or source>79)) or (not vault_slot(destination) and (destination<40 or destination>79)):return fail("Move the item between backpack and vault.")
-        if destination in EQUIPMENT and destination not in slots_for(items[source]):return fail("That item does not match this equipment slot.")
+        applying_poison=action=="inventory_move" and poison_application(source,destination)
+        if destination in EQUIPMENT and destination not in slots_for(items[source]) and not (applying_poison and destination in [10,11,12,13]):return fail("That item does not match this equipment slot.")
         if source in EQUIPMENT and items.has(destination) and source not in slots_for(items[destination]):return fail("The destination item cannot occupy this equipment slot.")
         client.call("MoveItem",source,destination,count)
     else:
@@ -161,7 +170,7 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
             if source<40 or source>79:return fail("You can only sell backpack items.")
             client.call("Target",int(id.get_slice(":",1)),0xE000)
             client.call("SellItem",x,y,source)
-    requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events,"equipment_request":action in ["inventory_equip","inventory_move"] and destination in EQUIPMENT};revision+=1;return true
+    requests+=1;feedback="Waiting for the server update...";pending={"action":action,"until_ms":now+12000,"inventory_events":inventory_events,"equipment_request":action in ["inventory_equip","inventory_move"] and destination in EQUIPMENT and not applying_poison,"item_application":applying_poison};revision+=1;return true
 
 func snapshot()->Dictionary:
     var rows:Array=[]

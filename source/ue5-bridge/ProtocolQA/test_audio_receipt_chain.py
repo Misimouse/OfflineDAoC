@@ -365,6 +365,17 @@ def verify(workspace):
         row=next(r for r in handover['files'] if r['target']==str(w/'Godot/inventory_state.gd'));saved=row['before_sha256'];row['before_sha256']='0'*64;put(handover_path,handover);rejected();checks+=1;row['before_sha256']=saved;put(handover_path,handover)
         handover['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(handover_path,handover);rejected();checks+=1;handover['files'].pop();put(handover_path,handover)
         assert verify_files(w)['item_handover_installed'];checks+=1
+        target=w/'Godot/inventory_state.gd';before=digest(target);target.write_text('poison-capable synthetic inventory')
+        poison_proof=w/'WeaponPoisonLab/proof.json';put(poison_proof,{'passed':True,'synthetic':True})
+        poison_path=w/'WeaponPoisonLab/installed.json';poison=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(handover_path),native_sha256=digest(binary),files=[dict(target=str(target),before_sha256=before,after_sha256=digest(target))],evidence={str(poison_proof):digest(poison_proof)})
+        put(poison_path,poison);assert verify_files(w)['weapon_poison_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_sha256']:
+            old=poison[field];poison[field]='0'*64;put(poison_path,poison);rejected();checks+=1;poison[field]=old;put(poison_path,poison)
+        poison['files'][0]['before_sha256']='0'*64;put(poison_path,poison);rejected();checks+=1;poison['files'][0]['before_sha256']=before;put(poison_path,poison)
+        for q in [target,poison_proof,binary,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered poison or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        poison['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(poison_path,poison);rejected();checks+=1;poison['files'].pop();put(poison_path,poison)
+        assert verify_files(w)['weapon_poison_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

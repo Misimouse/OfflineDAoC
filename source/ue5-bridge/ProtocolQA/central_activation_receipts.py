@@ -199,6 +199,22 @@ def verify_files(workspace):
     handover_path=workspace/'ItemHandoverLab/installed.json'
     handover=json.loads(handover_path.read_text()) if handover_path.exists() else None
     if handover and not handover.get('installed'):handover=None
+    poison_path=workspace/'WeaponPoisonLab/installed.json'
+    poison=json.loads(poison_path.read_text()) if poison_path.exists() else None
+    if poison and not poison.get('installed'):poison=None
+    poison_replacements={}
+    if poison:
+        assert handover and poison['phase']=='complete' and not poison['database_modified'] and not poison['server_rules_modified']
+        assert poison['predecessor_receipt_sha256']==digest(handover_path) and poison['native_sha256']==handover['native_after_sha256']
+        target=str(workspace/'Godot/inventory_state.gd');poison_replacements={row['target']:row for row in poison['files']}
+        assert len(poison['files'])==len(poison_replacements)==1 and set(poison_replacements)=={target}
+        row=poison_replacements[target];prior=next(r for r in handover['files'] if r['target']==target)
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert poison['evidence'] and all(digest(Path(p))==h for p,h in poison['evidence'].items())
+    def latest_poison(row,expected):
+        changed=poison_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     handover_replacements={}
     if handover:
         assert emblem and handover['phase']=='complete' and not handover['database_modified'] and not handover['server_rules_modified']
@@ -208,7 +224,7 @@ def verify_files(workspace):
         assert len(handover['files'])==len(handover_replacements)==len(expected) and set(handover_replacements)==expected
         for row in handover['files']:
             assert (row['before_sha256'] is None)==(Path(row['target']).name in HANDOVER_NEW_NAMES)
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_poison(row,row['after_sha256'])
         proof=Path(handover['inventory_predecessor_proof']);assert str(proof) in emblem['evidence'] and digest(proof)==emblem['evidence'][str(proof)]
         inputs=json.loads(proof.read_text())['source_inputs'];before=next(h for p,h in inputs.items() if Path(p).name=='inventory_state.gd')
         assert handover_replacements[str(workspace/'Godot/inventory_state.gd')]['before_sha256']==before
@@ -217,7 +233,7 @@ def verify_files(workspace):
     def latest_handover(row,expected):
         changed=handover_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_poison(row,expected)
     emblem_replacements={}
     if emblem:
         assert guild and emblem['phase']=='complete' and not emblem['database_modified'] and not emblem['server_rules_modified']
@@ -543,4 +559,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'verified_files':len(original['files'])}

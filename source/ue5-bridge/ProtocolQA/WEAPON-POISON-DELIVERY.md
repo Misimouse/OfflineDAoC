@@ -1,0 +1,11 @@
+# Original weapon poison application
+
+The bridge now permits the original inventory drag of a backpack poison onto an occupied weapon slot. Previously its equipment-fit guard rejected the vial as if it were an attempt to equip it. The exception is limited to the original poison object type and occupied original weapon slots. Double-click equip, armor slots, empty worn slots, stale item identity and pending transactions retain their existing guards.
+
+The request remains the original MoveItem packet. DOL controls Envenom, weapon ability, poison/player level, combat and mez restrictions, consumption and saved poison charges. The bridge neither grants a poison nor modifies an item optimistically. The original DOL weapon classification includes shields; that classification is preserved rather than replaced by a new client rule. Unchanged server inventory replies release rejected application requests without announcing success.
+
+Evidence: 27 isolated state checks; the existing inventory 35, armor-denial 11, NPC-handover 36 and gateway nine checks; eight real DOL application/level/stale/save checks; and three real no-Envenom checks. The real fixture starts with three low-level vials and verifies exactly one consumed for each accepted application, including a backpack weapon. Saved items retain the original poison ID and charges after normal shutdown. All private data and copied server libraries are restored. Receipt-chain tests pass 139 synthetic cases, including altered predecessor, backend, evidence, native binary and unrelated-file rejection.
+
+The installer changes exactly one client backend file, with a verified predecessor and backup. It changes no native binary, server rule, class specialization, played inventory, database or map. Owner gameplay review remains pending.
+
+Owner review: with a character that has the original required Envenom level, drag an eligible poison from the backpack onto an occupied weapon slot. One vial should be consumed after the server reply, and the item should retain its coating after re-entry. A character without Envenom or with insufficient level must be refused without consumption. The test tool does not add poison, money or skill points to the played account; this check can remain pending until an eligible character and items are available.
