@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
+from central_activation_receipts import WORLD_CLOCK_NATIVE_TARGETS,WORLD_CLOCK_NEW_NAMES,WORLD_CLOCK_GODOT_TARGETS,WORLD_CLOCK_ART_SHA256
 from central_activation_receipts import COMPASS_NATIVE_TARGETS,COMPASS_NEW_NAMES,COMPASS_ART_SHA256
 from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS,LIVE_RIDING_NATIVE_TARGETS,LIVE_RIDING_GODOT_TARGETS,LIVE_RIDING_NEW_NAMES,KEY_CONFIGURATION_NATIVE_TARGETS,KEY_CONFIGURATION_NEW_NAMES,INTERFACE_KEYS_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
@@ -506,6 +507,35 @@ def verify(workspace):
                 old=q.read_bytes();q.write_bytes(b'tampered compass or protected predecessor');rejected();checks+=1;q.write_bytes(old)
             compass['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(compass_path,compass);rejected();checks+=1;compass['files'].pop();put(compass_path,compass)
             assert verify_files(w)['compass_installed'];checks+=1
+            for relative in WORLD_CLOCK_NATIVE_TARGETS:
+                q=plugin/relative
+                if q.name not in WORLD_CLOCK_NEW_NAMES and not q.exists():q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(b'old clock source')
+            clock_native=w/'CompassLab/native_build.json'
+            put(clock_native,{'source_sha256':{r.removeprefix('Source/'):digest(plugin/r) for r in WORLD_CLOCK_NATIVE_TARGETS if r.startswith('Source/') and Path(r).name not in WORLD_CLOCK_NEW_NAMES},'binaries_sha256':{Path(r).name:digest(plugin/r) for r in WORLD_CLOCK_NATIVE_TARGETS if r.startswith('Binaries/')}})
+            compass['evidence'][str(clock_native)]=digest(clock_native);put(compass_path,compass)
+            for name in WORLD_CLOCK_GODOT_TARGETS:
+                q=w/'Godot'/name
+                if not q.exists():q.write_bytes(b'old clock gateway')
+            before_clock=w/'WorldClockLab/before.json';put(before_clock,dict(passed=True,normal_runtime_unchanged=True,database_restored=True,source_inputs={str(w/'Godot'/name):digest(w/'Godot'/name) for name in WORLD_CLOCK_GODOT_TARGETS}))
+            prior=digest(binary);clock_rows=[]
+            for relative in WORLD_CLOCK_NATIVE_TARGETS:
+                q=plugin/relative;q.parent.mkdir(parents=True,exist_ok=True);before=None if q.name in WORLD_CLOCK_NEW_NAMES else digest(q)
+                q.write_bytes(b'new synthetic clock '+relative.encode());clock_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+            for name in WORLD_CLOCK_GODOT_TARGETS:
+                q=w/'Godot'/name;before=digest(q);q.write_bytes(b'new clock transport '+name.encode());clock_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+            clock_proof=w/'WorldClockLab/proof.json';put(clock_proof,dict(passed=True,synthetic=True))
+            clock_path=w/'WorldClockLab/installed.json';clock=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(compass_path),native_before_sha256=prior,native_after_sha256=digest(binary),godot_before_proof=str(before_clock),files=clock_rows,evidence={str(clock_proof):digest(clock_proof),str(before_clock):digest(before_clock)})
+            assert WORLD_CLOCK_ART_SHA256=='1f68440ba402de202272ad3df59392737411feb31493f22517691c858e9206ff';checks+=1
+            with patch('central_activation_receipts.WORLD_CLOCK_ART_SHA256',digest(plugin/'Content/ClassicUI/timedisp.png')):
+                put(clock_path,clock);assert verify_files(w)['world_clock_installed'];checks+=1
+                for field in ['predecessor_receipt_sha256','native_before_sha256','native_after_sha256']:
+                    old=clock[field];clock[field]='0'*64;put(clock_path,clock);rejected();checks+=1;clock[field]=old;put(clock_path,clock)
+                for row in clock_rows:
+                    old=row['before_sha256'];row['before_sha256']='0'*64;put(clock_path,clock);rejected();checks+=1;row['before_sha256']=old;put(clock_path,clock)
+                for q in [Path(r['target']) for r in clock_rows]+[clock_native,clock_proof,before_clock,Path(server_rows[0]['target']),wave]:
+                    old=q.read_bytes();q.write_bytes(b'tampered clock or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+                clock['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(clock_path,clock);rejected();checks+=1;clock['files'].pop();put(clock_path,clock)
+                assert verify_files(w)['world_clock_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

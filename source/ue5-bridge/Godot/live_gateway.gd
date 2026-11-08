@@ -411,6 +411,14 @@ func command(value:Dictionary)->void:
         door_audio.request(id,bool(value.open),Time.get_ticks_msec())
         server.client.DoorRequest(id,1 if value.open else 0);door_requests+=1
 
+func world_clock_snapshot()->Dictionary:
+    # Reuse the original Server.game_hour() interpolation, including faster nights.
+    # The relay never substitutes the PC clock or invents a time before the first Time packet.
+    if server==null or not server.has_method("game_hour") or not bool(server.get("playing")):return {"ready":false}
+    var hour:float=float(server.call("game_hour"))
+    if not is_finite(hour) or hour<0.0 or hour>=24.0:return {"ready":false}
+    return {"ready":true,"hour":hour}
+
 func local_chat(text:String,channel:String="help")->void:
     if chat_state!=null:chat_state.append(text,channel)
     chat_lines.append(text.left(240));if chat_lines.size()>8:chat_lines.pop_front()
@@ -575,6 +583,7 @@ func _process(_delta:float)->void:
         player_snapshot["gm_mode"]=gm_mode.snapshot()
         player_snapshot["release"]=release_state.snapshot()
         transport.snapshot_metadata["player_status"]=player_snapshot
+        transport.snapshot_metadata["world_clock"]=world_clock_snapshot()
         transport.publish(rows,207,"live-offlinedaoc")
     character_lobby.tick(now,server)
     if now-last_report>1000:last_report=now;write_report()

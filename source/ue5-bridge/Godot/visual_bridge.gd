@@ -36,7 +36,7 @@ func publish(entities: Array, zone_id: int = 207, source: String = "live") -> bo
     last_snapshot = {"type":"snapshot", "protocol":"daoc-visual-bridge", "version":VERSION,
         "session":session, "seq":sequence, "zone_id":zone_id, "source":source,
         "origin_m":[1364.0,130.0,1263.0], "entities":entities}
-    for key in ["character","status","in_game","gm","max_speed_mps","doors","interaction","inventory","player_status","messages","chat","classic_ui","los_queries","spell_visuals","combat_audio","server_sound_audio","target_tracking","riding","zone_lights","character_lobby","exchange","guild","emblem_picker"]:
+    for key in ["character","status","in_game","gm","max_speed_mps","doors","interaction","inventory","player_status","messages","chat","classic_ui","los_queries","spell_visuals","combat_audio","server_sound_audio","target_tracking","riding","zone_lights","character_lobby","exchange","guild","emblem_picker","world_clock"]:
         if snapshot_metadata.has(key):last_snapshot[key]=snapshot_metadata[key]
     return true
 

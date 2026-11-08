@@ -1,0 +1,18 @@
+Owner direction, 8 November 2026. These are queued requirements, not completed features.
+
+Owner review is deferred while working on characters. Preserve the pending checklist in
+DAoC-Godot-UE5-Bridge/REVISION-PENDIENTE-PROPIETARIO.txt. Do not ask for validation between packages.
+
+Crafting and poison application: modernize their presentation and interaction. Audit the
+existing original implementation and server rules before designing the future interface.
+
+Housing and decorations: required future integration. Owner reports Godot lacked Housing.
+Audit server, database, protocol and assets rather than assuming end-to-end support.
+
+Frontiers / RvR: central gameplay priority. Plan and measure loading, resource budgets,
+collisions, many players and spell effects. Fast play and strong optimization are required,
+with graphics scaling for both modest and powerful hardware.
+
+Keep the current integration package focused; these notes do not authorize claiming the
+future blocks finished or silently replacing existing gameplay rules. Continue autonomously
+until the owner announces their return. Protect played progress and WORK's separate art.

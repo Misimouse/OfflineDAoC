@@ -2,6 +2,7 @@
 #include "Widgets/Layout/SBox.h"
 
 bool UDAoCBridgeSubsystem::RecoverableWindowOpen(const FString& Id)const{
+    if(Id==TEXT("time"))return bClassicTimeOpen;
     if(Id==TEXT("compass"))return bClassicCompassOpen;
     if(Id==TEXT("panel"))return bClassicOpen;
     if(Id==TEXT("chat_combat"))return bChatCombatOpen;
@@ -13,7 +14,8 @@ bool UDAoCBridgeSubsystem::RecoverableWindowOpen(const FString& Id)const{
 }
 void UDAoCBridgeSubsystem::ToggleRecoverableWindow(const FString& Id){
     if(!ClassicState.IsValid()||bExiting)return;
-    if(Id==TEXT("compass"))ToggleCompass();
+    if(Id==TEXT("time"))ToggleWorldClock();
+    else if(Id==TEXT("compass"))ToggleCompass();
     else if(Id==TEXT("panel")){bClassicOpen=!bClassicOpen;bInventoryMoving=false;RefreshClassicPanel();SaveClassicLayout();}
     else if(Id==TEXT("chat_combat"))ToggleCombatChat();
     else if(Id==TEXT("minigroup")){bClassicMiniGroupOpen=!bClassicMiniGroupOpen;RefreshClassicMiniGroup();SaveClassicLayout();}
@@ -24,6 +26,7 @@ void UDAoCBridgeSubsystem::ToggleRecoverableWindow(const FString& Id){
 void UDAoCBridgeSubsystem::ResetWindowLayout(){
     if(!ClassicState.IsValid()||bExiting)return;
     const FVector2D Size=UIViewportSize()/ClassicScale();
+    ClassicTimePosition={127,0};bClassicTimeOpen=true;RefreshWorldClock();
     ClassicCompassPosition={Size.X*.5-56,Size.Y-107};bClassicCompassOpen=true;RefreshCompass();
     ClassicPositions[0]={Size.X-192,0};
     ClassicPositions[1]={Size.X*.5-186,Size.Y-80};ClassicPositions[2]={Size.X*.5-186,Size.Y-40};

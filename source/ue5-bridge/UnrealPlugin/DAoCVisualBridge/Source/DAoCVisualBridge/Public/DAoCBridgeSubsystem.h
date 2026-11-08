@@ -138,6 +138,7 @@ private:
     bool TickWindowRecoveryAcceptance();
     bool TickPlayerVitalsAcceptance();
     bool TickCompassAcceptance();
+    bool TickWorldClockAcceptance();
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;
     FString Session, Status, Character, CatalogPath;
@@ -442,6 +443,14 @@ private:
     FString ClassicTab=TEXT("character"),ClassicLayoutFile,ClassicLayoutCharacter;
     bool bClassicOpen=true,ClassicVertical[3]={false,false,true};
     FVector2D ClassicPositions[5];
+    double WorldClockHour=-1.;
+    bool bClassicTimeOpen=true;
+    FVector2D ClassicTimePosition{127,0};
+    TSharedPtr<SBox> ClassicTimeBox;
+    void ApplyWorldClock(const TSharedPtr<FJsonObject>& Value);
+    FString WorldClockText() const;
+    void RefreshWorldClock();
+    void ToggleWorldClock();
     bool bClassicCompassOpen=true;
     FVector2D ClassicCompassPosition;
     TSharedPtr<SBox> ClassicCompassBox;

@@ -9,8 +9,9 @@ from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
 
-def verify(workspace, engine, installed=False):
-    root = workspace / 'CompassLab'
+def verify(workspace, engine, installed=False, lab_name="CompassLab"):
+    assert lab_name in ["CompassLab","WorldClockLab"]
+    root = workspace / lab_name
     bp = root / 'native_build.json'
     build = read(bp)
     assert build['passed']
@@ -22,7 +23,7 @@ def verify(workspace, engine, installed=False):
     if installed:
         from central_activation_receipts import verify_files
         assert verify_files(workspace)['compass_installed']
-    original = root / 'Art/compass_bar.png'
+    original = workspace / 'CompassLab/Art/compass_bar.png'
     art_hash = '29c5db6f8795c82cc38c675c108f0c8663020dfb6ce1677f3201f6af4b3dad37'
     assert digest(original) == art_hash
     out = root / ('InstalledCompassAcceptance' if installed else 'CompassAcceptance') / datetime.now().strftime('%Y%m%d-%H%M%S-%f')

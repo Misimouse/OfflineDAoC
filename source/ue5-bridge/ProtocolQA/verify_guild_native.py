@@ -6,7 +6,7 @@ from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
 def verify(workspace,engine,installed=False,lab_name="GuildWindowLab"):
-    assert lab_name in ["GuildWindowLab","EmblemWindowLab","ItemHandoverLab","HoverDetailsLab","UIScaleLab","WindowRecoveryLab","PlayerVitalsLab","CompassLab"]
+    assert lab_name in ["GuildWindowLab","EmblemWindowLab","ItemHandoverLab","HoverDetailsLab","UIScaleLab","WindowRecoveryLab","PlayerVitalsLab","CompassLab","WorldClockLab"]
     root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())

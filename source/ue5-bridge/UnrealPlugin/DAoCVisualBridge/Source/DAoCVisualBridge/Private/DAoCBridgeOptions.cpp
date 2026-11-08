@@ -90,9 +90,9 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     Button(TEXT("WINDOWS"),299,34,69,[this](){CloseOptions();bWindowOptions=true;bControlsOptions=bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
     if(bWindowOptions){
         At(20,74,340,36,Label(TEXT("OPEN OR CLOSE WINDOWS"),11));
-        const TCHAR* Ids[]={TEXT("panel"),TEXT("chat_combat"),TEXT("minigroup"),TEXT("map"),TEXT("journal"),TEXT("guild"),TEXT("compass")};
-        const TCHAR* Names[]={TEXT("CHARACTER PANEL"),TEXT("COMBAT CHAT"),TEXT("GROUP"),TEXT("MAP"),TEXT("QUEST JOURNAL"),TEXT("GUILD"),TEXT("COMPASS")};
-        for(int32 I=0;I<7;++I){const FString Id=Ids[I],Name=Names[I];At(20+(I%2)*175,118+(I/2)*32,165,24,SNew(SButton).IsEnabled(ClassicState.IsValid()).IsFocusable(false).OnClicked_Lambda([this,Id](){ToggleRecoverableWindow(Id);return FReply::Handled();})[
+        const TCHAR* Ids[]={TEXT("panel"),TEXT("chat_combat"),TEXT("minigroup"),TEXT("map"),TEXT("journal"),TEXT("guild"),TEXT("compass"),TEXT("time")};
+        const TCHAR* Names[]={TEXT("CHARACTER PANEL"),TEXT("COMBAT CHAT"),TEXT("GROUP"),TEXT("MAP"),TEXT("QUEST JOURNAL"),TEXT("GUILD"),TEXT("COMPASS"),TEXT("TIME")};
+        for(int32 I=0;I<8;++I){const FString Id=Ids[I],Name=Names[I];At(20+(I%2)*175,118+(I/2)*32,165,24,SNew(SButton).IsEnabled(ClassicState.IsValid()).IsFocusable(false).OnClicked_Lambda([this,Id](){ToggleRecoverableWindow(Id);return FReply::Handled();})[
             SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(Name)).ColorAndOpacity_Lambda([this,Id](){return RecoverableWindowOpen(Id)?FLinearColor(1,.84,.45):FLinearColor(.72,.72,.70);})]);}
         At(20,248,340,48,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text(FText::FromString(ClassicState.IsValid()?TEXT("Lit buttons mark open windows. Reopening keeps their position. Guild contents are provided by the server."):TEXT("Enter the world to manage its windows."))));
         At(70,306,244,24,SNew(SButton).IsEnabled(ClassicState.IsValid()).IsFocusable(false).OnClicked_Lambda([this](){ResetWindowLayout();return FReply::Handled();})[Label(TEXT("RESET WINDOW LAYOUT"),10)]);
