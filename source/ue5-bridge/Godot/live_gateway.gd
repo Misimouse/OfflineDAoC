@@ -33,6 +33,7 @@ var line_of_sight:RefCounted
 var spell_visuals:RefCounted
 var spell_cast:RefCounted
 var classic_ui:RefCounted
+var original_spec_actions:RefCounted
 var ui_pose:Node3D
 var zone_lights:Array=[]
 var last_ui_sync:=0
@@ -134,6 +135,9 @@ func _ready()->void:
     spell_cast.configure(JSON.parse_string(FileAccess.get_file_as_string("res://content/spells/spell_fx.json")))
     classic_ui=load(folder.path_join("classic_ui_state.gd")).new()
     classic_ui.macro_request=func(line:String)->bool:return dispatch_chat(line)
+    original_spec_actions=load(folder.path_join("original_spec_actions.gd")).new()
+    classic_ui.spec_request=func(entry:Dictionary)->bool:
+        return original_spec_actions.use(entry,server,position,heading,last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0.0,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()))
     classic_ui.pet_request=func(value:Dictionary)->bool:return pet.request(value,server.client,interaction,adapter.entities,Time.get_ticks_msec(),player_state.alive())
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     var native_models:Variant=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json")))
@@ -231,6 +235,15 @@ func apply_entry(entry:Dictionary)->void:
         heading=server.heading_of(float(entry.get("face",180)))
         status="Connected to Connacht"
 
+func observe_combat_lifecycle(kind:String,oid:int)->void:
+    if kind in ["you","region_changed","quit"]:
+        combat_visual.reset()
+    elif kind in ["death","revive","model_change","remove"]:
+        # ObjectDelete also hides living players. Clear before the adapter drops
+        # the OID so a rapid reveal cannot inherit their previous combat pose.
+        var id:String="player:local" if oid==int(server.me_oid) else String(adapter.oid_to_id.get(oid,""))
+        combat_visual.remove(id)
+
 func world_event(kind:String,data:Dictionary)->void:
     live_riding.consume(kind,data,Time.get_ticks_msec())
     player_models.consume(kind,data)
@@ -268,8 +281,7 @@ func world_event(kind:String,data:Dictionary)->void:
     classic_ui.catalog_loading=classic_ui.skills_loading or classic_ui.spells_loading
     var changed_oid:=int(data.get("oid",-1))
     var changed_id:String="player:local" if changed_oid==int(server.me_oid) else String(adapter.oid_to_id.get(changed_oid,""))
-    if kind in ["you","region_changed","quit"]:combat_visual.reset()
-    elif kind in ["death","revive","model_change"] or (kind=="remove" and int(data.get("type",1))!=9):combat_visual.remove(changed_id)
+    observe_combat_lifecycle(kind,changed_oid)
     var gm_revision:int=gm_mode.revision
     gm_mode.consume(kind,data)
     if kind=="you" or (kind=="revive" and changed_oid==int(server.me_oid)):gm_mode.request("protected",server.client,Time.get_ticks_msec())

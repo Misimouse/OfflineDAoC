@@ -39,8 +39,8 @@ func _initialize()->void:
     check(r.consume("riding",{"rider":30,"steed":20,"mount":1,"slot":1},8000) and r.local_steed==0,"remote rider cannot mount local player")
     check(r.snapshot(ids,entities).remote.size()==1,"resolved remote rider relationship exported")
     check(r.snapshot({},{}).remote.is_empty(),"unresolved remote relationship not exported")
-    r.consume("remove",{"oid":20,"type":9},8100);check(r.riders.size()==1,"ground-object delete does not erase living mount")
-    r.consume("remove",{"oid":20,"type":1},8100);check(r.riders.is_empty(),"steed removal clears remote relationship")
+    r.consume("remove",{"oid":99,"type":9},8100);check(r.riders.size()==1,"different ground OID cannot erase living mount")
+    r.consume("remove",{"oid":20,"type":9},8100);check(r.riders.is_empty(),"original generic ObjectDelete clears deleted steed relationship")
     r.consume("riding",packet,9000);r.consume("death",{"oid":30},9100);check(r.local_steed==20,"remote death leaves local mount alone")
     r.consume("death",{"oid":10},9200);check(r.local_steed==0,"local death clears visual seat")
     for event in ["you","region_changed","quit"]:

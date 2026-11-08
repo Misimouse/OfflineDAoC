@@ -4,6 +4,7 @@ var revision:=0
 var entries:Dictionary={}
 var macros:Dictionary={}
 var macro_request:Callable
+var spec_request:Callable
 var effects:Dictionary={}
 var concentration:Dictionary={}
 var pet:Dictionary={}
@@ -133,7 +134,14 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
     for i in skill_rows.size():
         var sk:Dictionary=skill_rows[i];var page:=int(sk.page)
         if page==0:
-            next_specs.append({"name":String(sk.name),"level":int(sk.level),"bonus":int(sk.get("bonus",0))});continue
+            next_specs.append({"name":String(sk.name),"level":int(sk.level),"bonus":int(sk.get("bonus",0))})
+            # Original panel_sheets exposes the Stealth specialization as a usable ability.
+            # Its index is the original type-zero UseSkill index, not a non-spec skill index.
+            if String(sk.name)=="Stealth" and int(sk.level)>0:
+                var id:="srv:spec:%d" % i
+                var ic:Array=server.skill_icon("icon",403)
+                next[id]=entry(id,"Stealth","ability",int(ic[0]),int(ic[1]),int(sk.level),"Stealth")
+            continue
         var kind:="style" if page==2 else "spell" if page in [3,4] else "ability"
         var ic:Array=server.skill_icon("style" if kind=="style" else "spell" if kind=="spell" else "icon",int(sk.icon))
         var group:=""
@@ -324,6 +332,9 @@ func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,al
         feedback="Command sent." if accepted else "Could not send the command. Check the pet window.";revision+=1;return accepted
     if catalog_loading:return fail("The server is updating the lists.")
     if server.reuse_left(String(e.id))>0:return fail("This action is still recovering.")
+    if String(e.id).begins_with("srv:spec:"):
+        if not spec_request.is_valid() or not bool(spec_request.call(e)):return fail("The server does not recognize this specialization action.")
+        feedback="Request sent to server.";revision+=1;return true
     if not server.use_entry(String(e.id),player,zone,visible):return fail("The server does not recognize this entry.")
     if e.kind=="item":refresh_used_item(server,e)
     feedback="Request sent to server.";revision+=1;return true

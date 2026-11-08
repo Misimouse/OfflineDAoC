@@ -21,11 +21,13 @@ func consume(kind:String,data:Dictionary,now:int)->bool:
         reset(int(oid) if _uint(oid,65535) else 0);return true
     if kind=="death" and data.get("oid",0)==local_oid:
         local_steed=0;local_slot=0;pending_dismount=false;revision+=1;return true
-    if kind=="remove" and int(data.get("type",1))!=9:
+    if kind=="remove":
         var removed:Variant=data.get("oid",0)
         if not _uint(removed,65535):return false
+        var changed:=false
         for rider in riders.keys():
-            if rider==int(removed) or riders[rider].steed==int(removed):riders.erase(rider)
+            if rider==int(removed) or riders[rider].steed==int(removed):riders.erase(rider);changed=true
+        if changed:revision+=1
         if local_steed==int(removed):
             # Lost steed requests real dismount; do not invent a server acknowledgement.
             waiting_since=mini(waiting_since,now-5001);revision+=1

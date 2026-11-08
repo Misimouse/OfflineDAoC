@@ -116,9 +116,10 @@ func consume_world(kind: String, data: Dictionary) -> void:
         requested.erase(oid)
         equipment_packets.erase(oid)
         if int(data.get("type",1))==9:non_living.erase(oid)
-        # ObjectDelete (type 9) removes a ground object, not a living.
+        # Original ObjectDelete is generic: DOL also uses it to hide a stealthed player.
+        # OIDs share one current world identity. Retained NPC corpses have already detached it.
         if int(data.get("type",1))==0:_keep_corpse(oid,Time.get_ticks_msec())
-        elif int(data.get("type",1))!=9:_erase(oid)
+        else:_erase(oid)
         return
     if oid==local_oid:return
     if kind in ["npc","player"]:
