@@ -67,4 +67,3 @@ if __name__ == '__main__':
     parser.add_argument('--installed', action='store_true')
     args = parser.parse_args()
     print(json.dumps(verify(args.workspace.resolve(), args.engine.resolve(), args.installed)))
-
