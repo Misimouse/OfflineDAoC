@@ -133,5 +133,5 @@ finally:
  result['private_server_restored']=bool(candidate_files)
  result['normal_shutdown']=bool(clients) and all(c.returncode==0 for c,_ in clients) and server is not None and server.returncode==0
  result['normal_runtime_unchanged']=all(digest(Path(p))==h for p,h in normal_hashes.items())
- result['passed']=result['passed'] and result['normal_shutdown'] and result['database_restored'] and result['normal_runtime_unchanged'] and not result['errors'] and all(digest(Path(p))==h for p,h in result['source_inputs'].items())
+ result['passed']=result['passed'] and result['normal_shutdown'] and result.get('database_restored',False) and result['normal_runtime_unchanged'] and not result['errors'] and all(digest(Path(p))==h for p,h in result['source_inputs'].items())
  (D/'verified.json').write_text(json.dumps(result,indent=2),encoding='utf-8');print(json.dumps({k:v for k,v in result.items() if k!='source_inputs'}));assert result['passed']
