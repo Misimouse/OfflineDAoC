@@ -58,6 +58,10 @@ def audit(workspace,install):
     if vitals_installed:
         row('Positive absolute player health',['net/server_world.gd'],['Godot/player_combat_state.gd','Godot/player_release.gd','Godot/combat_audio_state.gd','Godot/weapon_mode_audio_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerStatus.cpp'],'installed_owner_review_pending','Original positive absolute HP remains alive at rounded zero percent; actual Status/Death/Revive retain authority. Real one-HP, potion and native corpse/return checks passed; no invented local damage or resurrection.')
         result['next_package']='CLIENT-PARTY: audit and verify original group invite/accept/target/remove/leave using ordinary disposable players and current bridge; preserve original server permissions'
+    party_proof=workspace/'PartyLifecycleLab/verified.json'
+    if party_proof.exists() and json.loads(party_proof.read_text()).get('passed',False):
+        row('Original ordinary-player group lifecycle',['ui/panel_sheets.gd'],['Godot/party_state.gd','Godot/interaction_state.gd'],'installed_existing_runtime_verified_owner_review_pending','Nine real checks with ordinary players; decline/accept, roster vitals, member target, leader permissions, stale roster, removal and leave. 43 state and 79 installed native checks. No runtime replacement; cross-region/raid behavior remains separate.')
+        result['next_package']='CLIENT-CONCENTRATION: original concentration list, pool, owner-bound cancellation and confirmed effect removal; inspect existing Godot/DOL implementation before changes'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
