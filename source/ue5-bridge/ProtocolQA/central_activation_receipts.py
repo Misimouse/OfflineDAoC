@@ -121,6 +121,16 @@ PLAYER_VITALS_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
 PLAYER_VITALS_NEW_NAMES={'DAoCBridgePlayerVitalsAcceptance.cpp'}
 PLAYER_VITALS_GODOT_TARGETS=['player_combat_state.gd','player_release.gd','live_gateway.gd','combat_audio_state.gd','combat_visual_state.gd','weapon_mode_audio_state.gd']
 
+COMPASS_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeViewport.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeWorldPointer.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeWindowRecovery.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfigurationAcceptance.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeCompass.inl',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeCompassAcceptance.cpp','Content/ClassicUI/compass_bar.png']
+COMPASS_NEW_NAMES={'DAoCBridgeCompass.inl','DAoCBridgeCompassAcceptance.cpp','compass_bar.png'}
+COMPASS_ART_SHA256='29c5db6f8795c82cc38c675c108f0c8663020dfb6ce1677f3201f6af4b3dad37'
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -236,6 +246,31 @@ def verify_files(workspace):
     player_vitals_path=workspace/'PlayerVitalsLab/installed.json'
     player_vitals=json.loads(player_vitals_path.read_text()) if player_vitals_path.exists() else None
     if player_vitals and not player_vitals.get('installed'):player_vitals=None
+    compass_path=workspace/'CompassLab/installed.json'
+    compass=json.loads(compass_path.read_text()) if compass_path.exists() else None
+    if compass and not compass.get('installed'):compass=None
+    compass_replacements={}
+    if compass:
+        assert player_vitals and compass['phase']=='complete' and not compass['database_modified'] and not compass['server_rules_modified']
+        assert compass['predecessor_receipt_sha256']==digest(player_vitals_path) and compass['native_before_sha256']==player_vitals['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';compass_replacements={r['target']:r for r in compass['files']}
+        expected={str(plugin/p) for p in COMPASS_NATIVE_TARGETS}
+        assert len(compass['files'])==len(compass_replacements)==len(expected) and set(compass_replacements)==expected
+        proof=workspace/'PlayerVitalsLab/native_build.json'
+        assert str(proof) in player_vitals['evidence'] and digest(proof)==player_vitals['evidence'][str(proof)]
+        old_build=json.loads(proof.read_text());old_source={Path(p).as_posix():h for p,h in old_build['source_sha256'].items()}
+        for relative in COMPASS_NATIVE_TARGETS:
+            row=compass_replacements[str(plugin/relative)]
+            before=None if Path(relative).name in COMPASS_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
+            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+        assert compass_replacements[str(plugin/'Content/ClassicUI/compass_bar.png')]['after_sha256']==COMPASS_ART_SHA256
+        binary=compass_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==compass['native_before_sha256'] and binary['after_sha256']==compass['native_after_sha256']
+        assert compass['evidence'] and all(digest(Path(p))==h for p,h in compass['evidence'].items())
+    def latest_compass(row,expected):
+        changed=compass_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     player_vitals_replacements={}
     if player_vitals:
         assert window_recovery and player_vitals['phase']=='complete' and not player_vitals['database_modified'] and not player_vitals['server_rules_modified']
@@ -251,7 +286,7 @@ def verify_files(workspace):
         for relative in PLAYER_VITALS_NATIVE_TARGETS:
             row=player_vitals_replacements[str(plugin/relative)]
             before=None if Path(relative).name in PLAYER_VITALS_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
-            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+            assert row['before_sha256']==before and digest(Path(row['target']))==latest_compass(row,row['after_sha256'])
         for name in PLAYER_VITALS_GODOT_TARGETS:
             row=player_vitals_replacements[str(workspace/'Godot'/name)]
             assert row['before_sha256']==before_data['source_inputs'][str(workspace/'Godot'/name)] and digest(Path(row['target']))==row['after_sha256']
@@ -261,7 +296,7 @@ def verify_files(workspace):
     def latest_player_vitals(row,expected):
         changed=player_vitals_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_compass(row,expected)
     window_recovery_replacements={}
     if window_recovery:
         assert ui_scale and window_recovery['phase']=='complete' and not window_recovery['database_modified'] and not window_recovery['server_rules_modified']
@@ -706,4 +741,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'player_vitals_installed':bool(player_vitals),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'player_vitals_installed':bool(player_vitals),'compass_installed':bool(compass),'verified_files':len(original['files'])}

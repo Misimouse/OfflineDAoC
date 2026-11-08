@@ -137,6 +137,7 @@ private:
     void ResetWindowLayout();
     bool TickWindowRecoveryAcceptance();
     bool TickPlayerVitalsAcceptance();
+    bool TickCompassAcceptance();
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;
     FString Session, Status, Character, CatalogPath;
@@ -441,6 +442,12 @@ private:
     FString ClassicTab=TEXT("character"),ClassicLayoutFile,ClassicLayoutCharacter;
     bool bClassicOpen=true,ClassicVertical[3]={false,false,true};
     FVector2D ClassicPositions[5];
+    bool bClassicCompassOpen=true;
+    FVector2D ClassicCompassPosition;
+    TSharedPtr<SBox> ClassicCompassBox;
+    double CompassDegrees()const;
+    void RefreshCompass();
+    void ToggleCompass();
     bool bClassicPositioned=false;
     int64 ClassicRevision=-1;
     double ClassicReceivedAt=0,ClassicCapturedAt=0;

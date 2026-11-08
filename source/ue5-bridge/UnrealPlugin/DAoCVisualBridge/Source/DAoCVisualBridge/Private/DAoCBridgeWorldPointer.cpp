@@ -31,6 +31,7 @@ bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{
  if(bOptionsOpen)return true;
  auto Hit=[&](const TSharedPtr<SWidget>& W){return W.IsValid()&&W->GetVisibility().IsVisible()&&W->GetCachedGeometry().IsUnderLocation(Absolute);};
  if(bChatOpen||ExchangeTyping()||FSlateApplication::Get().AnyMenusVisible())return true;
+ if(bClassicCompassOpen&&Hit(ClassicCompassBox))return true;
  if(bClassicOpen&&Hit(ClassicPanelBox)||bClassicMiniGroupOpen&&Hit(ClassicMiniGroupBox))return true;
  for(const auto& W:{ClassicDetailPanel,ClassicGroupConfirmPanel,ClassicJournalPanel,ClassicTrainerPanel,ClassicVaultPanel,ClassicMerchantPanel,ExchangePanel,GuildPanel,EmblemPickerPanel,ZoneMapPanel})if(Hit(W))return true;
  for(const auto& W:ClassicBarBoxes)if(Hit(W))return true;

@@ -29,7 +29,7 @@ void UDAoCBridgeSubsystem::ReflowUILayout(FVector2D Previous,FVector2D Current){
     };
     Move(ClassicPositions[0],{192,448});
     for(int32 I=0;I<3;++I)Move(ClassicPositions[I+1],ClassicVertical[I]?FVector2D(33,372):FVector2D(372,33));
-    Move(ClassicPositions[4],{192,315});Move(ClassicJournalPosition,{512,300});Move(ClassicTrainerPosition,{580,448});
+    Move(ClassicCompassPosition,{112,22});Move(ClassicPositions[4],{192,315});Move(ClassicJournalPosition,{512,300});Move(ClassicTrainerPosition,{580,448});
     Move(ClassicPetPosition,{128,186});Move(ClassicConcentrationPosition,{128,136});Move(ClassicVaultPosition,{224,440});Move(ZoneMapPosition,{292,336});
     for(int32 I=0;I<2;++I){
         Move(ChatPositions[I],ChatSizes[I]);

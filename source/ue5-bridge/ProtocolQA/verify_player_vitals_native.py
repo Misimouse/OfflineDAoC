@@ -5,8 +5,9 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
-def verify(workspace,engine,fixture,installed=False):
-    root=workspace/'PlayerVitalsLab';bp=root/'native_build.json';build=read(bp);assert build['passed']
+def verify(workspace,engine,fixture,installed=False,lab_name="PlayerVitalsLab"):
+    assert lab_name in ["PlayerVitalsLab","CompassLab"]
+    root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'

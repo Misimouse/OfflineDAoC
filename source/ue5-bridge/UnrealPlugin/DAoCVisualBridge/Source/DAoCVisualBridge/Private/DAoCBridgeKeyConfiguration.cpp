@@ -24,6 +24,7 @@ FBridgeKeyConfiguration::FBridgeKeyConfiguration(){
     UI(TEXT("show_combat"),TEXT("Show Combat"),TEXT("J"));
     UI(TEXT("show_group"),TEXT("Show Group"),TEXT("G"));
     UI(TEXT("show_guild"),TEXT("Guild Window"),TEXT("Shift+G"));
+    UI(TEXT("show_compass"),TEXT("Compass"),TEXT("Ctrl+C"));
     UI(TEXT("show_map"),TEXT("Map Window"),TEXT("M"));
     UI(TEXT("show_journal"),TEXT("Quest Journal"),TEXT("L"));
     UI(TEXT("show_trainer"),TEXT("Training Window"),TEXT("T"));

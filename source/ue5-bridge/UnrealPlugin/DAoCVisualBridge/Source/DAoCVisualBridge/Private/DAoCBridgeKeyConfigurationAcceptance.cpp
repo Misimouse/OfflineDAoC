@@ -26,7 +26,7 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
             Check(KeyConfiguration->Text(TEXT("show_inventory"),0)==TEXT("I")&&KeyConfiguration->Text(TEXT("qb3_10"),0)==TEXT("Ctrl+Zero"),TEXT("new actions receive defaults without discarding saved movement"));
             KeyConfiguration->Reset();
         }
-        Check(K.Actions.Num()==66,TEXT("66 supported actions include the original guild window shortcut"));
+        Check(K.Actions.Num()==67,TEXT("67 supported actions include original guild and compass shortcuts"));
         for(const auto& A:K.Actions)Check(A.Bindings==A.Defaults&&(A.Bindings[0].IsEmpty()||FBridgeKeyConfiguration::Parse(A.Bindings[0],Chord)),*FString::Printf(TEXT("valid unchanged default %s"),*A.Id));
         for(const FKey Key:{EKeys::Escape,EKeys::Enter,EKeys::F11,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::LeftMouseButton})Check(!K.Bind(TEXT("jump"),0,Key.GetFName().ToString(),Message),TEXT("fixed action cannot be shadowed"));
         Check(!K.Bind(TEXT("unknown"),0,TEXT("Q"),Message)&&!K.Bind(TEXT("jump"),2,TEXT("Q"),Message),TEXT("invalid action and slot rejected"));

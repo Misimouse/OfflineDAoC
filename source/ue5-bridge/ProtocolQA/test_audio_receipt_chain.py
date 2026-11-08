@@ -3,6 +3,8 @@ import argparse
 import json
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
+from central_activation_receipts import COMPASS_NATIVE_TARGETS,COMPASS_NEW_NAMES,COMPASS_ART_SHA256
 from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATIVE_TARGETS, FOOTSTEP_NATIVE_TARGETS, SERVER_SOUND_NATIVE_TARGETS, WATER_NATIVE_TARGETS, JUMP_NATIVE_TARGETS, MOVEMENT_KEYS_NATIVE_TARGETS,TARGET_TRACKING_NATIVE_TARGETS,LIVE_RIDING_NATIVE_TARGETS,LIVE_RIDING_GODOT_TARGETS,LIVE_RIDING_NEW_NAMES,KEY_CONFIGURATION_NATIVE_TARGETS,KEY_CONFIGURATION_NEW_NAMES,INTERFACE_KEYS_NATIVE_TARGETS
 from prepare_combined_expansion_data import digest
 
@@ -480,6 +482,30 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered vitals or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         vitals['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(vitals_path,vitals);rejected();checks+=1;vitals['files'].pop();put(vitals_path,vitals)
         assert verify_files(w)['player_vitals_installed'];checks+=1
+        for relative in COMPASS_NATIVE_TARGETS:
+            q=plugin/relative
+            if q.name not in COMPASS_NEW_NAMES and not q.exists():q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(b'old compass source')
+        compass_native=w/'PlayerVitalsLab/native_build.json'
+        put(compass_native,{'source_sha256':{r.removeprefix('Source/'):digest(plugin/r) for r in COMPASS_NATIVE_TARGETS if r.startswith('Source/') and Path(r).name not in COMPASS_NEW_NAMES},'binaries_sha256':{Path(r).name:digest(plugin/r) for r in COMPASS_NATIVE_TARGETS if r.startswith('Binaries/')}})
+        vitals['evidence'][str(compass_native)]=digest(compass_native);put(vitals_path,vitals)
+        prior=digest(binary);compass_rows=[]
+        for relative in COMPASS_NATIVE_TARGETS:
+            q=plugin/relative;q.parent.mkdir(parents=True,exist_ok=True)
+            before=None if q.name in COMPASS_NEW_NAMES else digest(q)
+            q.write_bytes(b'new synthetic compass '+relative.encode());compass_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+        compass_proof=w/'CompassLab/proof.json';put(compass_proof,dict(passed=True,synthetic=True))
+        compass_path=w/'CompassLab/installed.json';compass=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(vitals_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=compass_rows,evidence={str(compass_proof):digest(compass_proof)})
+        assert COMPASS_ART_SHA256=='29c5db6f8795c82cc38c675c108f0c8663020dfb6ce1677f3201f6af4b3dad37';checks+=1
+        with patch('central_activation_receipts.COMPASS_ART_SHA256',digest(plugin/'Content/ClassicUI/compass_bar.png')):
+            put(compass_path,compass);assert verify_files(w)['compass_installed'];checks+=1
+            for field in ['predecessor_receipt_sha256','native_before_sha256','native_after_sha256']:
+                old=compass[field];compass[field]='0'*64;put(compass_path,compass);rejected();checks+=1;compass[field]=old;put(compass_path,compass)
+            for row in compass_rows:
+                old=row['before_sha256'];row['before_sha256']='0'*64;put(compass_path,compass);rejected();checks+=1;row['before_sha256']=old;put(compass_path,compass)
+            for q in [plugin/r for r in COMPASS_NATIVE_TARGETS]+[compass_native,compass_proof,w/'Godot/player_combat_state.gd',Path(server_rows[0]['target']),wave]:
+                old=q.read_bytes();q.write_bytes(b'tampered compass or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+            compass['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(compass_path,compass);rejected();checks+=1;compass['files'].pop();put(compass_path,compass)
+            assert verify_files(w)['compass_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})
