@@ -105,6 +105,10 @@ HANDOVER_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Bin
 HANDOVER_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','inventory_state.gd']
 HANDOVER_NEW_NAMES={'DAoCBridgeItemHandover.cpp','DAoCBridgeItemHandoverAcceptance.cpp'}
 
+HOVER_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeEmblemPickerAcceptance.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeHoverDetailsAcceptance.cpp']
+HOVER_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','classic_ui_state.gd']
+HOVER_NEW_NAMES={'DAoCBridgeHoverDetailsAcceptance.cpp'}
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -205,6 +209,28 @@ def verify_files(workspace):
     refusal_path=workspace/'EquipmentRefusalLab/installed.json'
     refusal=json.loads(refusal_path.read_text()) if refusal_path.exists() else None
     if refusal and not refusal.get('installed'):refusal=None
+    hover_path=workspace/'HoverDetailsLab/installed.json'
+    hover=json.loads(hover_path.read_text()) if hover_path.exists() else None
+    if hover and not hover.get('installed'):hover=None
+    hover_replacements={}
+    if hover:
+        assert refusal and handover and emblem and hover['phase']=='complete' and not hover['database_modified'] and not hover['server_rules_modified']
+        assert hover['predecessor_receipt_sha256']==digest(refusal_path) and hover['native_before_sha256']==refusal['native_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';hover_replacements={r['target']:r for r in hover['files']}
+        expected={str(plugin/p) for p in HOVER_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in HOVER_GODOT_TARGETS}
+        assert len(hover['files'])==len(hover_replacements)==len(expected) and set(hover_replacements)==expected
+        prior={r['target']:r['after_sha256'] for r in emblem['files']};prior.update({r['target']:r['after_sha256'] for r in handover['files']})
+        proof=Path(hover['classic_predecessor_proof']);assert str(proof) in emblem['evidence'] and digest(proof)==emblem['evidence'][str(proof)]
+        inputs=json.loads(proof.read_text())['source_inputs'];prior[str(workspace/'Godot/classic_ui_state.gd')]=next(h for p,h in inputs.items() if Path(p).name=='classic_ui_state.gd')
+        for row in hover['files']:
+            assert row['before_sha256']==(None if Path(row['target']).name in HOVER_NEW_NAMES else prior[row['target']])
+            assert digest(Path(row['target']))==row['after_sha256']
+        binary=hover_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')];assert binary['before_sha256']==hover['native_before_sha256'] and binary['after_sha256']==hover['native_after_sha256']
+        assert hover['evidence'] and all(digest(Path(p))==h for p,h in hover['evidence'].items())
+    def latest_hover(row,expected):
+        changed=hover_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     refusal_replacements={}
     if refusal:
         assert poison and refusal['phase']=='complete' and not refusal['database_modified'] and not refusal['server_rules_modified']
@@ -212,12 +238,12 @@ def verify_files(workspace):
         target=str(workspace/'Godot/inventory_state.gd');refusal_replacements={row['target']:row for row in refusal['files']}
         assert len(refusal['files'])==len(refusal_replacements)==1 and set(refusal_replacements)=={target}
         row=refusal_replacements[target];prior=poison['files'][0]
-        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==latest_hover(row,row['after_sha256'])
         assert refusal['evidence'] and all(digest(Path(p))==h for p,h in refusal['evidence'].items())
     def latest_refusal(row,expected):
         changed=refusal_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_hover(row,expected)
     poison_replacements={}
     if poison:
         assert handover and poison['phase']=='complete' and not poison['database_modified'] and not poison['server_rules_modified']
@@ -575,4 +601,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'verified_files':len(original['files'])}

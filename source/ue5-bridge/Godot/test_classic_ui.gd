@@ -17,8 +17,8 @@ class FakeServer extends Node:
     var details:Dictionary={}
     var queries:Array=[]
     func skill_detail(e:Dictionary)->Array:return [8,100] if e.id=="srv:skill:0" else [2,1]
-    func prefetch_detail(key:String,type:int,id:int,caption:String)->void:queries.append([key,type,id,caption])
-    func item_lines(key:String)->Dictionary:return details.get(key,{})
+    func prefetch_detail(key:Variant,type:int,id:int,caption:String)->void:queries.append([key,type,id,caption])
+    func item_lines(key:Variant)->Dictionary:return details.get(key,{})
     func take_detail(d:Dictionary)->bool:return consume_details
     func skill_icon(kind:String,icon:int)->Array:return [409,-1]
     func reuse_left(id:String)->float:return cooldown

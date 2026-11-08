@@ -42,6 +42,7 @@ bool UDAoCBridgeSubsystem::TickEmblemPickerAcceptance(){
   State->SetStringField(TEXT("token"),TEXT("qa:emblem:3"));ApplyEmblemPicker(State);Outgoing.Empty();if(EmblemPickerPreviewActor)InitialRotation=EmblemPickerPreviewActor->GetActorQuat();
   Check(EmblemPickerLogoScroll.IsValid(),TEXT("original logo catalogue has an actual scroll control"));
   if(EmblemPickerLogoScroll){EmblemPickerLogoScroll->SetScrollOffset(120);State->SetNumberField(TEXT("revision"),2);ApplyEmblemPicker(State);Check(FMath::IsNearlyEqual(EmblemPickerLogoScroll->GetScrollOffset(),120.f),TEXT("draft refresh preserves the player's position in the logo catalogue"));}
+  Began=FPlatformTime::Seconds();return true;
  }
  if(FPlatformTime::Seconds()-Began<1.5)return true;UpdateEmblemPickerPreview();
  Check(EmblemPickerPanel&&WorldPointerBlocked(EmblemPickerPanel->GetCachedGeometry().GetAbsolutePosition()+FVector2D(12,12)),TEXT("actual picker blocks world selection through its frame and logo area"));

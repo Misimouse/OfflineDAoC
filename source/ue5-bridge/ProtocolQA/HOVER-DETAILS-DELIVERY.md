@@ -1,0 +1,11 @@
+# Original item and skill hover descriptions
+
+Hovering inventory equipment, backpack names/icons, skills, quickbar entries, effects and vault entries now requests the original server detail text and displays it in a non-interactive tooltip with the game's font. Explicit information windows and existing click/drag actions remain available. Macros show their local command without executing it.
+
+The bridge shares Godot's original integer inventory-slot, skill and effect cache keys. Inventory and skill-list updates therefore invalidate the same descriptions as the original client. A stationary tooltip refreshes after cache invalidation without rebuilding the surrounding panel. A changed entry token, replaced raw inventory item, partial catalogue or unsupported zone cannot inspect a stale entry. Missing replies show only the entry name; no statistics are fabricated.
+
+Evidence: 28 isolated state checks; 173 inventory/UI compatibility checks; eight real DOL checks before installation and eight against the installed backend; 19 native widget/command checks before installation and 19 against the installed plugin. Eleven native regression packages passed, including 265 audio checks and the existing controls, movement, water, guild, emblem, display and item-handover checks. The synthetic installation receipt chain passes 163 checks. The emblem acceptance setup now starts its wait after loading its resources, so cold-start resource loading cannot consume the test's required Slate frames; game behavior is unchanged by that test adjustment.
+
+Installation replaces ten client files with exact predecessor hashes and backups. It changes no server library, gameplay rule, map or played database. Real protocol tests use a marked disposable database and restore its fixtures, configuration and copied libraries after normal shutdown.
+
+Owner review: open inventory with I, hover an equipped piece and a backpack item, then hover a skill and its quickbar icon. Check that English descriptions appear without clicking or opening another panel. Move an item between backpack slots and hover it again. Existing dragging, use, equip and explicit inspection should still work. Hover an active effect if available. Vault hover can be checked when visiting a vault keeper. These automated results do not claim a complete visual remaster or full migration acceptance.

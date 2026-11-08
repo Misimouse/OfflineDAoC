@@ -33,6 +33,9 @@ var server_window:Dictionary={}
 var window_serial:=0
 var detail:Dictionary={}
 var detail_started:=0
+var hover:Dictionary={}
+var hover_started:=0
+var hover_request:Array=[]
 func _init()->void:
     for b in 3:
         var pages:Array=[]
@@ -44,6 +47,7 @@ func _init()->void:
 func storage_path()->String:return save_folder.path_join(character.to_lower().sha256_text()+".json")
 func open_character(name:String,folder:String,legacy_path:String="")->void:
     if character==name:return
+    hover.clear()
     macros.clear();entries.clear()
     for b in 3:
         for k in 10:
@@ -105,7 +109,7 @@ func create_macro(text:String)->bool:
     feedback="Macro created in the first free slot of the visible quickbars." if placed else "Macro saved in Abilities. Change page and drag it to a slot."
     revision+=1;save();return true
 func observe(kind:String,packet:Dictionary,server:Node)->void:
-    if kind in ["you","region_changed","quit"]:detail.clear();server_window.clear()
+    if kind in ["you","region_changed","quit"]:detail.clear();hover.clear();server_window.clear()
     if kind=="detail" and not server.take_detail(packet):
         window_serial+=1
         server_window={"caption":String(packet.get("caption","Information")),"lines":packet.get("lines",[]).duplicate(true),"status":"ready","token":str(window_serial)}
@@ -165,6 +169,19 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
                 detail["caption"]=String(response.get("caption",current.name));detail["lines"]=response.get("lines",[]).duplicate(true);detail["status"]="ready"
             elif now-detail_started>=4000:detail["status"]="unavailable"
 
+    if not hover.is_empty():
+        var current:Dictionary=detail_entry(String(hover.entry_id),String(hover.entry_token))
+        if current.is_empty():hover.clear()
+        elif current.kind!="macro":
+            # Share the original cache keys and its inventory/skill invalidation rules.
+            var response:Dictionary=server.item_lines(hover.key)
+            if not response.is_empty():
+                hover["caption"]=String(response.get("caption",current.name));hover["lines"]=response.get("lines",[]).duplicate(true);hover["status"]="ready"
+            elif hover.status=="ready":
+                hover["lines"]=[];hover["status"]="pending";hover_started=now
+                server.prefetch_detail(hover.key,int(hover_request[0]),int(hover_request[1]),String(current.name))
+            elif hover.status=="pending" and now-hover_started>=4000:hover["status"]="unavailable"
+
     var changed:=false
     for b in 3:
         for k in 10:
@@ -179,7 +196,7 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
     var stable:={"character":character,"ready":not server.info.is_empty(),"skills_ready":skills_received,"info":server.info.duplicate(true),"points":server.points.duplicate(true),"stats":server.stats.duplicate(),"stat_buffs":server.stat_buffs.duplicate(),"resists":server.resists.duplicate(),"con_lost":int(server.con_lost),"weapon_stats":server.weapon_stats.duplicate(true),"specs":specs,"entries":entries.values(),"concentration":concentration.duplicate(true),"pet":pet.duplicate(true),"trainer":trainer.duplicate(true),"journal":journal.duplicate(true),"party":party.duplicate(true),"group_selected_oid":group_selected_oid,"effects":effects.values(),"casting":casting.duplicate(true),"group":party.get("members",group),"bars":bars,"banks":banks,"feedback":feedback,"detail":detail.duplicate(true),"server_window":server_window.duplicate(true)}
     var stamp:=JSON.stringify(stable)
     if stamp!=signature:signature=stamp;revision+=1
-    data=stable
+    data=stable;data["hover"]=hover.duplicate(true)
     var reuse:Dictionary={}
     for id in entries:
         var left:float=server.reuse_left(id)
@@ -198,6 +215,18 @@ func index(value:Dictionary,key:String,limit:int)->int:
     return int(v)
 func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,alive:bool)->bool:
     var action:=String(value.get("action",""))
+    if action=="ui_hover":
+        var e:Dictionary=detail_entry(String(value.get("entry_id","")),String(value.get("entry_token","")))
+        if e.is_empty() or zone!=207 or catalog_loading:return false
+        if not hover.is_empty() and hover.entry_id==e.id and hover.entry_token==e.token and (hover.status!="unavailable" or Time.get_ticks_msec()-hover_started<5000):return true
+        if e.kind=="macro":
+            hover={"entry_id":e.id,"entry_token":e.token,"key":"macro-local","caption":e.name,"lines":[String(e.macro_command)],"status":"ready"};return true
+        var request:Array=[5,int(e.effect_icon)] if e.kind=="effect" else [1,int(String(e.id).trim_prefix("srv:"))] if e.kind=="item" else server.skill_detail(e)
+        if request.is_empty():return false
+        var key:Variant=int(request[1]) if e.kind=="item" else "fx:%d" % int(request[1]) if e.kind=="effect" else "sk:%d:%d" % [int(request[0]),int(request[1])]
+        hover_request=request.duplicate()
+        hover={"entry_id":e.id,"entry_token":e.token,"key":key,"caption":e.name,"lines":[],"status":"pending"};hover_started=Time.get_ticks_msec()
+        server.prefetch_detail(key,int(request[0]),int(request[1]),String(e.name));return true
     if action=="ui_server_window_close":
         if server_window.is_empty():return true
         if String(value.get("window_token",""))!=String(server_window.token):return fail("The window has changed. Close it again.")
@@ -262,4 +291,4 @@ func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,al
     if not server.use_entry(String(e.id),player,zone,visible):return fail("The server does not recognize this entry.")
     feedback="Request sent to server.";revision+=1;return true
 func snapshot()->Dictionary:
-    var out:Dictionary=data.duplicate(true);out["revision"]=revision;out["bars"]=bars;out["banks"]=banks;out["feedback"]=feedback;out["detail"]=detail.duplicate(true);out["server_window"]=server_window.duplicate(true);return out
+    var out:Dictionary=data.duplicate(true);out["revision"]=revision;out["bars"]=bars;out["banks"]=banks;out["feedback"]=feedback;out["detail"]=detail.duplicate(true);out["hover"]=hover.duplicate(true);out["server_window"]=server_window.duplicate(true);return out

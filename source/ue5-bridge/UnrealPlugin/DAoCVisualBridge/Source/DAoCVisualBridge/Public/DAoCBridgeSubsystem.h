@@ -298,6 +298,9 @@ private:
     TSharedPtr<FJsonObject> ClassicState;
     TSharedPtr<SWidget> ClassicOverlay,ClassicDetailOverlay,ClassicDetailPanel;
     void ClassicInspect(const FString& Id,const FString& Token);
+    TSharedRef<SWidget> MakeClassicHoverLabel(const TSharedRef<SWidget>& Content,const FString& Id,const FString& Token);
+    void ClassicHover(const FString& Id,const FString& Token);
+    FText ClassicHoverText(const FString& Id,const FString& Token)const;
     bool CloseClassicDetail();
     void RefreshClassicDetail();
     TSharedPtr<SBox> ClassicPanelBox,ClassicBarBoxes[3],ClassicEffectsBox,ClassicCastBox,ClassicMiniGroupBox;
@@ -476,6 +479,7 @@ private:
     void InventorySlotClicked(int32 Slot);
     void GiveInventoryItemAtCursor(int32 Slot,const FString& ItemToken,FVector2D Absolute);
     bool TickItemHandoverAcceptance();
+    bool TickHoverDetailsAcceptance();
     void SendItemAction(const FString& Action,int32 Slot,int32 ToSlot=-1);
     void BuyMerchantItem(int32 Page,int32 Index,const FString& MerchantId,int64 CatalogRevision);
     bool TickInventoryAcceptance();

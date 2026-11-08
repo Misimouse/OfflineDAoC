@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -349,7 +349,8 @@ def verify(workspace):
         assert verify_files(w)['emblem_window_installed'];checks+=1
         # Inventory was not changed by the emblem UI delivery. Anchor its old
         # bytes to that delivery's already-sealed source evidence as well.
-        inventory_proof=w/'EmblemWindowLab/prior_inventory_source.json';put(inventory_proof,{'source_inputs':{str(w/'source/inventory_state.gd'):digest(w/'Godot/inventory_state.gd')}})
+        (w/'Godot/classic_ui_state.gd').write_text('unchanged synthetic classic UI')
+        inventory_proof=w/'EmblemWindowLab/prior_inventory_source.json';put(inventory_proof,{'source_inputs':{str(w/'source/inventory_state.gd'):digest(w/'Godot/inventory_state.gd'),str(w/'source/classic_ui_state.gd'):digest(w/'Godot/classic_ui_state.gd')}})
         emblem['evidence']={str(inventory_proof):digest(inventory_proof)};put(emblem_path,emblem)
         prior=digest(binary);handover_rows=[]
         for target in [plugin/r for r in HANDOVER_NATIVE_TARGETS]+[w/'Godot'/r for r in HANDOVER_GODOT_TARGETS]:
@@ -387,6 +388,18 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered refusal or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         refusal['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(refusal_path,refusal);rejected();checks+=1;refusal['files'].pop();put(refusal_path,refusal)
         assert verify_files(w)['equipment_refusals_installed'];checks+=1
+        prior=digest(binary);hover_rows=[]
+        for target in [plugin/r for r in HOVER_NATIVE_TARGETS]+[w/'Godot'/r for r in HOVER_GODOT_TARGETS]:
+            target.parent.mkdir(parents=True,exist_ok=True);old=None if target.name in HOVER_NEW_NAMES else digest(target)
+            target.write_bytes(b'new hover details '+str(target).encode());hover_rows.append(dict(target=str(target),before_sha256=old,after_sha256=digest(target)))
+        hover_path=w/'HoverDetailsLab/installed.json';hover=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(refusal_path),native_before_sha256=prior,native_after_sha256=digest(binary),classic_predecessor_proof=str(inventory_proof),files=hover_rows,evidence={str(poison_proof):digest(poison_proof)})
+        put(hover_path,hover);assert verify_files(w)['hover_details_installed'];checks+=1
+        hover['predecessor_receipt_sha256']='0'*64;put(hover_path,hover);rejected();checks+=1;hover['predecessor_receipt_sha256']=digest(refusal_path);put(hover_path,hover)
+        for q in [binary,w/'Godot/classic_ui_state.gd',w/'Godot/live_gateway.gd',plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeHoverDetailsAcceptance.cpp',inventory_proof,poison_proof,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered hover or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        row=next(r for r in hover['files'] if r['target']==str(w/'Godot/classic_ui_state.gd'));old=row['before_sha256'];row['before_sha256']='0'*64;put(hover_path,hover);rejected();checks+=1;row['before_sha256']=old;put(hover_path,hover)
+        hover['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(hover_path,hover);rejected();checks+=1;hover['files'].pop();put(hover_path,hover)
+        assert verify_files(w)['hover_details_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

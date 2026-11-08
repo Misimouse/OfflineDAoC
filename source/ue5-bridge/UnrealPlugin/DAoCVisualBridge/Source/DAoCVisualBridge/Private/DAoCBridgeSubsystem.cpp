@@ -610,6 +610,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    if(TickHoverDetailsAcceptance())return;
     if(TickItemHandoverAcceptance())return;
     if(TickEmblemPickerAcceptance())return;
     if(TickGuildAcceptance())return;

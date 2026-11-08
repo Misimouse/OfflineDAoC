@@ -384,7 +384,7 @@ func command(value:Dictionary)->void:
         if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
         sync_inventory(Time.get_ticks_msec())
         inventory.execute(value,server.client,interaction,adapter.entities,position,Time.get_ticks_msec())
-    elif action in ["ui_bank","ui_assign","ui_clear","ui_use","ui_use_slot","ui_detail","ui_detail_close","ui_server_window_close"]:
+    elif action in ["ui_bank","ui_assign","ui_clear","ui_use","ui_use_slot","ui_detail","ui_hover","ui_detail_close","ui_server_window_close"]:
         sync_inventory(Time.get_ticks_msec());classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec())
         ui_pose.global_position=position;ui_pose.heading=heading;ui_pose.velocity=Vector3(0,0,last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0)
         classic_ui.request(value,server,ui_pose,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
