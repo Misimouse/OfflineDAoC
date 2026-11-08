@@ -36,6 +36,8 @@ var detail_started:=0
 var hover:Dictionary={}
 var hover_started:=0
 var hover_request:Array=[]
+var item_detail_refresh:Dictionary={}
+var item_detail_serial:=0
 func _init()->void:
     for b in 3:
         var pages:Array=[]
@@ -47,7 +49,7 @@ func _init()->void:
 func storage_path()->String:return save_folder.path_join(character.to_lower().sha256_text()+".json")
 func open_character(name:String,folder:String,legacy_path:String="")->void:
     if character==name:return
-    hover.clear()
+    hover.clear();item_detail_refresh.clear()
     macros.clear();entries.clear()
     for b in 3:
         for k in 10:
@@ -109,7 +111,7 @@ func create_macro(text:String)->bool:
     feedback="Macro created in the first free slot of the visible quickbars." if placed else "Macro saved in Abilities. Change page and drag it to a slot."
     revision+=1;save();return true
 func observe(kind:String,packet:Dictionary,server:Node)->void:
-    if kind in ["you","region_changed","quit"]:detail.clear();hover.clear();server_window.clear()
+    if kind in ["you","region_changed","quit"]:detail.clear();hover.clear();item_detail_refresh.clear();server_window.clear()
     if kind=="detail" and not server.take_detail(packet):
         window_serial+=1
         server_window={"caption":String(packet.get("caption","Information")),"lines":packet.get("lines",[]).duplicate(true),"status":"ready","token":str(window_serial)}
@@ -160,10 +162,11 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
         row["effect_icon"]=int(fx.icon);row["negative"]=int(fx.get("negative",0))!=0;row["until_ms"]=int(fx.get("until",0));row["token"]=JSON.stringify(row).sha256_text()
         effects[id]=row;remaining[id]=maxi(0,int(row.until_ms)-now) if int(row.until_ms)>0 else -1
 
+    sync_item_details(server,now)
     if not detail.is_empty():
         var current:Dictionary=detail_entry(String(detail.entry_id),String(detail.entry_token))
         if current.is_empty():detail.clear()
-        elif detail.get("status","")=="pending":
+        elif detail.get("status","")=="pending" and not item_refreshing(current):
             var response:Dictionary=server.item_lines(String(detail.key))
             if not response.is_empty():
                 detail["caption"]=String(response.get("caption",current.name));detail["lines"]=response.get("lines",[]).duplicate(true);detail["status"]="ready"
@@ -172,7 +175,7 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
     if not hover.is_empty():
         var current:Dictionary=detail_entry(String(hover.entry_id),String(hover.entry_token))
         if current.is_empty():hover.clear()
-        elif current.kind!="macro":
+        elif current.kind!="macro" and not item_refreshing(current):
             # Share the original cache keys and its inventory/skill invalidation rules.
             var response:Dictionary=server.item_lines(hover.key)
             if not response.is_empty():
@@ -203,6 +206,39 @@ func sync(server:Node,inventory:Dictionary,now:int)->void:
         if left>0:reuse[id]=roundi(left*1000)
     data["casting_age_ms"]=casting_age_ms;data["effects_remaining_ms"]=remaining;data["reuse_ms"]=reuse;data["revision"]=revision
 func fail(text:String)->bool:feedback=text;revision+=1;return false
+func item_refreshing(e:Dictionary)->bool:
+    return e.get("kind","")=="item" and item_detail_refresh.has(int(String(e.id).trim_prefix("srv:")))
+func refresh_used_item(server:Node,e:Dictionary)->void:
+    # Original DOL can change charges without an inventory packet. Discard
+    # cached text only; never predict charges or acknowledge a successful use.
+    var cache:Variant=server.get("_item_lines")
+    if not cache is Dictionary:return
+    var slot:=int(String(e.id).trim_prefix("srv:"));item_detail_serial+=1
+    cache.erase(slot);cache.erase("bridge-ui:"+String(e.token))
+    var key:="bridge-use-refresh:%d:%d" % [slot,item_detail_serial]
+    item_detail_refresh[slot]={"key":key,"id":e.id,"token":e.token,"until_ms":Time.get_ticks_msec()+4000}
+    for panel in [hover,detail]:
+        if panel.get("entry_id","")==e.id and panel.get("entry_token","")==e.token:panel["lines"]=[];panel["status"]="pending"
+    # A separate queue key preserves any older in-flight Detail response.
+    server.prefetch_detail(key,1,slot,String(e.name))
+func sync_item_details(server:Node,now:int)->void:
+    if item_detail_serial==0:return
+    var cache:Variant=server.get("_item_lines")
+    if not cache is Dictionary:return
+    for slot in item_detail_refresh.keys():
+        var request:Dictionary=item_detail_refresh[slot];var current:Dictionary=detail_entry(request.id,request.token)
+        var response:Dictionary=server.item_lines(request.key)
+        if current.is_empty():item_detail_refresh.erase(slot)
+        elif not response.is_empty():
+            cache[slot]=response.duplicate(true);cache["bridge-ui:"+String(request.token)]=response.duplicate(true);item_detail_refresh.erase(slot)
+        elif now>=int(request.until_ms):
+            cache.erase(slot);cache.erase("bridge-ui:"+String(request.token));item_detail_refresh.erase(slot)
+            for panel in [hover,detail]:
+                if panel.get("entry_id","")==request.id and panel.get("entry_token","")==request.token:panel["lines"]=[];panel["status"]="unavailable"
+    var waiting:Array=[]
+    for request in item_detail_refresh.values():waiting.append(request.key)
+    for key in cache.keys():
+        if key is String and String(key).begins_with("bridge-use-refresh:") and not key in waiting:cache.erase(key)
 func resolve(id:String,token:String="")->Dictionary:
     var e:Dictionary=entries.get(id,{})
     return e if not e.is_empty() and (token.is_empty() or String(e.token)==token) else {}
@@ -289,6 +325,7 @@ func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,al
     if catalog_loading:return fail("The server is updating the lists.")
     if server.reuse_left(String(e.id))>0:return fail("This action is still recovering.")
     if not server.use_entry(String(e.id),player,zone,visible):return fail("The server does not recognize this entry.")
+    if e.kind=="item":refresh_used_item(server,e)
     feedback="Request sent to server.";revision+=1;return true
 func snapshot()->Dictionary:
     var out:Dictionary=data.duplicate(true);out["revision"]=revision;out["bars"]=bars;out["banks"]=banks;out["feedback"]=feedback;out["detail"]=detail.duplicate(true);out["hover"]=hover.duplicate(true);out["server_window"]=server_window.duplicate(true);return out

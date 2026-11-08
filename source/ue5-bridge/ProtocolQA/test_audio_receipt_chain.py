@@ -400,6 +400,17 @@ def verify(workspace):
         row=next(r for r in hover['files'] if r['target']==str(w/'Godot/classic_ui_state.gd'));old=row['before_sha256'];row['before_sha256']='0'*64;put(hover_path,hover);rejected();checks+=1;row['before_sha256']=old;put(hover_path,hover)
         hover['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(hover_path,hover);rejected();checks+=1;hover['files'].pop();put(hover_path,hover)
         assert verify_files(w)['hover_details_installed'];checks+=1
+        target=w/'Godot/classic_ui_state.gd';before=digest(target);target.write_text('refreshed original consumable details')
+        consumable_proof=w/'ConsumableUseLab/proof.json';put(consumable_proof,{'passed':True,'synthetic':True})
+        consumable_path=w/'ConsumableUseLab/installed.json';consumable=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(hover_path),native_sha256=digest(binary),files=[dict(target=str(target),before_sha256=before,after_sha256=digest(target))],evidence={str(consumable_proof):digest(consumable_proof)})
+        put(consumable_path,consumable);assert verify_files(w)['consumable_use_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_sha256']:
+            old=consumable[field];consumable[field]='0'*64;put(consumable_path,consumable);rejected();checks+=1;consumable[field]=old;put(consumable_path,consumable)
+        consumable['files'][0]['before_sha256']='0'*64;put(consumable_path,consumable);rejected();checks+=1;consumable['files'][0]['before_sha256']=before;put(consumable_path,consumable)
+        for q in [target,consumable_proof,binary,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered consumable or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        consumable['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(consumable_path,consumable);rejected();checks+=1;consumable['files'].pop();put(consumable_path,consumable)
+        assert verify_files(w)['consumable_use_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

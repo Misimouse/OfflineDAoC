@@ -212,6 +212,22 @@ def verify_files(workspace):
     hover_path=workspace/'HoverDetailsLab/installed.json'
     hover=json.loads(hover_path.read_text()) if hover_path.exists() else None
     if hover and not hover.get('installed'):hover=None
+    consumable_path=workspace/'ConsumableUseLab/installed.json'
+    consumable=json.loads(consumable_path.read_text()) if consumable_path.exists() else None
+    if consumable and not consumable.get('installed'):consumable=None
+    consumable_replacements={}
+    if consumable:
+        assert hover and consumable['phase']=='complete' and not consumable['database_modified'] and not consumable['server_rules_modified']
+        assert consumable['predecessor_receipt_sha256']==digest(hover_path) and consumable['native_sha256']==hover['native_after_sha256']
+        target=str(workspace/'Godot/classic_ui_state.gd');consumable_replacements={r['target']:r for r in consumable['files']}
+        assert len(consumable['files'])==len(consumable_replacements)==1 and set(consumable_replacements)=={target}
+        row=consumable_replacements[target];prior=next(r for r in hover['files'] if r['target']==target)
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert consumable['evidence'] and all(digest(Path(p))==h for p,h in consumable['evidence'].items())
+    def latest_consumable(row,expected):
+        changed=consumable_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     hover_replacements={}
     if hover:
         assert refusal and handover and emblem and hover['phase']=='complete' and not hover['database_modified'] and not hover['server_rules_modified']
@@ -224,13 +240,13 @@ def verify_files(workspace):
         inputs=json.loads(proof.read_text())['source_inputs'];prior[str(workspace/'Godot/classic_ui_state.gd')]=next(h for p,h in inputs.items() if Path(p).name=='classic_ui_state.gd')
         for row in hover['files']:
             assert row['before_sha256']==(None if Path(row['target']).name in HOVER_NEW_NAMES else prior[row['target']])
-            assert digest(Path(row['target']))==row['after_sha256']
+            assert digest(Path(row['target']))==latest_consumable(row,row['after_sha256'])
         binary=hover_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')];assert binary['before_sha256']==hover['native_before_sha256'] and binary['after_sha256']==hover['native_after_sha256']
         assert hover['evidence'] and all(digest(Path(p))==h for p,h in hover['evidence'].items())
     def latest_hover(row,expected):
         changed=hover_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_consumable(row,expected)
     refusal_replacements={}
     if refusal:
         assert poison and refusal['phase']=='complete' and not refusal['database_modified'] and not refusal['server_rules_modified']
@@ -601,4 +617,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'verified_files':len(original['files'])}
