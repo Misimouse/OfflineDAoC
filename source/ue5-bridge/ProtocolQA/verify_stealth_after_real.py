@@ -109,10 +109,15 @@ try:
  result['checks']['stale_ui_action_refused']=not hidden()
  use_stealth();wait(lambda:hidden() and a.snapshot['max_speed_mps']<base,'Original Stealth effect and speed confirmed')
  result['checks']['original_server_hides_after_ui_action']=True
+ def own_render():return next((r for r in a.snapshot.get('entities',[]) if r.get('id')=='player:local'),{})
+ wait(lambda:own_render().get('stealth_render_known') and own_render().get('stealth_render_hidden'),'Original local model-type packet reaches native snapshot')
+ result['checks']['local_hidden_presentation_is_server_confirmed']=True
  use_stealth();settle(.3)
  result['checks']['original_two_second_toggle_limit_preserved']=hidden() and any('wait' in m.lower() and 'hide' in m.lower() for m in a.snapshot.get('messages',[]))
  settle(2.1);use_stealth();wait(lambda:not hidden() and abs(a.snapshot['max_speed_mps']-base)<.01,'Original Stealth toggles off after allowed delay')
  result['checks']['original_server_reveals_and_restores_speed']=True
+ wait(lambda:own_render().get('stealth_render_known') and not own_render().get('stealth_render_hidden'),'Original local type-two restores visible presentation')
+ result['checks']['local_visible_presentation_is_server_confirmed']=True
  wait(lambda:any(e.get('name')=='Codexdruid' for e in b.snapshot.get('entities',[])),'Original reveal creates Nightshade for normal observer')
  observer_id=next(e['id'] for e in b.snapshot['entities'] if e.get('name')=='Codexdruid')
  b.send('target',entity_id=observer_id);wait(lambda:b.snapshot.get('interaction',{}).get('target',{}).get('id')==observer_id,'Observer targets authoritatively revealed Nightshade')

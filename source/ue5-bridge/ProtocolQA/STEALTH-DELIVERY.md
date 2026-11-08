@@ -1,16 +1,19 @@
-# Original Stealth integration — candidate checkpoint
+# Original Stealth integration â€” candidate checkpoint
 
 Status: mechanical integration verified in isolation, not installed in the normal game.
 The owner's review remains deferred. This is not a claim that Stealth or the whole migration is finished.
 
 The existing Abilities window and quickbars expose Stealth only when the original server supplies a trained Stealth specialization. Activation sends the original type-zero UseSkill packet with validated current identity, position and heading. Server cooldowns, rejection rules and speed remain authoritative. No skill or hidden state is granted locally.
 
+The undecoded original PlayerModelTypeChange packet is observed through the existing Packet signal: only local type 3/flags 8 and type 2/flags 0 control hidden/visible presentation metadata. Wireframe types 0/1, malformed packets and previous character identities are ignored. Region/logout clear the state. No network-client binary or original Godot server file was changed. The native shader presentation remains pending.
+
 Generic ObjectDelete also removes living players hidden by the original server. Their target, native actor, mount relation and cached combat pose are cleared; original PlayerCreate restores visibility. An unrelated ground-object removal preserves other living entities.
 
 Validation of the candidate:
-- 14 checks with two ordinary players on an isolated original server: UI/quickbar activation, stale identity, two-second toggle limit, hide/reveal, original speed, observer disappearance/reappearance, hidden target cleanup, and Sprint rejection while hidden.
-- 703 state checks across 27 compatibility packages, including 27 focused Stealth checks.
+- 16 checks with two ordinary players on an isolated original server: UI/quickbar activation, stale identity, two-second toggle limit, hide/reveal, original speed, observer disappearance/reappearance, hidden target cleanup, and Sprint rejection while hidden.
+- 715 state checks across 27 compatibility packages, including 27 focused Stealth checks.
 - 177 checks through the installed Unreal entity consumer, replaying candidate entity snapshots with a verified living/standing player status. This is an offline native actor test, not a rendered Stealth acceptance test.
+- A read-only Unreal audit inspected 13 material/mesh samples with five base material roots. Skin and hair roots lack a supported opacity control; shared original materials remain unchanged.
 - Private database, layout, configuration and server binaries restored; normal runtime unchanged.
 
 Still pending before full acceptance:

@@ -184,6 +184,8 @@ func _ready()->void:
     server.skills_changed.connect(func():classic_ui.capture_lists(server))
     server.characters_ready.connect(characters_ready)
     server.world.connect(world_event)
+    if server.client!=null and server.client.has_signal("Packet"):
+        server.client.connect("Packet",Callable(player_models,"consume_raw"))
     server.jumped.connect(func(entry):apply_entry(entry))
     server.login_failed.connect(func(_why):status="Login error. Check the normal launcher";write_report())
     server.disconnected.connect(func(_why):status="Disconnected";write_report();get_tree().quit())
@@ -552,7 +554,7 @@ func _process(_delta:float)->void:
             var angle:=-float(heading)*TAU/4096.0
             var health:float=player_state.health_fraction()
             var form:Dictionary=player_models.snapshot()
-            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":form.model_id,"morphed":form.morphed,"source_model":form.source_model,"missing_morph_model":form.missing_model,"size":form.size,"look":local_look.duplicate(true),
+            rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":form.model_id,"morphed":form.morphed,"source_model":form.source_model,"missing_morph_model":form.missing_model,"size":form.size,"look":local_look.duplicate(true),"stealth_render_known":form.stealth_render_known,"stealth_render_hidden":form.stealth_render_hidden,
                 "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"alive":not player_state.ready or player_state.alive(),"state":"dead" if player_state.ready and not player_state.alive() else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)
