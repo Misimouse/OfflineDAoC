@@ -9,7 +9,7 @@ def verify(workspace,install):
     root=workspace/'HoverDetailsLab/Compatibility'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');project=root/'Project';project.mkdir(parents=True)
     (project/'project.godot').write_text('[application]\nconfig/name="Private inventory compatibility QA"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
     inputs={}
-    for name in ['inventory_state.gd','interaction_state.gd','test_inventory.gd','test_inventory_denial.gd','test_item_handover.gd','test_item_handover_gateway.gd','live_gateway.gd','visual_bridge.gd','test_weapon_poison.gd','classic_ui_state.gd','test_classic_ui.gd']:
+    for name in ['player_combat_state.gd','inventory_state.gd','interaction_state.gd','test_inventory.gd','test_inventory_denial.gd','test_item_handover.gd','test_item_handover_gateway.gd','live_gateway.gd','visual_bridge.gd','test_weapon_poison.gd','classic_ui_state.gd','test_classic_ui.gd']:
         p=source/name;inputs[str(p)]=digest(p);shutil.copy2(p,project/name)
     env=dict(os.environ,APPDATA=str(root/'AppData'),LOCALAPPDATA=str(root/'LocalAppData'))
     for key in ['APPDATA','LOCALAPPDATA']:Path(env[key]).mkdir()

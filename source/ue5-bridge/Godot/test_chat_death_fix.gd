@@ -14,6 +14,7 @@ class Selection extends RefCounted:
     var selected_id:=""
 class Adapter extends Node:
     var entities:Dictionary={}
+    var oid_to_id:Dictionary={}
 var checks:=0
 var failures:Array=[]
 func check(ok:bool,label:String)->void:
@@ -22,6 +23,8 @@ func check(ok:bool,label:String)->void:
 func _initialize()->void:
     var gateway=load("res://live_gateway.gd").new();var server:=FakeServer.new();var client:=Client.new();server.client=client;gateway.server=server
     gateway.classic_ui=load("res://classic_ui_state.gd").new()
+    gateway.exchange=load("res://exchange_state.gd").new();gateway.live_riding=load("res://live_riding_state.gd").new();gateway.movement_flags=load("res://movement_flags_state.gd").new()
+    var adapter:=Adapter.new();gateway.adapter=adapter;gateway.interaction=Selection.new()
     gateway.player_state=load("res://player_combat_state.gd").new();gateway.player_state.ready=true;gateway.player_state.vitals={"health_pct":0};gateway.position=Vector3(1300,130,1200);gateway.heading=777;gateway.last_position_send=Time.get_ticks_msec()
     var original:Vector3=gateway.position
     gateway.command({"action":"move","position_m":[1300,130,1200],"forward_xz":[1,0],"speed_mps":0})
@@ -32,7 +35,7 @@ func _initialize()->void:
     gateway.command({"action":"chat","text":"/release"});check(server.commands==["/release"],"dead player can use original release command through chat")
     for text in ["bad\ncommand","bad\rcommand","a".repeat(241)]:gateway.command({"action":"chat","text":text})
     check(server.commands.size()==1,"gateway rejects multiline and overlong chat")
-    var adapter:=Adapter.new();gateway.adapter=adapter;gateway.interaction=Selection.new();gateway.player_state.vitals.health_pct=25
+    gateway.player_state.consume("status",{"health_pct":25,"health":25,"max_health":100},4,Time.get_ticks_msec())
     gateway.command({"action":"move","position_m":[1300.05,130,1200],"forward_xz":[1,0],"speed_mps":0})
     check(gateway.heading!=777 and client.packets.size()==1,"authoritative positive health restores live movement")
     var transport=load("res://visual_bridge.gd").new();transport.snapshot_metadata={"messages":["Server reply"]};transport.publish([]);check(transport.last_snapshot.get("messages",[])==["Server reply"],"server replies included in actual bridge frame");transport.free()

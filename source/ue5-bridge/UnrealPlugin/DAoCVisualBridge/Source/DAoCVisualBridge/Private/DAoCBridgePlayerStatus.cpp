@@ -32,29 +32,34 @@ void UDAoCBridgeSubsystem::RemovePlayerStatusUI(){
     PlayerStatusOverlay.Reset();PlayerStatusPanel.Reset();PlayerControlsArea.Reset();
 }
 bool UDAoCBridgeSubsystem::PlayerStatusHovered() const{return PlayerStatusPanel.IsValid()&&PlayerStatusPanel->IsHovered();}
-bool UDAoCBridgeSubsystem::PlayerIsDead() const{return PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"),100)<=0;}
+bool UDAoCBridgeSubsystem::PlayerIsDead() const{
+    const auto Vitals=PlayerVitals(PlayerState);bool Alive=false;
+    if(Vitals&&Vitals->TryGetBoolField(TEXT("alive"),Alive))return !Alive;
+    if(PlayerFlag(Vitals,TEXT("absolute_health_known")))return PlayerNum(Vitals,TEXT("health"))<=0;
+    return PlayerNum(Vitals,TEXT("health_pct"),100)<=0;
+}
 bool UDAoCBridgeSubsystem::PlayerCanMove() const{
-    return PlayerFlag(PlayerState,TEXT("ready"))&&PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"))>0&&!PlayerFlag(PlayerVitals(PlayerState),TEXT("sitting"))&&!PlayerFlag(PlayerState,TEXT("posture_uncertain"))&&!(PlayerFlag(PlayerState,TEXT("posture_pending"))&&PlayerFlag(PlayerState,TEXT("posture_requested_sitting")));
+    return PlayerFlag(PlayerState,TEXT("ready"))&&!PlayerIsDead()&&!PlayerFlag(PlayerVitals(PlayerState),TEXT("sitting"))&&!PlayerFlag(PlayerState,TEXT("posture_uncertain"))&&!(PlayerFlag(PlayerState,TEXT("posture_pending"))&&PlayerFlag(PlayerState,TEXT("posture_requested_sitting")));
 }
 void UDAoCBridgeSubsystem::RequestAttack(bool On){
     if(!bLocalAvailable||Session.IsEmpty()||bExiting)return;
-    if(On&&(!PlayerFlag(PlayerState,TEXT("ready"))||PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"))<=0||PlayerFlag(PlayerState,TEXT("attack_pending"))||PlayerFlag(PlayerState,TEXT("attack_uncertain"))))return;
+    if(On&&(!PlayerFlag(PlayerState,TEXT("ready"))||PlayerIsDead()||PlayerFlag(PlayerState,TEXT("attack_pending"))||PlayerFlag(PlayerState,TEXT("attack_uncertain"))))return;
     auto V=MakeShared<FJsonObject>();V->SetBoolField(TEXT("on"),On);V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));V->SetStringField(TEXT("entity_id"),CurrentTarget());Send(TEXT("combat_attack"),V);
 }
 void UDAoCBridgeSubsystem::RequestSit(bool On){
-    if(!bLocalAvailable||Session.IsEmpty()||bExiting||!PlayerFlag(PlayerState,TEXT("ready"))||PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"))<=0)return;
+    if(!bLocalAvailable||Session.IsEmpty()||bExiting||!PlayerFlag(PlayerState,TEXT("ready"))||PlayerIsDead())return;
     if(On&&(PlayerFlag(PlayerState,TEXT("posture_pending"))||PlayerFlag(PlayerState,TEXT("posture_uncertain"))))return;
     auto V=MakeShared<FJsonObject>();V->SetBoolField(TEXT("on"),On);V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));Send(TEXT("player_sit"),V);
 }
 void UDAoCBridgeSubsystem::RequestRelease(){
-    if(!bLocalAvailable||Session.IsEmpty()||bExiting||!PlayerFlag(PlayerState,TEXT("ready"))||PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"),100)!=0)return;
+    if(!bLocalAvailable||Session.IsEmpty()||bExiting||!PlayerFlag(PlayerState,TEXT("ready"))||!PlayerIsDead())return;
     const TSharedPtr<FJsonObject>* Release=nullptr;if(PlayerState->TryGetObjectField(TEXT("release"),Release)&&PlayerFlag(*Release,TEXT("pending")))return;
     auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));Send(TEXT("player_release"),V);
 }
 void UDAoCBridgeSubsystem::RequestGMMode(bool CombatTest){
     if(!bLocalAvailable||Session.IsEmpty()||bExiting)return;
     const TSharedPtr<FJsonObject>* GM=nullptr;if(PlayerState.IsValid())PlayerState->TryGetObjectField(TEXT("gm_mode"),GM);
-    if(CombatTest&&(!GM||!PlayerFlag(*GM,TEXT("ready"))||PlayerFlag(*GM,TEXT("pending"))||PlayerFlag(*GM,TEXT("uncertain"))||PlayerNum(PlayerVitals(PlayerState),TEXT("health_pct"))<=0))return;
+    if(CombatTest&&(!GM||!PlayerFlag(*GM,TEXT("ready"))||PlayerFlag(*GM,TEXT("pending"))||PlayerFlag(*GM,TEXT("uncertain"))||PlayerIsDead()))return;
     auto V=MakeShared<FJsonObject>();V->SetBoolField(TEXT("on"),CombatTest);V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));Send(TEXT("gm_test_mode"),V);
 }
 void UDAoCBridgeSubsystem::UpdatePlayerStatusInput(){
@@ -101,7 +106,7 @@ void UDAoCBridgeSubsystem::ApplyPlayerStatus(TSharedPtr<FJsonObject> State){
     PlayerStatusPanel->ClearChildren();
     if(!PlayerFlag(State,TEXT("ready"))){PlayerStatusPanel->AddSlot().AutoHeight()[PlayerLabel(TEXT("Receiving character status..."))];return;}
     auto Vitals=PlayerVitals(State);
-    const bool Dead=PlayerNum(Vitals,TEXT("health_pct"))<=0;const bool Attack=PlayerFlag(State,TEXT("attack_on"))||PlayerFlag(State,TEXT("attack_pending"))||PlayerFlag(State,TEXT("attack_uncertain"));const bool Sit=PlayerFlag(Vitals,TEXT("sitting"))||PlayerFlag(State,TEXT("posture_pending"))||PlayerFlag(State,TEXT("posture_uncertain"));
+    const bool Dead=PlayerIsDead();const bool Attack=PlayerFlag(State,TEXT("attack_on"))||PlayerFlag(State,TEXT("attack_pending"))||PlayerFlag(State,TEXT("attack_uncertain"));const bool Sit=PlayerFlag(Vitals,TEXT("sitting"))||PlayerFlag(State,TEXT("posture_pending"))||PlayerFlag(State,TEXT("posture_uncertain"));
     if(Dead){
         if(PlayerControlsArea.IsValid())PlayerControlsArea->SetExpanded(true);
         const TSharedPtr<FJsonObject>* Release=nullptr;State->TryGetObjectField(TEXT("release"),Release);const bool Waiting=Release&&PlayerFlag(*Release,TEXT("pending"));

@@ -114,6 +114,13 @@ UI_SCALE_NEW_NAMES={'DAoCBridgeInterfaceSettings.h','DAoCBridgeInterfaceSettings
 UI_SCALE_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp']+['Source/DAoCVisualBridge/Private/'+name for name in sorted(UI_SCALE_NEW_NAMES)]
 
 
+PLAYER_VITALS_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgePlayerStatus.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgePlayerVitalsAcceptance.cpp']
+PLAYER_VITALS_NEW_NAMES={'DAoCBridgePlayerVitalsAcceptance.cpp'}
+PLAYER_VITALS_GODOT_TARGETS=['player_combat_state.gd','player_release.gd','live_gateway.gd','combat_audio_state.gd','combat_visual_state.gd','weapon_mode_audio_state.gd']
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -226,6 +233,35 @@ def verify_files(workspace):
     window_recovery_path=workspace/'WindowRecoveryLab/installed.json'
     window_recovery=json.loads(window_recovery_path.read_text()) if window_recovery_path.exists() else None
     if window_recovery and not window_recovery.get('installed'):window_recovery=None
+    player_vitals_path=workspace/'PlayerVitalsLab/installed.json'
+    player_vitals=json.loads(player_vitals_path.read_text()) if player_vitals_path.exists() else None
+    if player_vitals and not player_vitals.get('installed'):player_vitals=None
+    player_vitals_replacements={}
+    if player_vitals:
+        assert window_recovery and player_vitals['phase']=='complete' and not player_vitals['database_modified'] and not player_vitals['server_rules_modified']
+        assert player_vitals['predecessor_receipt_sha256']==digest(window_recovery_path) and player_vitals['native_before_sha256']==window_recovery['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';player_vitals_replacements={r['target']:r for r in player_vitals['files']}
+        expected={str(plugin/p) for p in PLAYER_VITALS_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in PLAYER_VITALS_GODOT_TARGETS}
+        assert len(player_vitals['files'])==len(player_vitals_replacements)==len(expected) and set(player_vitals_replacements)==expected
+        proof=workspace/'WindowRecoveryLab/native_build.json'
+        assert str(proof) in window_recovery['evidence'] and digest(proof)==window_recovery['evidence'][str(proof)]
+        old_build=json.loads(proof.read_text());old_source={Path(p).as_posix():h for p,h in old_build['source_sha256'].items()}
+        before_proof=Path(player_vitals['godot_before_proof']);assert str(before_proof) in player_vitals['evidence'] and digest(before_proof)==player_vitals['evidence'][str(before_proof)]
+        before_data=json.loads(before_proof.read_text());assert before_data['passed'] and before_data['case']=='before' and before_data['bug_reproduced'] and before_data['normal_runtime_unchanged']
+        for relative in PLAYER_VITALS_NATIVE_TARGETS:
+            row=player_vitals_replacements[str(plugin/relative)]
+            before=None if Path(relative).name in PLAYER_VITALS_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
+            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+        for name in PLAYER_VITALS_GODOT_TARGETS:
+            row=player_vitals_replacements[str(workspace/'Godot'/name)]
+            assert row['before_sha256']==before_data['source_inputs'][str(workspace/'Godot'/name)] and digest(Path(row['target']))==row['after_sha256']
+        binary=player_vitals_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==player_vitals['native_before_sha256'] and binary['after_sha256']==player_vitals['native_after_sha256']
+        assert player_vitals['evidence'] and all(digest(Path(p))==h for p,h in player_vitals['evidence'].items())
+    def latest_player_vitals(row,expected):
+        changed=player_vitals_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     window_recovery_replacements={}
     if window_recovery:
         assert ui_scale and window_recovery['phase']=='complete' and not window_recovery['database_modified'] and not window_recovery['server_rules_modified']
@@ -239,14 +275,14 @@ def verify_files(workspace):
         for relative in WINDOW_RECOVERY_NATIVE_TARGETS:
             row=window_recovery_replacements[str(plugin/relative)]
             before=None if Path(relative).name in WINDOW_RECOVERY_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
-            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+            assert row['before_sha256']==before and digest(Path(row['target']))==latest_player_vitals(row,row['after_sha256'])
         binary=window_recovery_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==window_recovery['native_before_sha256'] and binary['after_sha256']==window_recovery['native_after_sha256']
         assert window_recovery['evidence'] and all(digest(Path(p))==h for p,h in window_recovery['evidence'].items())
     def latest_window_recovery(row,expected):
         changed=window_recovery_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_player_vitals(row,expected)
     ui_scale_replacements={}
     if ui_scale:
         assert consumable and hover and ui_scale['phase']=='complete' and not ui_scale['database_modified'] and not ui_scale['server_rules_modified']
@@ -670,4 +706,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'player_vitals_installed':bool(player_vitals),'verified_files':len(original['files'])}

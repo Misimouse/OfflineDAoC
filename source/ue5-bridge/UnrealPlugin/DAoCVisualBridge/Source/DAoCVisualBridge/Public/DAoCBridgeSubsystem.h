@@ -136,6 +136,7 @@ private:
     void ToggleRecoverableWindow(const FString& Id);
     void ResetWindowLayout();
     bool TickWindowRecoveryAcceptance();
+    bool TickPlayerVitalsAcceptance();
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;
     FString Session, Status, Character, CatalogPath;

@@ -77,7 +77,7 @@ func consume(kind:String,data:Dictionary,me:int,ids:Dictionary,entities:Dictiona
     var style:=int(data.get("style",0))
     var styled:bool=style>0 and style not in [BOW_SHOOT,0x3E81,0x3E82] and result==11
     var attacker_row:Dictionary=entities.get(attacker,{})
-    var attacker_dead:bool=String(attacker_row.get("state",""))=="dead" or float(attacker_row.get("health",1))<=0
+    var attacker_dead:bool=String(attacker_row.get("state",""))=="dead" or not bool(attacker_row.get("alive",float(attacker_row.get("health",1))>0))
     if not spell and not dead.has(attacker) and not attacker_dead:
         if ws>0:emit(attacker,entities,"weapons",ws,"style_use" if styled else "use",now)
         else:creature(attacker,entities,"attack",now)
@@ -94,7 +94,7 @@ func consume(kind:String,data:Dictionary,me:int,ids:Dictionary,entities:Dictiona
         elif result in [10,11]:
             emit(defender,entities,"weapons",ws if ws>0 else WEAPONLESS,"style_hit" if result==11 else ("hit_medium" if heavy else "hit_light"),now)
             if after>0:pain(defender,entities,"pain_heavy" if result==11 else ("pain_medium" if heavy else "pain_light"),now)
-        if after==0:death(defender,entities,now)
+        if after==0 and defender!="player:local":death(defender,entities,now)
     if after>=0 and not defender.is_empty():health[defender]=after
 
 func snapshot(now:int)->Array:

@@ -6,7 +6,7 @@ from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 
 def verify(workspace,engine,installed=False,lab_name="UIScaleLab"):
-    assert lab_name in ["UIScaleLab","WindowRecoveryLab"]
+    assert lab_name in ["UIScaleLab","WindowRecoveryLab","PlayerVitalsLab"]
     root=workspace/lab_name;bp=root/'native_build.json';build=json.loads(bp.read_text());assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())

@@ -18,9 +18,7 @@ class Interaction:
     extends RefCounted
     var selected_id:=""
 class Player:
-    extends RefCounted
-    var ready:=false
-    var vitals:Dictionary={}
+    extends "res://player_combat_state.gd"
 class Server:
     extends Node
     var client:Node

@@ -28,7 +28,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     const TSharedPtr<FJsonObject>* VitalsPtr=nullptr;TSharedPtr<FJsonObject> Vitals;
     if(PlayerState.IsValid()&&PlayerState->TryGetObjectField(TEXT("vitals"),VitalsPtr))Vitals=*VitalsPtr;
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
-    const bool Dead=Local?(Ready?PoseNum(Vitals,TEXT("health_pct"))<=0:Pose.Dead):Requested==TEXT("dead");
+    const bool Dead=Local?(Ready?PlayerIsDead():Pose.Dead):Requested==TEXT("dead");
     const bool Mounted=!Dead&&(Local?(bLocalMounted&&bLocalSeatReady):(*Row)->HasField(TEXT("riding_steed_entity_id")));
     const bool Sitting=Ready&&!Mounted&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
     const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump")||Requested==TEXT("walk_back");

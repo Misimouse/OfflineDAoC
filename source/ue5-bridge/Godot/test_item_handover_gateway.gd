@@ -7,9 +7,9 @@ class Server extends Node:
     var client:Node=Client.new()
 class Adapter extends Node:
     var entities:Dictionary={}
-class Player extends RefCounted:
-    var ready:=true
-    var vitals:Dictionary={"health_pct":100}
+class Player extends "res://player_combat_state.gd":
+    func _init()->void:
+        ready=true;vitals={"health_pct":100}
 class Exchange extends RefCounted:
     const ACTIONS=[]
     var locked:=false

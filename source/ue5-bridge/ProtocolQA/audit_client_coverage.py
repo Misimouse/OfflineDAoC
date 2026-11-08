@@ -54,6 +54,10 @@ def audit(workspace,install):
     if windows_installed:
         row('Original window recovery',['ui/options_window.gd','ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeWindowRecovery.cpp'],'installed_owner_review_pending','Six existing closable windows, retained positions and reset of native layout defaults; custom chat filters, quickbar actions, key bindings and scale retained. Unavailable original surfaces remain separate.')
         result['next_package']='CLIENT-VITALS: audit the confirmed positive absolute-health versus rounded-zero-percent ambiguity against original Godot/DOL state, with isolated proof before changing runtime'
+    vitals_receipt=workspace/'PlayerVitalsLab/installed.json';vitals_installed=vitals_receipt.exists() and json.loads(vitals_receipt.read_text()).get('installed',False)
+    if vitals_installed:
+        row('Positive absolute player health',['net/server_world.gd'],['Godot/player_combat_state.gd','Godot/player_release.gd','Godot/combat_audio_state.gd','Godot/weapon_mode_audio_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerStatus.cpp'],'installed_owner_review_pending','Original positive absolute HP remains alive at rounded zero percent; actual Status/Death/Revive retain authority. Real one-HP, potion and native corpse/return checks passed; no invented local damage or resurrection.')
+        result['next_package']='CLIENT-PARTY: audit and verify original group invite/accept/target/remove/leave using ordinary disposable players and current bridge; preserve original server permissions'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

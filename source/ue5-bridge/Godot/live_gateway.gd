@@ -134,7 +134,7 @@ func _ready()->void:
     spell_cast.configure(JSON.parse_string(FileAccess.get_file_as_string("res://content/spells/spell_fx.json")))
     classic_ui=load(folder.path_join("classic_ui_state.gd")).new()
     classic_ui.macro_request=func(line:String)->bool:return dispatch_chat(line)
-    classic_ui.pet_request=func(value:Dictionary)->bool:return pet.request(value,server.client,interaction,adapter.entities,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+    classic_ui.pet_request=func(value:Dictionary)->bool:return pet.request(value,server.client,interaction,adapter.entities,Time.get_ticks_msec(),player_state.alive())
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     var native_models:Variant=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json")))
     player_models=load(folder.path_join("player_model_state.gd")).new()
@@ -153,7 +153,7 @@ func _ready()->void:
     server.name_checked.connect(func(name,result):character_lobby.name_result(name,result,server,Time.get_ticks_msec()))
     item_db=load("res://game/ui/item_db.gd");assert(item_db!=null)
     exchange.item_lookup=func(id:String)->Dictionary:return item_db.item(id)
-    server.exchange_open.connect(func(which):exchange.open(which,server,interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0,Time.get_ticks_msec()))
+    server.exchange_open.connect(func(which):exchange.open(which,server,interaction,adapter.entities,position,player_state.alive(),Time.get_ticks_msec()))
     server.exchange_changed.connect(func():exchange.sync(server,inventory,Time.get_ticks_msec()))
     var collisions=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../collision_catalog.json")))
     if collisions is Dictionary:
@@ -241,9 +241,9 @@ func world_event(kind:String,data:Dictionary)->void:
         # Preserve pre-packet health for the original light/medium pain rule.
         var audio_rows:Dictionary=adapter.entities.duplicate()
         var audio_form:Dictionary=player_models.snapshot()
-        var audio_health:float=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
+        var audio_health:float=player_state.health_fraction()
         audio_rows["player:local"]={"model_id":audio_form.model_id,"position_m":[position.x,position.y,position.z],
-            "health":audio_health,"health_known":player_state.ready,"state":"dead" if player_state.ready and audio_health<=0 else "idle"}
+            "health":audio_health,"health_known":player_state.ready,"alive":not player_state.ready or player_state.alive(),"state":"dead" if player_state.ready and not player_state.alive() else "idle"}
         combat_audio.consume(kind,data,int(server.me_oid),adapter.oid_to_id,audio_rows,Time.get_ticks_msec())
         weapon_mode_audio.consume(kind,data,int(server.me_oid),combat_audio,audio_rows,inventory,Time.get_ticks_msec())
     exchange.observe(kind,data)
@@ -302,7 +302,7 @@ func world_event(kind:String,data:Dictionary)->void:
     inventory.observe(kind,data)
     player_state.consume(kind,data,int(server.me_oid),Time.get_ticks_msec())
     var release_revision:int=release_state.revision
-    release_state.consume(kind,data,int(server.me_oid))
+    release_state.consume(kind,data,int(server.me_oid),player_state)
     if release_state.revision!=release_revision:player_state.revision+=1
     player_state.observe_target_death(kind,data,interaction.selected_id,adapter.oid_to_id,adapter.entities,server.client,Time.get_ticks_msec())
     if kind in ["you","region_changed","quit"]:target_sight_id="";target_sight=false;target_sight_at=0
@@ -314,7 +314,7 @@ func world_event(kind:String,data:Dictionary)->void:
     if kind in ["inventory","market"]:sync_inventory(Time.get_ticks_msec())
     if kind=="combat" and int(server.entry.get("zone",-1))==207:
         var now:=Time.get_ticks_msec();sync_inventory(now)
-        combat_visual.consume(data,int(server.me_oid),adapter.oid_to_id,adapter.entities,now,local_weapon_stance(),not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0)
+        combat_visual.consume(data,int(server.me_oid),adapter.oid_to_id,adapter.entities,now,local_weapon_stance(),not player_state.alive())
 
 func command(value:Dictionary)->void:
     var action:=String(value.get("action",""))
@@ -329,13 +329,13 @@ func command(value:Dictionary)->void:
     if action in exchange.ACTIONS:
         var now:=Time.get_ticks_msec()
         sync_inventory(now);exchange.sync(server,inventory,now)
-        exchange.execute(value,server,inventory,interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0,now)
+        exchange.execute(value,server,inventory,interaction,adapter.entities,position,player_state.alive(),now)
         return
     if action=="vault_close":vault.close(value);sync_inventory(Time.get_ticks_msec());return
     if action=="conc_cancel":
         concentration.sync(server,player_state.vitals,player_state.ready,Time.get_ticks_msec());concentration.request(value,server.client,Time.get_ticks_msec());return
     if action in ["trainer_refresh","trainer_train"]:
-        trainer.sync(server,server.client,Time.get_ticks_msec());trainer.request(value,server.client,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0);return
+        trainer.sync(server,server.client,Time.get_ticks_msec());trainer.request(value,server.client,Time.get_ticks_msec(),player_state.alive());return
     if action in ["journal_remove","journal_guide","journal_guide_close"]:
         journal.sync(server,Time.get_ticks_msec());journal.request(value,server,server.client,Time.get_ticks_msec());return
     if action=="target_self":interaction.select_self(server.client,int(server.me_oid));return
@@ -364,7 +364,7 @@ func command(value:Dictionary)->void:
         var elapsed:=clampf(float(Time.get_ticks_msec()-last_position_send)/1000.0,0.05,0.5)
         if next.distance_to(position)>maxf(5.0,limit*elapsed+1.0):move_rejected+=1;return
         if limit<=0 and next.distance_to(position)>(4.0 if mounted else .1):move_rejected+=1;return
-        if player_state.ready and int(player_state.vitals.get("health_pct",0))<=0:return
+        if player_state.ready and not player_state.alive():return
         if not movement_flags.consume(value):return
         position=next
         move_commands+=1
@@ -380,14 +380,14 @@ func command(value:Dictionary)->void:
     elif action in ["target","interact","keyword","dialog_response","dismiss_interaction"]:
         interaction.execute(value,server.client,adapter.entities,position)
     elif action in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:
-        if action=="inventory_give" and (not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0):inventory.fail("You cannot hand over items right now.");return
+        if action=="inventory_give" and (not player_state.alive()):inventory.fail("You cannot hand over items right now.");return
         if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
         sync_inventory(Time.get_ticks_msec())
         inventory.execute(value,server.client,interaction,adapter.entities,position,Time.get_ticks_msec())
     elif action in ["ui_bank","ui_assign","ui_clear","ui_use","ui_use_slot","ui_detail","ui_hover","ui_detail_close","ui_server_window_close"]:
         sync_inventory(Time.get_ticks_msec());classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec())
         ui_pose.global_position=position;ui_pose.heading=heading;ui_pose.velocity=Vector3(0,0,last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0)
-        classic_ui.request(value,server,ui_pose,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+        classic_ui.request(value,server,ui_pose,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()),player_state.alive())
     elif action=="player_release":
         if int(server.entry.get("zone",-1))==207:
             release_state.request(value,player_state,server.client,Time.get_ticks_msec());player_state.revision+=1
@@ -395,7 +395,7 @@ func command(value:Dictionary)->void:
         if int(server.entry.get("zone",-1))!=207 or not value.get("on") is bool:return
         if int(value.get("player_generation",-1))!=player_state.generation:return
         var mode:="combat" if bool(value.on) else "protected"
-        if mode=="combat" and (not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0):return
+        if mode=="combat" and (not player_state.alive()):return
         if gm_mode.request(mode,server.client,Time.get_ticks_msec()):player_state.revision+=1
     elif action in ["combat_attack","player_sit"]:
         if int(server.entry.get("zone",-1))==207:player_state.execute(value,server.client,interaction.selected_id,adapter.entities,Time.get_ticks_msec(),sync_attack_visibility)
@@ -433,14 +433,14 @@ func dispatch_chat(text:String)->bool:
         if page<1 or page>10 or bar<1 or bar>3:local_chat("Usage: /qbar page[1..10] bar[1..3]");return false
         return classic_ui.request({"action":"ui_bank","bar":bar-1,"bank":page-1},server,ui_pose,int(server.entry.get("zone",-1)),false,true)
     if word=="/train" and parts.size()==1:
-        trainer.sync(server,server.client,Time.get_ticks_msec());return trainer.request({"action":"trainer_refresh"},server.client,Time.get_ticks_msec(),player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+        trainer.sync(server,server.client,Time.get_ticks_msec());return trainer.request({"action":"trainer_refresh"},server.client,Time.get_ticks_msec(),player_state.alive())
     server.command(text);return true
 
 func emit_tracking_feedback()->void:
     var text:String=target_tracking.take_feedback()
     if not text.is_empty():local_chat(text,"system")
 func request_tracking(mode:String)->bool:
-    var ready:bool=live_riding.local_steed==0 and int(server.entry.get("zone",-1))==207 and player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving
+    var ready:bool=live_riding.local_steed==0 and int(server.entry.get("zone",-1))==207 and player_state.alive() and not bool(player_state.vitals.get("sitting",false)) and not leaving
     var accepted:bool=target_tracking.request(mode,interaction.selected_id,adapter.entities,position,ready,Time.get_ticks_msec())
     emit_tracking_feedback();return accepted
 func request_logout(exit_application:bool=true)->void:
@@ -473,7 +473,7 @@ func recover_test_region(now:int)->void:
         return
     # This client only renders Connacht. Preserve the actual bind point and ask
     # the server for the same GM transfer used on entry, after real revival.
-    if not player_state.ready or int(player_state.vitals.get("health_pct",0))<=0:
+    if not player_state.alive():
         status="Outside Connacht: waiting for server recovery"
         return
     if not gm_mode.allows_test_transfer(int(server.entry.get("region",0)),int(server.entry.get("zone",0))):
@@ -523,17 +523,17 @@ func _process(_delta:float)->void:
     if now-last_publish>=50:
         last_publish=now
         if server.playing and not leaving:
-            interaction.local_target={"name":character_name,"health":float(player_state.vitals.get("health_pct",0))*.01 if player_state.ready else -1.0,"level":int(server.info.get("level",0)),"kind":"player","guild":""}
+            interaction.local_target={"name":character_name,"health":player_state.health_fraction() if player_state.ready else -1.0,"level":int(server.info.get("level",0)),"kind":"player","guild":""}
             interaction.maintain(server.client,adapter.entities,position)
         var rows:Array=[]
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             rows=adapter.entities.values().filter(func(row):return row.id!="player:local")
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             var angle:=-float(heading)*TAU/4096.0
-            var health:=float(player_state.vitals.get("health_pct",100))*.01 if player_state.ready else 1.0
+            var health:float=player_state.health_fraction()
             var form:Dictionary=player_models.snapshot()
             rows.append({"id":"player:local","kind":"player","name":character_name,"model_id":form.model_id,"morphed":form.morphed,"source_model":form.source_model,"missing_morph_model":form.missing_model,"size":form.size,"look":local_look.duplicate(true),
-                "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"state":"dead" if player_state.ready and health<=0 else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
+                "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"alive":not player_state.ready or player_state.alive(),"state":"dead" if player_state.ready and not player_state.alive() else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)
         for row in rows:
@@ -554,7 +554,7 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["spell_visuals"]=spell_visuals.snapshot(now)
         transport.snapshot_metadata["combat_audio"]=combat_audio.snapshot(now)
         transport.snapshot_metadata["server_sound_audio"]=server_sound.snapshot(now)
-        target_tracking.maintain(adapter.entities,player_state.ready and int(player_state.vitals.get("health_pct",0))>0 and not bool(player_state.vitals.get("sitting",false)) and not leaving and live_riding.local_steed==0,now)
+        target_tracking.maintain(adapter.entities,player_state.alive() and not bool(player_state.vitals.get("sitting",false)) and not leaving and live_riding.local_steed==0,now)
         emit_tracking_feedback()
         transport.snapshot_metadata["target_tracking"]=target_tracking.snapshot(now)
         transport.snapshot_metadata["riding"]=live_riding.snapshot(adapter.oid_to_id,adapter.entities)
@@ -617,7 +617,7 @@ func send_position(speed:float)->void:
 
 func sync_inventory(now:int)->void:
     last_inventory_sync=now
-    vault.maintain(interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+    vault.maintain(interaction,adapter.entities,position,player_state.alive())
     var vault_state:Dictionary=vault.snapshot()
     var slots:Array=inventory.EQUIPMENT+range(40,80)
     if vault.valid:slots.append_array(range(vault.first,vault.first+vault.count))
@@ -633,7 +633,7 @@ func sync_inventory(now:int)->void:
         row["equip_slots"]=inventory.slots_for(row)
         rows.append(row)
     inventory.sync(rows,server.money,server.gear,server.weapon_set,int(server.weight_now),int(server.weight_max),now,vault_state)
-    exchange.maintain(interaction,adapter.entities,position,player_state.ready and int(player_state.vitals.get("health_pct",0))>0)
+    exchange.maintain(interaction,adapter.entities,position,player_state.alive())
     exchange.sync(server,inventory,now)
 
 func write_report()->void:

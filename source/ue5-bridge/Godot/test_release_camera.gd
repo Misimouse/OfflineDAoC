@@ -1,7 +1,7 @@
 extends SceneTree
 class FakeServer extends Node:
     var playing:=true
-    var entry:Dictionary={"zone":202}
+    var entry:Dictionary={"zone":202,"region":200}
     var commands:Array=[]
     func command(text:String)->void:commands.append(text)
 var checks:=0

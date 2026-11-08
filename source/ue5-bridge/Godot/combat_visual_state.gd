@@ -52,7 +52,7 @@ func _id(oid:int,me:int,oid_to_id:Dictionary)->String:
     return "player:local" if oid==me else String(oid_to_id.get(oid,""))
 func _living(id:String,entities:Dictionary)->bool:
     var row:Dictionary=entities.get(id,{})
-    return not row.is_empty() and String(row.get("state",""))!="dead" and float(row.get("health",1))>0
+    return not row.is_empty() and String(row.get("state",""))!="dead" and bool(row.get("alive",float(row.get("health",1))>0))
 func _emit(id:String,row:Dictionary,clip:String,kind:String,weapon:int,style:int,now:int,if_idle:bool,packet:Dictionary)->void:
     if not available(int(row.get("model_id",-1)),clip):return
     sequence+=1;emitted+=1

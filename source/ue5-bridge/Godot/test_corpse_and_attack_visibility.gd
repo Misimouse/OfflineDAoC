@@ -34,7 +34,7 @@ func _initialize()->void:
     a.consume_world("remove",{"oid":2,"type":1});check(a.entities.size()==1,"normal visibility removal does not invent corpse")
     a.clear_world();check(a.entities.is_empty() and a.corpses.is_empty(),"session reset clears corpse timers")
     var g=load("res://live_gateway.gd").new();var c=FakeClient.new();var server=FakeServer.new();server.client=c
-    g.server=server;g.adapter=a;g.interaction=load("res://interaction_state.gd").new();g.player_state=load("res://player_combat_state.gd").new()
+    g.server=server;g.movement_flags=load("res://movement_flags_state.gd").new();g.live_riding=load("res://live_riding_state.gd").new();g.adapter=a;g.interaction=load("res://interaction_state.gd").new();g.player_state=load("res://player_combat_state.gd").new()
     a.consume_world("npc",spawn(3));g.interaction.selected_id="npc:3";var now:=Time.get_ticks_msec();g.target_sight_id="npc:3";g.target_sight=true;g.target_sight_at=now
     check(g.target_visible(now),"fresh native visibility belongs to selected target")
     check(not g.target_visible(now+1501),"expired visibility cannot grant view")

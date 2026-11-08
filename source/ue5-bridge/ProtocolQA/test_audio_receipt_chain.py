@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES,UI_SCALE_NATIVE_TARGETS,UI_SCALE_NEW_NAMES,WINDOW_RECOVERY_NATIVE_TARGETS,WINDOW_RECOVERY_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES,UI_SCALE_NATIVE_TARGETS,UI_SCALE_NEW_NAMES,WINDOW_RECOVERY_NATIVE_TARGETS,WINDOW_RECOVERY_NEW_NAMES,PLAYER_VITALS_NATIVE_TARGETS,PLAYER_VITALS_NEW_NAMES,PLAYER_VITALS_GODOT_TARGETS
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -454,6 +454,32 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered window recovery or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         window['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(window_path,window);rejected();checks+=1;window['files'].pop();put(window_path,window)
         assert verify_files(w)['window_recovery_installed'];checks+=1
+        for relative in PLAYER_VITALS_NATIVE_TARGETS:
+            q=plugin/relative
+            if q.name not in PLAYER_VITALS_NEW_NAMES and not q.exists():q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(b'old vitals native source')
+        vitals_native=w/'WindowRecoveryLab/native_build.json'
+        put(vitals_native,{'source_sha256':{r.removeprefix('Source/'):digest(plugin/r) for r in PLAYER_VITALS_NATIVE_TARGETS if r.startswith('Source/') and Path(r).name not in PLAYER_VITALS_NEW_NAMES},'binaries_sha256':{Path(r).name:digest(plugin/r) for r in PLAYER_VITALS_NATIVE_TARGETS if r.startswith('Binaries/')}})
+        window['evidence'][str(vitals_native)]=digest(vitals_native);put(window_path,window)
+        for name in PLAYER_VITALS_GODOT_TARGETS:
+            q=w/'Godot'/name
+            if not q.exists():q.write_bytes(b'old vitals Godot source '+name.encode())
+        before_vitals=w/'PlayerVitalsLab/before_protocol.json'
+        put(before_vitals,dict(passed=True,case='before',bug_reproduced=True,normal_runtime_unchanged=True,source_inputs={str(w/'Godot'/n):digest(w/'Godot'/n) for n in PLAYER_VITALS_GODOT_TARGETS}))
+        prior=digest(binary);vitals_rows=[]
+        for q in [plugin/r for r in PLAYER_VITALS_NATIVE_TARGETS]+[w/'Godot'/n for n in PLAYER_VITALS_GODOT_TARGETS]:
+            q.parent.mkdir(parents=True,exist_ok=True);before=None if q.name in PLAYER_VITALS_NEW_NAMES else digest(q)
+            q.write_bytes(b'new vitals '+q.name.encode());vitals_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+        vitals_proof=w/'PlayerVitalsLab/proof.json';put(vitals_proof,dict(passed=True,synthetic=True))
+        vitals_path=w/'PlayerVitalsLab/installed.json';vitals=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(window_path),native_before_sha256=prior,native_after_sha256=digest(binary),godot_before_proof=str(before_vitals),files=vitals_rows,evidence={str(before_vitals):digest(before_vitals),str(vitals_proof):digest(vitals_proof)})
+        put(vitals_path,vitals);assert verify_files(w)['player_vitals_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_before_sha256','native_after_sha256']:
+            old=vitals[field];vitals[field]='0'*64;put(vitals_path,vitals);rejected();checks+=1;vitals[field]=old;put(vitals_path,vitals)
+        for row in vitals_rows:
+            old=row['before_sha256'];row['before_sha256']='0'*64;put(vitals_path,vitals);rejected();checks+=1;row['before_sha256']=old;put(vitals_path,vitals)
+        for q in [Path(row['target']) for row in vitals_rows]+[vitals_native,before_vitals,vitals_proof,w/'Godot/classic_ui_state.gd',Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered vitals or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        vitals['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(vitals_path,vitals);rejected();checks+=1;vitals['files'].pop();put(vitals_path,vitals)
+        assert verify_files(w)['player_vitals_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

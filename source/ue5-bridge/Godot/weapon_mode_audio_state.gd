@@ -8,14 +8,18 @@ func reset()->void:
 
 func consume(kind:String,data:Dictionary,me:int,audio:RefCounted,entities:Dictionary,inventory,now:int)->void:
     if kind in ["you","region_changed","quit"]:reset();return
-    if (kind=="death" and int(data.get("oid",0))==me) or (kind=="status" and int(data.get("health_pct",-1))==0):
+    var status_dead:=kind=="status" and int(data.get("health_pct",-1))==0
+    if kind=="status":
+        var points=data.get("health",-1);var maximum=data.get("max_health",-1)
+        if (points is int or points is float) and (maximum is int or maximum is float) and is_finite(float(points)) and is_finite(float(maximum)) and float(points)==floor(float(points)) and float(maximum)==floor(float(maximum)) and points>=0 and points<=65535 and maximum>0 and maximum<=65535:status_dead=points==0
+    if (kind=="death" and int(data.get("oid",0))==me) or status_dead:
         # Death removes weapon mode; a corpse is not audibly sheathing an item.
         reset();return
     if kind!="attack_mode":return
     var on:=bool(data.get("on",false))
     if on==armed:return
     var row:Dictionary=entities.get("player:local",{})
-    if row.is_empty() or (on and (String(row.get("state",""))=="dead" or float(row.get("health",1))<=0)):
+    if row.is_empty() or (on and (String(row.get("state",""))=="dead" or not bool(row.get("alive",float(row.get("health",1))>0)))):
         reset();return
     var model:=drawn_model
     if on:
