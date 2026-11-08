@@ -46,6 +46,10 @@ def audit(workspace,install):
     if consumable_installed:
         row('Original consumables and charge descriptions',['net/server.gd','ui/quickbar.gd'],['Godot/classic_ui_state.gd'],'installed_owner_review_pending','Original UseSlot, level/posture/cooldown/charge rules; refresh authoritative item descriptions after use without predicting charges.')
         result['next_package']='CLIENT-UI-SCALE: audit original interface scale preference and native viewport/layout behavior'
+    scale_receipt=workspace/'UIScaleLab/installed.json';scale_installed=scale_receipt.exists() and json.loads(scale_receipt.read_text()).get('installed',False)
+    if scale_installed:
+        row('Original interface scale',['ui/options_window.gd','ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceSettings.cpp','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceOptions.cpp'],'installed_owner_review_pending','Original 60-160% slider applies on release, persists across processes and reflows existing windows with viewport fit. Other original Interface/Options settings remain separate.')
+        result['next_package']='CLIENT-WINDOW-RESTORE: audit original Options / Windows recovery and reset against existing native windows; do not add unavailable world services'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

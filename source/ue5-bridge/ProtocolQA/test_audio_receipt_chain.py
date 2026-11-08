@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES,UI_SCALE_NATIVE_TARGETS,UI_SCALE_NEW_NAMES
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -411,6 +411,30 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered consumable or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         consumable['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(consumable_path,consumable);rejected();checks+=1;consumable['files'].pop();put(consumable_path,consumable)
         assert verify_files(w)['consumable_use_installed'];checks+=1
+        # Extend only this synthetic fixture; historical installed evidence stays sealed.
+        old_native=w/'HoverDetailsLab/native_build.json'
+        for relative in UI_SCALE_NATIVE_TARGETS:
+            q=plugin/relative
+            if q.name not in UI_SCALE_NEW_NAMES and not q.exists():q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(b'old UI scale predecessor')
+        put(old_native,{'source_sha256':{r.removeprefix('Source/'):digest(plugin/r) for r in UI_SCALE_NATIVE_TARGETS if r.startswith('Source/') and Path(r).name not in UI_SCALE_NEW_NAMES},'binaries_sha256':{Path(r).name:digest(plugin/r) for r in UI_SCALE_NATIVE_TARGETS if r.startswith('Binaries/')}})
+        hover['evidence'][str(old_native)]=digest(old_native);put(hover_path,hover)
+        consumable['predecessor_receipt_sha256']=digest(hover_path);put(consumable_path,consumable)
+        prior=digest(binary);scale_rows=[]
+        for relative in UI_SCALE_NATIVE_TARGETS:
+            q=plugin/relative;q.parent.mkdir(parents=True,exist_ok=True)
+            before=None if q.name in UI_SCALE_NEW_NAMES else digest(q)
+            q.write_bytes(b'new UI scale '+relative.encode());scale_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+        scale_proof=w/'UIScaleLab/proof.json';put(scale_proof,{'passed':True,'synthetic':True})
+        scale_path=w/'UIScaleLab/installed.json';scale=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(consumable_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=scale_rows,evidence={str(scale_proof):digest(scale_proof)})
+        put(scale_path,scale);assert verify_files(w)['ui_scale_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_before_sha256','native_after_sha256']:
+            old=scale[field];scale[field]='0'*64;put(scale_path,scale);rejected();checks+=1;scale[field]=old;put(scale_path,scale)
+        for row in scale_rows:
+            old=row['before_sha256'];row['before_sha256']='0'*64;put(scale_path,scale);rejected();checks+=1;row['before_sha256']=old;put(scale_path,scale)
+        for q in [binary,plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceSettings.cpp',w/'Godot/classic_ui_state.gd',old_native,scale_proof,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered scale or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        scale['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(scale_path,scale);rejected();checks+=1;scale['files'].pop();put(scale_path,scale)
+        assert verify_files(w)['ui_scale_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

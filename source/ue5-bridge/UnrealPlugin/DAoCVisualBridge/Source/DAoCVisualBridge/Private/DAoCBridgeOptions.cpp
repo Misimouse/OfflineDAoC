@@ -1,6 +1,7 @@
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeDisplaySettings.h"
+#include "DAoCBridgeInterfaceSettings.h"
 #include "Engine/Engine.h"
 #include "GameFramework/GameUserSettings.h"
 #include "Widgets/Input/SComboBox.h"
@@ -67,7 +68,7 @@ void UDAoCBridgeSubsystem::SetAudioVolume(bool Master,float Value){
 }
 void UDAoCBridgeSubsystem::OpenOptions(){
     if(bOptionsOpen||!GetWorld()||!GetWorld()->GetGameViewport())return;
-    LoadAudioSettings();LoadKeyConfiguration();TickDisplaySettings();
+    LoadAudioSettings();LoadKeyConfiguration();LoadInterfaceSettings();TickDisplaySettings();
     FString Art=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/options.png");
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeOptionsArt="),Art);
     if(!ClassicTextures.Contains(TEXT("options"))){
@@ -79,13 +80,25 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     auto Canvas=SNew(SCanvas);
     auto At=[&](float X,float Y,float W,float H,TSharedRef<SWidget> Widget){Canvas->AddSlot().Position(FVector2D(X,Y)).Size(FVector2D(W,H))[Widget];};
     auto Label=[&](const FString& Text,int32 Size=12){return SNew(STextBlock).Text(FText::FromString(Text)).Font(FCoreStyle::GetDefaultFontStyle("Regular",Size)).ColorAndOpacity(FLinearColor(.94,.91,.78));};
-    auto Button=[&](const FString& Text,float X,float Y,float W,TFunction<void()> Click){At(X,Y,W,22,SNew(SButton).IsFocusable(false).ContentPadding(FMargin(2,0)).OnClicked_Lambda([Click](){Click();return FReply::Handled();})[Label(Text,Text==TEXT("CHARACTER SELECT")?8:10)]);};
+    auto Button=[&](const FString& Text,float X,float Y,float W,TFunction<void()> Click){At(X,Y,W,22,SNew(SButton).IsFocusable(false).ContentPadding(FMargin(2,0)).OnClicked_Lambda([Click](){Click();return FReply::Handled();})[Label(Text,(Y==34||Text==TEXT("CHARACTER SELECT"))?8:10)]);};
     At(0,0,384,420,SNew(SImage).Image(ClassicArt(TEXT("options"))));
     At(15,5,330,19,Label(TEXT("OPTIONS"),13));
-    Button(TEXT("SOUND"),15,34,110,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=false;OpenOptions();});
-    Button(TEXT("CONTROLS"),135,34,110,[this](){CloseOptions();bControlsOptions=true;bDisplayOptions=false;OpenOptions();});
-    Button(TEXT("DISPLAY"),255,34,110,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=true;OpenOptions();});
-    if(bDisplayOptions){
+    Button(TEXT("SOUND"),15,34,83,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
+    Button(TEXT("CONTROLS"),105,34,83,[this](){CloseOptions();bControlsOptions=true;bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
+    Button(TEXT("DISPLAY"),195,34,83,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=true;bInterfaceOptions=false;OpenOptions();});
+    Button(TEXT("INTERFACE"),285,34,83,[this](){CloseOptions();bControlsOptions=bDisplayOptions=false;bInterfaceOptions=true;OpenOptions();});
+    if(bInterfaceOptions){
+        At(20,85,300,22,Label(TEXT("UI SCALE")));
+        At(20,118,275,20,SNew(SSlider).MinValue(.6f).MaxValue(1.6f).StepSize(.05f).MouseUsesStep(true)
+            .Value_Lambda([this](){return PendingInterfaceScale;})
+            .OnMouseCaptureBegin_Lambda([this](){bInterfaceScaleDragging=true;})
+            .OnValueChanged_Lambda([this](float V){PreviewInterfaceScale(V);})
+            .OnMouseCaptureEnd_Lambda([this](){const bool Dragging=bInterfaceScaleDragging;bInterfaceScaleDragging=false;if(Dragging&&bOptionsOpen)CommitInterfaceScale();}));
+        At(305,116,55,22,SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",12)).Text_Lambda([this](){return FText::FromString(FString::Printf(TEXT("%d%%"),FMath::RoundToInt(PendingInterfaceScale*100)));}));
+        At(20,164,340,75,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text(FText::FromString(TEXT("Make the interface bigger or smaller. Release the slider to apply. Large windows fit the screen automatically."))));
+        Button(TEXT("RESTORE DEFAULT SIZE"),70,255,244,[this](){bInterfaceScaleDragging=false;PendingInterfaceScale=1.f;CommitInterfaceScale();});
+        At(20,310,340,68,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text_Lambda([this](){return FText::FromString(InterfaceMessage.IsEmpty()?TEXT("Changes are saved automatically. Window positions follow their screen edges."):InterfaceMessage);}));
+    }else if(bDisplayOptions){
         if(DisplaySettings){
             auto Choice=[&](float Y,const FString& Name,const TArray<FString>& Values,TFunction<int32()> Selected,TFunction<void(int32)> Change,TFunction<bool()> Enabled){
                 At(20,Y,340,20,Label(Name,11));
@@ -135,12 +148,12 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     Button(TEXT("CHARACTER SELECT"),10,394,114,[this](){CloseOptions();auto Value=MakeShared<FJsonObject>();Value->SetStringField(TEXT("text"),TEXT("/quit"));Send(TEXT("chat"),Value);});
     Button(TEXT("QUIT"),135,394,114,[this](){CloseOptions();Send(TEXT("logout"));bExiting=true;Status=TEXT("Saving and logging out...");});
     Button(TEXT("CLOSE"),256,394,114,[this](){CloseOptions();});
-    const float Scale=ClassicScale();auto Overlay=SNew(SOverlay);Overlay->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).WidthOverride(384*Scale).HeightOverride(420*Scale)[SNew(SScaleBox).Stretch(EStretch::ScaleToFit)[SNew(SBox).WidthOverride(384).HeightOverride(420)[Canvas]]]];
+    auto Overlay=SNew(SOverlay);Overlay->AddSlot().HAlign(HAlign_Center).VAlign(VAlign_Center)[SNew(SBox).WidthOverride_Lambda([this](){return 384*ClassicScale();}).HeightOverride_Lambda([this](){return 420*ClassicScale();})[SNew(SScaleBox).Stretch(EStretch::ScaleToFit)[SNew(SBox).WidthOverride(384).HeightOverride(420)[Canvas]]]];
     OptionsOverlay=Overlay;GetWorld()->GetGameViewport()->AddViewportWidgetContent(Overlay,90);
 }
 bool UDAoCBridgeSubsystem::CloseOptions(){
     if(DisplayConfirmUntil>0)ConfirmDisplayChange(false);
-    const bool WasOpen=bOptionsOpen;bOptionsOpen=false;
+    const bool WasOpen=bOptionsOpen;bOptionsOpen=false;bInterfaceScaleDragging=false;if(InterfaceSettings)PendingInterfaceScale=InterfaceSettings->Scale;
     BindingCaptureAction.Empty();BindingCaptureSlot=-1;if(WasOpen){ChatClosedAt=FPlatformTime::Seconds();if(MovementKeys)MovementKeys->RunLock=false;}
     if(OptionsOverlay&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(OptionsOverlay.ToSharedRef());
     OptionsOverlay.Reset();return WasOpen;

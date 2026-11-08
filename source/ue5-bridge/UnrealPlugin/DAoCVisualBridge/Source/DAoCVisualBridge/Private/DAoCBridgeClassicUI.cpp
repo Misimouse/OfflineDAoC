@@ -1,6 +1,7 @@
 #include "DAoCBridgeKeyConfiguration.h"
 #include "HAL/FileManager.h"
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeInterfaceSettings.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Engine/World.h"
@@ -132,7 +133,7 @@ bool VerifyDAoCItemHandoverDrag(){
     auto Handled=Make();Handled->OnDrop(true,Event(EKeys::LeftMouseButton));auto Cancelled=Make();Cancelled->OnDrop(false,FPointerEvent());auto Right=Make();Right->OnDrop(false,Event(EKeys::RightMouseButton));
     return Correct&&Calls==1;
 }
-float UDAoCBridgeSubsystem::ClassicScale()const{const auto S=UIViewportSize();return FMath::Clamp(float(FMath::Min(S.Y/600.,S.X/800.)*.78),.4f,2.5f);}
+float UDAoCBridgeSubsystem::ClassicScale()const{return FBridgeInterfaceSettings::EffectiveScale(UIViewportSize(),InterfaceSettings?InterfaceSettings->Scale:1.f);}
 const FSlateBrush* UDAoCBridgeSubsystem::ClassicArt(const FString& Name,FVector2D Min,FVector2D Max){
  const FString Key=Name+Min.ToString()+Max.ToString();if(auto* B=ClassicBrushes.Find(Key))return B->Get();
  UTexture2D* Tex=nullptr;if(auto* Existing=ClassicTextures.Find(Name))Tex=Existing->Get();else{Tex=FImageUtils::ImportFileAsTexture2D(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI")/(Name+TEXT(".png")));if(Tex){Tex->SRGB=true;Tex->Filter=TF_Bilinear;ClassicTextures.Add(Name,Tex);}}

@@ -93,7 +93,7 @@ bool UDAoCBridgeSubsystem::ShouldCreateSubsystem(UObject* Outer) const {
     return W&&W->IsGameWorld()&&FParse::Param(FCommandLine::Get(),TEXT("DaocBridge"));
 }
 void UDAoCBridgeSubsystem::Initialize(FSubsystemCollectionBase& C) {
-    Super::Initialize(C);bAutoInteractionTest=FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoInteractionTest"));Status=TEXT("Waiting for the Godot client...");
+    Super::Initialize(C);LoadInterfaceSettings();bAutoInteractionTest=FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoInteractionTest"));Status=TEXT("Waiting for the Godot client...");
     ControlsFile=FPaths::Combine(FPaths::ProjectSavedDir(),TEXT("DAoCControls.json"));
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeControlsSettings="),ControlsFile);
     FString ControlText;TSharedPtr<FJsonObject> ControlSettings;
@@ -610,6 +610,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+    if(TickInterfaceScaleAcceptance())return;
     if(TickHoverDetailsAcceptance())return;
     if(TickItemHandoverAcceptance())return;
     if(TickEmblemPickerAcceptance())return;
