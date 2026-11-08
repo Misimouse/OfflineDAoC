@@ -66,6 +66,10 @@ def audit(workspace,install):
     if concentration_proof.exists() and json.loads(concentration_proof.read_text()).get('passed',False):
         row('Original concentration lifecycle',['net/server.gd','ui/game_ui.gd'],['Godot/concentration_state.gd'],'installed_existing_runtime_verified_owner_review_pending','14 real checks with ordinary accounts, two self buffs and foreign cancellation refusal; 26 state and 82 installed native checks. Pool, list indices, owners, icons and refunds retain server authority. Cross-player casting geometry and general timed effects are outside this package.')
         result['next_package']='CLIENT-PETS: audit original owned pet summon/commands/release and stale identity; verify disposable ordinary-player behavior before choosing changes'
+    pet_proof=workspace/'PetLifecycleLab/verified.json'
+    if pet_proof.exists() and json.loads(pet_proof.read_text()).get('passed',False):
+        row('Original owned-pet lifecycle',['net/server.gd','ui/game_ui.gd'],['Godot/pet_state.gd'],'installed_existing_runtime_verified_owner_review_pending','17 real ordinary-account checks, 28 state and 80 installed native checks. Original summon/model/ownership, seven orders, mode acknowledgements, release and safe quickbar rebinding. Live combat/navigation and every class pet remain separate.')
+        result['next_package']='CLIENT-COMPASS: audit original compass art, character heading, visibility and retained layout before adding the missing native surface'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
