@@ -80,14 +80,26 @@ void UDAoCBridgeSubsystem::OpenOptions(){
     auto Canvas=SNew(SCanvas);
     auto At=[&](float X,float Y,float W,float H,TSharedRef<SWidget> Widget){Canvas->AddSlot().Position(FVector2D(X,Y)).Size(FVector2D(W,H))[Widget];};
     auto Label=[&](const FString& Text,int32 Size=12){return SNew(STextBlock).Text(FText::FromString(Text)).Font(FCoreStyle::GetDefaultFontStyle("Regular",Size)).ColorAndOpacity(FLinearColor(.94,.91,.78));};
-    auto Button=[&](const FString& Text,float X,float Y,float W,TFunction<void()> Click){At(X,Y,W,22,SNew(SButton).IsFocusable(false).ContentPadding(FMargin(2,0)).OnClicked_Lambda([Click](){Click();return FReply::Handled();})[Label(Text,(Y==34||Text==TEXT("CHARACTER SELECT"))?8:10)]);};
+    auto Button=[&](const FString& Text,float X,float Y,float W,TFunction<void()> Click){At(X,Y,W,22,SNew(SButton).IsFocusable(false).ContentPadding(FMargin(2,0)).OnClicked_Lambda([Click](){Click();return FReply::Handled();})[SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)[Label(Text,(Y==34||Text==TEXT("CHARACTER SELECT"))?8:10)]]);};
     At(0,0,384,420,SNew(SImage).Image(ClassicArt(TEXT("options"))));
     At(15,5,330,19,Label(TEXT("OPTIONS"),13));
-    Button(TEXT("SOUND"),15,34,83,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
-    Button(TEXT("CONTROLS"),105,34,83,[this](){CloseOptions();bControlsOptions=true;bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
-    Button(TEXT("DISPLAY"),195,34,83,[this](){CloseOptions();bControlsOptions=false;bDisplayOptions=true;bInterfaceOptions=false;OpenOptions();});
-    Button(TEXT("INTERFACE"),285,34,83,[this](){CloseOptions();bControlsOptions=bDisplayOptions=false;bInterfaceOptions=true;OpenOptions();});
-    if(bInterfaceOptions){
+    Button(TEXT("SOUND"),15,34,67,[this](){CloseOptions();bControlsOptions=bDisplayOptions=bInterfaceOptions=bWindowOptions=false;OpenOptions();});
+    Button(TEXT("CONTROLS"),86,34,67,[this](){CloseOptions();bControlsOptions=true;bDisplayOptions=bInterfaceOptions=bWindowOptions=false;OpenOptions();});
+    Button(TEXT("DISPLAY"),157,34,67,[this](){CloseOptions();bDisplayOptions=true;bControlsOptions=bInterfaceOptions=bWindowOptions=false;OpenOptions();});
+    Button(TEXT("INTERFACE"),228,34,67,[this](){CloseOptions();bInterfaceOptions=true;bControlsOptions=bDisplayOptions=bWindowOptions=false;OpenOptions();});
+    Button(TEXT("WINDOWS"),299,34,69,[this](){CloseOptions();bWindowOptions=true;bControlsOptions=bDisplayOptions=bInterfaceOptions=false;OpenOptions();});
+    if(bWindowOptions){
+        At(20,74,340,36,Label(TEXT("OPEN OR CLOSE WINDOWS"),11));
+        const TCHAR* Ids[]={TEXT("panel"),TEXT("chat_combat"),TEXT("minigroup"),TEXT("map"),TEXT("journal"),TEXT("guild")};
+        const TCHAR* Names[]={TEXT("CHARACTER PANEL"),TEXT("COMBAT CHAT"),TEXT("GROUP"),TEXT("MAP"),TEXT("QUEST JOURNAL"),TEXT("GUILD")};
+        for(int32 I=0;I<6;++I){const FString Id=Ids[I],Name=Names[I];At(20+(I%2)*175,118+(I/2)*32,165,24,SNew(SButton).IsEnabled(ClassicState.IsValid()).IsFocusable(false).OnClicked_Lambda([this,Id](){ToggleRecoverableWindow(Id);return FReply::Handled();})[
+            SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(Name)).ColorAndOpacity_Lambda([this,Id](){return RecoverableWindowOpen(Id)?FLinearColor(1,.84,.45):FLinearColor(.72,.72,.70);})]);}
+        At(20,226,340,64,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",10)).Text(FText::FromString(ClassicState.IsValid()?TEXT("Lit buttons mark open windows. Reopening keeps their position. Guild contents are provided by the server."):TEXT("Enter the world to manage its windows."))));
+        At(70,306,244,24,SNew(SButton).IsEnabled(ClassicState.IsValid()).IsFocusable(false).OnClicked_Lambda([this](){ResetWindowLayout();return FReply::Handled();})[Label(TEXT("RESET WINDOW LAYOUT"),10)]);
+        At(20,344,340,34,SNew(STextBlock).AutoWrapText(true).Font(FCoreStyle::GetDefaultFontStyle("Regular",9)).Text(FText::FromString(TEXT("Restores window positions and sizes. Your items, quickbar actions, chat filters and settings are kept."))));
+    }
+    else if(bInterfaceOptions){
+
         At(20,85,300,22,Label(TEXT("UI SCALE")));
         At(20,118,275,20,SNew(SSlider).MinValue(.6f).MaxValue(1.6f).StepSize(.05f).MouseUsesStep(true)
             .Value_Lambda([this](){return PendingInterfaceScale;})

@@ -50,6 +50,10 @@ def audit(workspace,install):
     if scale_installed:
         row('Original interface scale',['ui/options_window.gd','ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceSettings.cpp','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceOptions.cpp'],'installed_owner_review_pending','Original 60-160% slider applies on release, persists across processes and reflows existing windows with viewport fit. Other original Interface/Options settings remain separate.')
         result['next_package']='CLIENT-WINDOW-RESTORE: audit original Options / Windows recovery and reset against existing native windows; do not add unavailable world services'
+    windows_receipt=workspace/'WindowRecoveryLab/installed.json';windows_installed=windows_receipt.exists() and json.loads(windows_receipt.read_text()).get('installed',False)
+    if windows_installed:
+        row('Original window recovery',['ui/options_window.gd','ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeWindowRecovery.cpp'],'installed_owner_review_pending','Six existing closable windows, retained positions and reset of native layout defaults; custom chat filters, quickbar actions, key bindings and scale retained. Unavailable original surfaces remain separate.')
+        result['next_package']='CLIENT-VITALS: audit the confirmed positive absolute-health versus rounded-zero-percent ambiguity against original Godot/DOL state, with isolated proof before changing runtime'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

@@ -108,6 +108,8 @@ HANDOVER_NEW_NAMES={'DAoCBridgeItemHandover.cpp','DAoCBridgeItemHandoverAcceptan
 HOVER_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeEmblemPickerAcceptance.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeHoverDetailsAcceptance.cpp']
 HOVER_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','classic_ui_state.gd']
 HOVER_NEW_NAMES={'DAoCBridgeHoverDetailsAcceptance.cpp'}
+WINDOW_RECOVERY_NEW_NAMES={'DAoCBridgeWindowRecovery.cpp','DAoCBridgeWindowRecoveryAcceptance.cpp'}
+WINDOW_RECOVERY_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp']+['Source/DAoCVisualBridge/Private/'+name for name in sorted(WINDOW_RECOVERY_NEW_NAMES)]
 UI_SCALE_NEW_NAMES={'DAoCBridgeInterfaceSettings.h','DAoCBridgeInterfaceSettings.cpp','DAoCBridgeInterfaceOptions.cpp','DAoCBridgeInterfaceScaleAcceptance.cpp'}
 UI_SCALE_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeOptions.cpp']+['Source/DAoCVisualBridge/Private/'+name for name in sorted(UI_SCALE_NEW_NAMES)]
 
@@ -221,6 +223,30 @@ def verify_files(workspace):
     ui_scale_path=workspace/'UIScaleLab/installed.json'
     ui_scale=json.loads(ui_scale_path.read_text()) if ui_scale_path.exists() else None
     if ui_scale and not ui_scale.get('installed'):ui_scale=None
+    window_recovery_path=workspace/'WindowRecoveryLab/installed.json'
+    window_recovery=json.loads(window_recovery_path.read_text()) if window_recovery_path.exists() else None
+    if window_recovery and not window_recovery.get('installed'):window_recovery=None
+    window_recovery_replacements={}
+    if window_recovery:
+        assert ui_scale and window_recovery['phase']=='complete' and not window_recovery['database_modified'] and not window_recovery['server_rules_modified']
+        assert window_recovery['predecessor_receipt_sha256']==digest(ui_scale_path) and window_recovery['native_before_sha256']==ui_scale['native_after_sha256']
+        plugin=workspace/'Client/Plugins/DAoCVisualBridge';window_recovery_replacements={r['target']:r for r in window_recovery['files']}
+        expected={str(plugin/p) for p in WINDOW_RECOVERY_NATIVE_TARGETS}
+        assert len(window_recovery['files'])==len(window_recovery_replacements)==len(expected) and set(window_recovery_replacements)==expected
+        proof=workspace/'UIScaleLab/native_build.json'
+        assert str(proof) in ui_scale['evidence'] and digest(proof)==ui_scale['evidence'][str(proof)]
+        old_build=json.loads(proof.read_text());old_source={Path(p).as_posix():h for p,h in old_build['source_sha256'].items()}
+        for relative in WINDOW_RECOVERY_NATIVE_TARGETS:
+            row=window_recovery_replacements[str(plugin/relative)]
+            before=None if Path(relative).name in WINDOW_RECOVERY_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
+            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+        binary=window_recovery_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
+        assert binary['before_sha256']==window_recovery['native_before_sha256'] and binary['after_sha256']==window_recovery['native_after_sha256']
+        assert window_recovery['evidence'] and all(digest(Path(p))==h for p,h in window_recovery['evidence'].items())
+    def latest_window_recovery(row,expected):
+        changed=window_recovery_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     ui_scale_replacements={}
     if ui_scale:
         assert consumable and hover and ui_scale['phase']=='complete' and not ui_scale['database_modified'] and not ui_scale['server_rules_modified']
@@ -234,14 +260,14 @@ def verify_files(workspace):
         for relative in UI_SCALE_NATIVE_TARGETS:
             row=ui_scale_replacements[str(plugin/relative)]
             before=None if Path(relative).name in UI_SCALE_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
-            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+            assert row['before_sha256']==before and digest(Path(row['target']))==latest_window_recovery(row,row['after_sha256'])
         binary=ui_scale_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==ui_scale['native_before_sha256'] and binary['after_sha256']==ui_scale['native_after_sha256']
         assert ui_scale['evidence'] and all(digest(Path(p))==h for p,h in ui_scale['evidence'].items())
     def latest_ui_scale(row,expected):
         changed=ui_scale_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_window_recovery(row,expected)
     consumable_replacements={}
     if consumable:
         assert hover and consumable['phase']=='complete' and not consumable['database_modified'] and not consumable['server_rules_modified']
@@ -644,4 +670,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'verified_files':len(original['files'])}

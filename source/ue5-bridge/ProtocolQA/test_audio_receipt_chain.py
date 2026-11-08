@@ -7,7 +7,7 @@ from central_activation_receipts import verify_files, OPTIONS_TARGETS, DOOR_NATI
 from prepare_combined_expansion_data import digest
 
 
-from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES,UI_SCALE_NATIVE_TARGETS,UI_SCALE_NEW_NAMES
+from central_activation_receipts import DISPLAY_NATIVE_TARGETS,DISPLAY_NEW_NAMES,GUILD_NATIVE_TARGETS,GUILD_GODOT_TARGETS,GUILD_NEW_NAMES,EMBLEM_NATIVE_TARGETS,EMBLEM_GODOT_TARGETS,EMBLEM_NEW_NAMES,EMBLEM_UI_TARGETS,HANDOVER_NATIVE_TARGETS,HANDOVER_GODOT_TARGETS,HANDOVER_NEW_NAMES,HOVER_NATIVE_TARGETS,HOVER_GODOT_TARGETS,HOVER_NEW_NAMES,UI_SCALE_NATIVE_TARGETS,UI_SCALE_NEW_NAMES,WINDOW_RECOVERY_NATIVE_TARGETS,WINDOW_RECOVERY_NEW_NAMES
 
 def put(path,value):
     path.parent.mkdir(parents=True,exist_ok=True)
@@ -435,6 +435,25 @@ def verify(workspace):
             old=q.read_bytes();q.write_bytes(b'tampered scale or protected predecessor');rejected();checks+=1;q.write_bytes(old)
         scale['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(scale_path,scale);rejected();checks+=1;scale['files'].pop();put(scale_path,scale)
         assert verify_files(w)['ui_scale_installed'];checks+=1
+        window_native=w/'UIScaleLab/native_build.json'
+        put(window_native,{'source_sha256':{r.removeprefix('Source/'):digest(plugin/r) for r in WINDOW_RECOVERY_NATIVE_TARGETS if r.startswith('Source/') and Path(r).name not in WINDOW_RECOVERY_NEW_NAMES},'binaries_sha256':{Path(r).name:digest(plugin/r) for r in WINDOW_RECOVERY_NATIVE_TARGETS if r.startswith('Binaries/')}})
+        scale['evidence'][str(window_native)]=digest(window_native);put(scale_path,scale)
+        prior=digest(binary);window_rows=[]
+        for relative in WINDOW_RECOVERY_NATIVE_TARGETS:
+            q=plugin/relative;q.parent.mkdir(parents=True,exist_ok=True)
+            before=None if q.name in WINDOW_RECOVERY_NEW_NAMES else digest(q)
+            q.write_bytes(b'new window recovery '+relative.encode());window_rows.append(dict(target=str(q),before_sha256=before,after_sha256=digest(q)))
+        window_proof=w/'WindowRecoveryLab/proof.json';put(window_proof,{'passed':True,'synthetic':True})
+        window_path=w/'WindowRecoveryLab/installed.json';window=dict(installed=True,phase='complete',database_modified=False,server_rules_modified=False,predecessor_receipt_sha256=digest(scale_path),native_before_sha256=prior,native_after_sha256=digest(binary),files=window_rows,evidence={str(window_proof):digest(window_proof)})
+        put(window_path,window);assert verify_files(w)['window_recovery_installed'];checks+=1
+        for field in ['predecessor_receipt_sha256','native_before_sha256','native_after_sha256']:
+            old=window[field];window[field]='0'*64;put(window_path,window);rejected();checks+=1;window[field]=old;put(window_path,window)
+        for row in window_rows:
+            old=row['before_sha256'];row['before_sha256']='0'*64;put(window_path,window);rejected();checks+=1;row['before_sha256']=old;put(window_path,window)
+        for q in [binary,plugin/'Source/DAoCVisualBridge/Private/DAoCBridgeWindowRecovery.cpp',w/'Godot/classic_ui_state.gd',window_native,window_proof,Path(server_rows[0]['target']),wave]:
+            old=q.read_bytes();q.write_bytes(b'tampered window recovery or protected predecessor');rejected();checks+=1;q.write_bytes(old)
+        window['files'].append(dict(target=str(plugin/'unrelated.txt'),before_sha256=None,after_sha256='0'*64));put(window_path,window);rejected();checks+=1;window['files'].pop();put(window_path,window)
+        assert verify_files(w)['window_recovery_installed'];checks+=1
         sw=w/'shar_case';rules=sw/'rules.json';rules.parent.mkdir();rules.write_text('old rules');old_rules=digest(rules)
         sb=sw/'ExpansionRaceLab/CentralDelivery';original=sb/'MinotaurActivation/installed.json'
         put(original,{'installed':True,'only_race_enabled':21,'files':[{'target':str(rules),'after_sha256':old_rules}]})

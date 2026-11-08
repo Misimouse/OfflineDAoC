@@ -5,11 +5,12 @@ from pathlib import Path
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,engine,installed=False):
-    root=workspace/'UIScaleLab';bp=root/'native_build.json';build=json.loads(bp.read_text());assert build['passed']
+def verify(workspace,engine,installed=False,lab_name="UIScaleLab"):
+    assert lab_name in ["UIScaleLab","WindowRecoveryLab"]
+    root=workspace/lab_name;bp=root/'native_build.json';build=json.loads(bp.read_text());assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/p)==h for p,h in build['source_sha256'].items())
-    if installed:assert verify_files(workspace)['ui_scale_installed']
+    if installed:assert verify_files(workspace)['window_recovery_installed' if lab_name=='WindowRecoveryLab' else 'ui_scale_installed']
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     expected=build['binaries_sha256'][normal.name] if installed else build['normal_binary_sha256'];assert digest(normal)==expected
     out=root/('InstalledScaleAcceptance' if installed else 'ScaleAcceptance')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True)

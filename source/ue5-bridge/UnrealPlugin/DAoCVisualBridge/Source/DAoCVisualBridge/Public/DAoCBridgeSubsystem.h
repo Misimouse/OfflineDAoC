@@ -131,6 +131,11 @@ private:
     void PreviewInterfaceScale(float Value);
     void CommitInterfaceScale();
     bool TickInterfaceScaleAcceptance();
+    bool bWindowOptions=false;
+    bool RecoverableWindowOpen(const FString& Id)const;
+    void ToggleRecoverableWindow(const FString& Id);
+    void ResetWindowLayout();
+    bool TickWindowRecoveryAcceptance();
     FSocket* Socket = nullptr;
     TArray<uint8> Incoming, Outgoing;
     FString Session, Status, Character, CatalogPath;
