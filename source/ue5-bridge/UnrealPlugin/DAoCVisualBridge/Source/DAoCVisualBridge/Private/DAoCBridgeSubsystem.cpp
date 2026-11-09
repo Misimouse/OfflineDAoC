@@ -627,6 +627,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickInventoryQuantityAcceptance())return;
     if(TickPersonalTorchVisual())return;
     if(TickPersonalTorchAcceptance())return;
+    if(TickNpcGhostMaterialAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;
     if(TickPlayerVitalsAcceptance())return;

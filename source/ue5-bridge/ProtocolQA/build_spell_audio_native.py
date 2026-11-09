@@ -10,7 +10,7 @@ from prepare_combined_expansion_data import digest
 
 def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab','PersonalTorchLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab','PersonalTorchLab','NpcVisualFlagsLab']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -26,7 +26,8 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     if lab_name=='SiegeWorldLab':
         from prepare_siege_world_content import prepare
         prepare(workspace)
-    for target,source in [(host/'Content',workspace.parent/'DAoC-Enhanced-Unreal/Content'),(plugin/'Content',central/'Content')]:
+    native_content=root/'RenderHost/Plugins/DAoCVisualBridge/Content' if lab_name=='NpcVisualFlagsLab' else central/'Content'
+    for target,source in [(host/'Content',workspace.parent/'DAoC-Enhanced-Unreal/Content'),(plugin/'Content',native_content)]:
         if lab_name in ['LiveRidingLab','SiegeWorldLab'] and target==plugin/'Content':continue
         if target.exists():assert target.is_junction() and target.resolve()==source.resolve()
         else:subprocess.run(['powershell.exe','-NoProfile','-Command','New-Item -ItemType Junction -Path '+quote(target)+' -Target '+quote(source)+' | Out-Null'],check=True,creationflags=subprocess.CREATE_NO_WINDOW)

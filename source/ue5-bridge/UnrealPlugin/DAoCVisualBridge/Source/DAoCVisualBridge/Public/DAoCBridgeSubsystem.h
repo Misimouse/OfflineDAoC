@@ -513,6 +513,7 @@ private:
     void ClearPersonalTorch();
     void RequestPersonalTorch();
     bool TickPersonalTorchAcceptance();
+    bool TickNpcGhostMaterialAcceptance();
     bool TickPersonalTorchVisual();
     double WorldClockHour=-1.;
     bool bClassicTimeOpen=true;
