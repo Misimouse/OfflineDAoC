@@ -5,7 +5,7 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 
 def verify(workspace,engine,installed=False,lab_name="InventoryQuantityLab"):
-    assert lab_name in ["InventoryQuantityLab","RvRWindowsLab"]
+    assert lab_name in ["InventoryQuantityLab","RvRWindowsLab","SiegeWindowLab"]
     root=workspace/lab_name;bp=root/'native_build.json';build=json.loads(bp.read_text())
     assert build['passed']
     source=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'

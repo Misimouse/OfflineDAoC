@@ -16,6 +16,15 @@ def latest(rows,row,expected):
         expected=replacement['after_sha256']
     return expected
 
+def compose(first,second):
+    result={k:dict(v) for k,v in first.items()}
+    for target,row in second.items():
+        if target in result:
+            assert result[target]['after_sha256']==row['before_sha256']
+            result[target]['after_sha256']=row['after_sha256']
+        else:result[target]=dict(row)
+    return result
+
 def verify(workspace,successor_rows=None):
     successor_rows=successor_rows or {}
     root=workspace/'InventoryQuantityLab';path=root/'installed.json'

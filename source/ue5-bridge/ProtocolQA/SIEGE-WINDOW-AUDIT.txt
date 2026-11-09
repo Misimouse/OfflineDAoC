@@ -1,0 +1,11 @@
+SIEGE WINDOW — ORIGINAL SOURCE AUDIT
+
+Original UI: game/ui/siege_window.gd. Fixed 210x196 stone frame with original LOAD, ARM, AIM, FIRE, MOVE, STOP, REPAIR, SALVAGE, RELEASE controls and an ammunition list. Ram SWING has separate original command 10. Closing the ClassicWindow hides it; it does not implicitly send ReleaseControl.
+
+Network: DaocClient.SiegeCommand sends original TCP 0xF5 short zero, command byte, ammunition-index byte. The server's 0xF5 interface is decoded as siege_window with oid, name, can_move, ammo_type, time (tenths), action, ammo_slot, effect and ammunition rows. siege_close has no identity. Nearby 0xE3 siege_anim does not grant control. MovingObjectCreate is decoded into an ordinary npc with moving_object=true and already uses the bridge's normal interaction route.
+
+DOL: SiegeWeaponActionHandler preserves all original server checks for controlling identity, stealth, posture, incapacitation, distance and the individual weapon methods. GameSiegeWeapon.TryTakeControl sends the interface and may begin arming. ReleaseControl sends the close packet. No local prediction of ownership, ammunition consumption, readiness or damage is appropriate.
+
+Bridge work: bounded atomic state validates original packet ranges and duplicate ammunition indices. Commands require current controlled oid and window revision; LOAD must name a received nonempty ammunition slot; MOVE requires can_move. Presentation countdown reaching zero does not change the server's action state. Closing hides the panel without fabricating release. Logout/character/region/server close clears control. Native siege interface, ground targeting, weapon animation and ordinary-player live proof remain separate required acceptance work.
+
+Sequence: state tests -> original disposable-server take/release/reacquire -> original native interface and real delegates -> native regression and guarded delivery. No temporary replacement UI, ordinary played database changes or whole-world/siege warfare acceptance. This package does not enable frontier geography.

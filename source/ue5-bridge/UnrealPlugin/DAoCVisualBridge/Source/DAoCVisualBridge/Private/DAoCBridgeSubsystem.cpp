@@ -236,6 +236,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     const TSharedPtr<FJsonObject>* PlayerStatus=nullptr;if(M->TryGetObjectField(TEXT("player_status"),PlayerStatus))ApplyPlayerStatus(*PlayerStatus);
     const TSharedPtr<FJsonObject>* Clock=nullptr;ApplyWorldClock(M->TryGetObjectField(TEXT("world_clock"),Clock)?*Clock:nullptr);
     const TSharedPtr<FJsonObject>* Classic=nullptr;if(M->TryGetObjectField(TEXT("classic_ui"),Classic))ApplyClassicUI(*Classic);
+    const TSharedPtr<FJsonObject>* Siege=nullptr;ApplySiege(M->TryGetObjectField(TEXT("siege"),Siege)?*Siege:nullptr);
     const TSharedPtr<FJsonObject>* War=nullptr;ApplyRealmWar(M->TryGetObjectField(TEXT("realm_war"),War)?*War:nullptr);
     ApplyChat(M);
     const TSharedPtr<FJsonObject>* Exchange=nullptr;if(M->TryGetObjectField(TEXT("exchange"),Exchange))ApplyExchange(*Exchange);
@@ -614,6 +615,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
 void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickStealthMaterialAcceptance())return;
     if(TickRealmWarAcceptance())return;
+    if(TickSiegeAcceptance())return;
     if(TickInventoryQuantityAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;

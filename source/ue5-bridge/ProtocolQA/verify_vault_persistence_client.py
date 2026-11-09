@@ -6,7 +6,7 @@ from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 
 def verify(workspace,install,engine,quantity_candidate=False,candidate_lab="InventoryQuantityLab"):
-    assert candidate_lab in ["InventoryQuantityLab","RvRWindowsLab"]
+    assert candidate_lab in ["InventoryQuantityLab","RvRWindowsLab","SiegeWindowLab"]
     assert verify_files(workspace)['hover_details_installed']
     source=Path(__file__).resolve().parents[1]
     root=workspace/(candidate_lab+'/VaultRegression' if quantity_candidate else 'VaultPersistenceLab/Client')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')

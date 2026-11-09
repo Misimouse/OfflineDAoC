@@ -35,7 +35,7 @@ bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{
  if(bClassicTimeOpen&&Hit(ClassicTimeBox))return true;
  if(bClassicCompassOpen&&Hit(ClassicCompassBox))return true;
  if(bClassicOpen&&Hit(ClassicPanelBox)||bClassicMiniGroupOpen&&Hit(ClassicMiniGroupBox))return true;
- for(const auto& W:{ClassicDetailPanel,ClassicGroupConfirmPanel,ClassicJournalPanel,ClassicTrainerPanel,ClassicVaultPanel,ClassicMerchantPanel,ExchangePanel,GuildPanel,EmblemPickerPanel,ZoneMapPanel,RealmWarPanel})if(Hit(W))return true;
+ for(const auto& W:{ClassicDetailPanel,ClassicGroupConfirmPanel,ClassicJournalPanel,ClassicTrainerPanel,ClassicVaultPanel,ClassicMerchantPanel,ExchangePanel,GuildPanel,EmblemPickerPanel,ZoneMapPanel,RealmWarPanel,SiegePanel})if(Hit(W))return true;
  for(const auto& W:ClassicBarBoxes)if(Hit(W))return true;
  for(const auto& W:ChatPanels)if(Hit(W))return true;
  for(const auto& W:WorldBubblePanels)if(Hit(W))return true;

@@ -1,0 +1,11 @@
+ORIGINAL SIEGE CONTROL WINDOW
+
+The bridge now exposes the original server-granted siege interface and original command IDs. Right-click an actual siege weapon to request control. The original stone window lists received ammunition and provides LOAD / ARM / AIM / FIRE / MOVE / STOP / REPAIR / SALVAGE / RELEASE. The server remains authoritative for ownership, posture, distance, ammunition, timers, valid targets and damage. A presentation timer reaching zero never implies readiness.
+
+The painted cross and Escape hide the window without releasing control, matching the original client. /siege reopens the hidden window only while original control is still present. RELEASE waits for the original server close. Character/session/region changes clear the previous weapon identity. Commands from a detached earlier window are rejected.
+
+Validation: 46 state checks; 11 live protocol checks with an ordinary controller and a separate GM creating a disposable original field ballista; 26 native Slate checks including real button delegates, frame capture, stale-window refusal and saved position. Existing realm-war, quantity, vault and window recovery checks are required before delivery. Private database and server libraries restored, no normal world geometry or played database changes.
+
+Scope: this is the original siege control window and its command transport. Ground targeting, world weapon animation/projectiles and full fortress warfare are still independent integration/acceptance tasks. MOVE and ground-target artillery require the original ground-target path; this window does not invent one or substitute a different game rule. No permanent siege object is planted in Connacht by this delivery.
+
+Owner check, when available: as a GM create a temporary field ballista with the original /siegeweapon create ballista command; right-click it, observe the server arming state, RELEASE, regain control, close and reopen with /siege, then release. Leave whole-world siege combat for its own acceptance block.

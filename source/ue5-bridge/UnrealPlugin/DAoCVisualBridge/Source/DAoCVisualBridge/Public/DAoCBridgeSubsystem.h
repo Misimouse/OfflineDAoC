@@ -142,6 +142,7 @@ private:
     bool TickWorldClockAcceptance();
     bool TickInventoryQuantityAcceptance();
     bool TickRealmWarAcceptance();
+    bool TickSiegeAcceptance();
     bool TickStealthMaterialAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
@@ -440,6 +441,17 @@ private:
     bool CloseClassicQuantity();
     void RefreshClassicQuantity();
     void AcceptClassicQuantity();
+    TSharedPtr<FJsonObject> SiegeState;
+    TSharedPtr<SWidget> SiegeOverlay,SiegePanel;
+    FVector2D SiegePosition=FVector2D(120,50);
+    int64 SiegeRevision=-1;
+    int32 SiegeAmmoIndex=-1;
+    double SiegeReceivedAt=0,SiegeTimeLeft=0;
+    bool bSiegeOpen=false;
+    void ApplySiege(TSharedPtr<FJsonObject> State);
+    void SendSiegeCommand(int32 Command);
+    bool CloseSiege(bool Notify=true);
+    void RefreshSiege();
     TSharedPtr<FJsonObject> RealmWarState,RealmWarData;
     TSharedPtr<SWidget> RealmWarOverlay,RealmWarPanel;
     bool bRealmWarOpen=false;
