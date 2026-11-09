@@ -35,6 +35,7 @@ bool UDAoCBridgeSubsystem::TickInventoryQuantityAcceptance(){
     }
     if(FPlatformTime::Seconds()-Run.At<1)return true;
     if(ClassicQuantityPanel){
+        Check(WorldPointerBlocked(ClassicQuantityPanel->GetCachedGeometry().LocalToAbsolute(FVector2D(60,40))),TEXT("quantity chooser blocks world selection behind it"));
         Check(ClassicQuantityPanel->GetCachedGeometry().GetLocalSize().Equals(FVector2D(128,96),.1),TEXT("original XML dimensions retained"));
         TArray<FColor> Pixels;TArray<uint8> Bytes;FIntVector Size=FIntVector::ZeroValue;bool Captured=FSlateApplication::Get().TakeScreenshot(ClassicQuantityPanel.ToSharedRef(),Pixels,Size);if(Captured){FImageUtils::CompressImageArray(Size.X,Size.Y,Pixels,Bytes);Captured=FFileHelper::SaveArrayToFile(Bytes,*(Path+TEXT(".png")));}Check(Captured,TEXT("original quantity window rendered"));
         TArray<TSharedPtr<SButton>> Buttons;TFunction<void(TSharedRef<SWidget>)> Visit=[&](TSharedRef<SWidget> Widget){if(Widget->GetTypeAsString()==TEXT("SButton"))Buttons.Add(StaticCastSharedRef<SButton>(Widget));auto Children=Widget->GetChildren();for(int32 I=0;I<Children->Num();++I)Visit(Children->GetChildAt(I));};Visit(ClassicQuantityPanel.ToSharedRef());Check(Buttons.Num()==5,TEXT("close arrows accept cancel have actual buttons"));

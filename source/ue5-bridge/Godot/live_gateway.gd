@@ -22,6 +22,7 @@ var live_riding:RefCounted
 var travel_routes:RefCounted
 var gm_mode:RefCounted
 var release_state:RefCounted
+var realm_war:RefCounted
 var concentration:RefCounted
 var pet:RefCounted
 var trainer:RefCounted
@@ -122,6 +123,7 @@ func _ready()->void:
         if audio_index is Dictionary:combat_audio.configure(audio_index.get("combat_model_sets",{}),audio_index.get("combat_weapon_models",{}))
     gm_mode=load(folder.path_join("gm_test_mode.gd")).new()
     release_state=load(folder.path_join("player_release.gd")).new()
+    realm_war=load(folder.path_join("realm_war_state.gd")).new()
     concentration=load(folder.path_join("concentration_state.gd")).new()
     pet=load(folder.path_join("pet_state.gd")).new()
     trainer=load(folder.path_join("trainer_state.gd")).new()
@@ -247,6 +249,7 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
         combat_visual.remove(id)
 
 func world_event(kind:String,data:Dictionary)->void:
+    realm_war.consume(kind,data)
     live_riding.consume(kind,data,Time.get_ticks_msec())
     player_models.consume(kind,data)
     server_sound.consume(kind,data,int(server.entry.get("zone",-1)) if server.playing else -1,position,Time.get_ticks_msec())
@@ -336,6 +339,8 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action in ["warmap_request","warmap_close"]:
+        realm_war.request(value,server.client,server.playing,Time.get_ticks_msec());return
     if emblem_picker!=null and action in emblem_picker.ACTIONS:
         emblem_picker.sync(server,character_name);emblem_picker.request(value,server);return
     if guild_state!=null and action in guild_state.ACTIONS:
@@ -537,6 +542,7 @@ func _process(_delta:float)->void:
         var casting:Dictionary=spell_cast.snapshot("player:local",now)
         classic_ui.casting=casting.duplicate(true);classic_ui.casting_age_ms=int(casting.get("age_ms",0));classic_ui.casting.erase("age_ms")
         sync_party(now)
+        realm_war.maintain(now)
         journal.sync(server,now);classic_ui.journal=journal.snapshot()
         trainer.sync(server,server.client,now);classic_ui.trainer=trainer.snapshot()
         pet.sync(server,adapter.entities,adapter.oid_to_id);classic_ui.pet=pet.snapshot()
@@ -598,6 +604,7 @@ func _process(_delta:float)->void:
         player_snapshot["release"]=release_state.snapshot()
         transport.snapshot_metadata["player_status"]=player_snapshot
         transport.snapshot_metadata["world_clock"]=world_clock_snapshot()
+        transport.snapshot_metadata["realm_war"]=realm_war.snapshot()
         transport.publish(rows,207,"live-offlinedaoc")
     character_lobby.tick(now,server)
     if now-last_report>1000:last_report=now;write_report()

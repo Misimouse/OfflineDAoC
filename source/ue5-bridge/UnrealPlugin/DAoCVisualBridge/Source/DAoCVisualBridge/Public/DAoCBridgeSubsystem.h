@@ -141,6 +141,7 @@ private:
     bool TickCompassAcceptance();
     bool TickWorldClockAcceptance();
     bool TickInventoryQuantityAcceptance();
+    bool TickRealmWarAcceptance();
     bool TickStealthMaterialAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
@@ -439,6 +440,20 @@ private:
     bool CloseClassicQuantity();
     void RefreshClassicQuantity();
     void AcceptClassicQuantity();
+    TSharedPtr<FJsonObject> RealmWarState,RealmWarData;
+    TSharedPtr<SWidget> RealmWarOverlay,RealmWarPanel;
+    bool bRealmWarOpen=false;
+    int32 RealmWarPage=3;
+    int64 RealmWarRevision=-1;
+    double RealmWarLastRequest=-10000;
+    FVector2D RealmWarPosition=FVector2D(100,40);
+    FString RealmWarSignature;
+    void LoadRealmWarData();
+    void ApplyRealmWar(TSharedPtr<FJsonObject> State);
+    void RequestRealmWarPage(int32 Page);
+    void ToggleRealmWar();
+    bool CloseRealmWar(bool Notify=true);
+    void RefreshRealmWar();
     void ActivateClassicInventorySlot(int32 Slot);
     int32 ClassicLastInventorySlot=-1;
     double ClassicLastInventoryClickAt=0;

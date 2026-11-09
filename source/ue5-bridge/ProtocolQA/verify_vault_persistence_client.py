@@ -5,10 +5,11 @@ from pathlib import Path
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine,quantity_candidate=False):
+def verify(workspace,install,engine,quantity_candidate=False,candidate_lab="InventoryQuantityLab"):
+    assert candidate_lab in ["InventoryQuantityLab","RvRWindowsLab"]
     assert verify_files(workspace)['hover_details_installed']
     source=Path(__file__).resolve().parents[1]
-    root=workspace/('InventoryQuantityLab/VaultRegression' if quantity_candidate else 'VaultPersistenceLab/Client')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    root=workspace/(candidate_lab+'/VaultRegression' if quantity_candidate else 'VaultPersistenceLab/Client')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     project=root/'Godot';project.mkdir(parents=True);(root/'Reports/vault').mkdir(parents=True)
     (project/'project.godot').write_text('[application]\nconfig/name="Private Vault QA"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
     inputs={}
@@ -22,7 +23,7 @@ def verify(workspace,install,engine,quantity_candidate=False):
     state=json.loads((root/'Reports/vault/godot_tests.json').read_text());assert state['passed'] and state['checks']>=25
     fixture=root/'fixture.json';shutil.copy2(workspace/'Reports/vault/fixture.json',fixture);inputs[str(workspace/'Reports/vault/fixture.json')]=digest(fixture)
     receipt=workspace/'HoverDetailsLab/installed.json';inputs[str(receipt)]=digest(receipt)
-    build_path=workspace/'InventoryQuantityLab/native_build.json'
+    build_path=workspace/candidate_lab/'native_build.json'
     build=json.loads(build_path.read_text()) if quantity_candidate else None
     native_project=Path(build['project']) if build else workspace/'Client/DAoCBridgeClient.uproject'
     if build:assert build['passed'] and all(digest(source/'UnrealPlugin/DAoCVisualBridge/Source'/p)==h for p,h in build['source_sha256'].items())

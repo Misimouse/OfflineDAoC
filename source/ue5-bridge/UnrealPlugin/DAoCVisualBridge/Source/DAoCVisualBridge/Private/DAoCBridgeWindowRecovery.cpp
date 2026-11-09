@@ -2,6 +2,7 @@
 #include "Widgets/Layout/SBox.h"
 
 bool UDAoCBridgeSubsystem::RecoverableWindowOpen(const FString& Id)const{
+    if(Id==TEXT("warmap"))return bRealmWarOpen;
     if(Id==TEXT("time"))return bClassicTimeOpen;
     if(Id==TEXT("compass"))return bClassicCompassOpen;
     if(Id==TEXT("panel"))return bClassicOpen;
@@ -14,7 +15,8 @@ bool UDAoCBridgeSubsystem::RecoverableWindowOpen(const FString& Id)const{
 }
 void UDAoCBridgeSubsystem::ToggleRecoverableWindow(const FString& Id){
     if(!ClassicState.IsValid()||bExiting)return;
-    if(Id==TEXT("time"))ToggleWorldClock();
+    if(Id==TEXT("warmap"))ToggleRealmWar();
+    else if(Id==TEXT("time"))ToggleWorldClock();
     else if(Id==TEXT("compass"))ToggleCompass();
     else if(Id==TEXT("panel")){bClassicOpen=!bClassicOpen;bInventoryMoving=false;RefreshClassicPanel();SaveClassicLayout();}
     else if(Id==TEXT("chat_combat"))ToggleCombatChat();
@@ -41,6 +43,7 @@ void UDAoCBridgeSubsystem::ResetWindowLayout(){
     bChatCombatOpen=true;bClassicOpen=true;bClassicMiniGroupOpen=false;
     const double Reserve=FMath::Max(320.,double(ChatReservedHeight())+16.)/ClassicScale();
     ClassicPetPosition={Size.X-330,Size.Y-Reserve-198};ClassicConcentrationPosition={Size.X-468,Size.Y-Reserve-198};
+    RealmWarPosition={100,40};CloseRealmWar();
     ZoneMapPosition={60,80};CloseZoneMap();CloseClassicJournal();CloseClassicTrainer();CloseClassicDetail();CloseGuild();
     UILayoutUnits=FVector2D::ZeroVector;UpdateUILayout();
     RefreshClassicPanel();RefreshClassicBars();RefreshClassicMiniGroup();
