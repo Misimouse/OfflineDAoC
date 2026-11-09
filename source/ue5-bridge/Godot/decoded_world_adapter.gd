@@ -29,6 +29,7 @@ var corpses:Dictionary={}
 var corpse_serial:=0
 const CORPSE_MS:=12000
 const SINK_MS:=4000
+const NPCVisualFlags=preload("npc_visual_flags.gd")
 
 
 func clear_world() -> void:
@@ -195,6 +196,10 @@ func consume_world(kind: String, data: Dictionary) -> void:
             row.session_id=int(data.get("session",0));row.realm=(int(data.get("flags",0))>>2)&3
         if kind=="npc" and data.has("flags"):
             row.realm=int(data.flags)>>6;row.flying=(int(data.flags)&32)!=0
+        if kind=="npc":
+            # Only the create packet owns these bits. Movement flags encode zones.
+            # Replace, never merge: a reused OID must not inherit a prior ghost.
+            row.npc_visual=NPCVisualFlags.decode(data)
         _motion_sample(row,data,kind)
         entities[id]=row;oid_to_id[oid]=id
     elif oid_to_id.has(oid):
