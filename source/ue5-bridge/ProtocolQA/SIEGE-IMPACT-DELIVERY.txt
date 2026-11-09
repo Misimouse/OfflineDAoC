@@ -1,0 +1,11 @@
+ORIGINAL SIEGE IMPACTS — BOUNDED DELIVERY
+
+Problem: DOL's siege fire packet carries a spell-effect ID, but the original Godot world code looked it up directly as a graphics ID. Those are separate catalogues. The bridge now resolves the effect's original target stage: ScorpionBolt2202 ->373, Boulder2204 ->381, BoilingOil2209 ->401.
+
+The server's absolute impact point, including its height offset and navigation adjustment, is converted through the same validated Connacht origin as world bodies. Its millisecond timer delays the original target visual. The independent anchor remains at that point when the source moves or disappears. No fake target actor, damage, readiness or projectile trajectory is invented. Existing visual caps and collision-free render components apply; session changes clear queued impacts.
+
+Verification: 25 Godot state checks; 15 private live protocol checks with an ordinary catapult controller and independent observer; 58 native original spell/impact checks; 236 original permanent weapon-effect checks; 25 delivery-guard simulation checks. Live evidence compares the decoded original FIRE packet with both peers, including navigation-adjusted height. Test database, navigation and server libraries are restored afterward. Native checks are repeated on the installed client. Owner gameplay review remains deferred.
+
+Exact runtime scope: two Godot files, one native source file and two native binary metadata/output files. Backup and hash-checked delivery receipt: SiegeImpactLab/installed.json. No map, server rule, database or original art is changed. Flight/loading graphics, siege audio and the frontier world are separate work; this does not close the entire migration or RvR chapter.
+
+Review when convenient: retain previous pending checks. A controlled catapult with a valid original ground target should show a single original boulder impact after FIRE; ARM and AIM should not produce impacts. Leaving control after firing must not drag/cancel the already announced impact. Normal magic and permanent weapon visuals must remain intact. No permanent siege fixture is planted in the owner's Ardee map.

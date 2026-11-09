@@ -74,10 +74,14 @@ def audit(workspace,install):
     if ground_receipt.exists() and json.loads(ground_receipt.read_text()).get('installed',False):
         row('Original physical ground target',['zone_viewer.gd','net/DaocClient.cs'],['Godot/ground_target_state.gd','Godot/live_gateway.gd'],'installed_owner_review_deferred','Ctrl+G configurable; original yellow geometry/bitmap; physical ray and independent terrain sight; original ground target and ability header bits. 26 state,21 private live checks,8 production header checks,26 native checks; original navigation rules retained. No full siege/world frontier claim.')
         result['next_package']='CLIENT-SIEGE-WORLD-ANIMATION-AUDIT'
+    impact_receipt=workspace/'SiegeImpactLab/installed.json'
+    if impact_receipt.exists() and json.loads(impact_receipt.read_text()).get('installed',False):
+        row('Original fixed-world siege impacts',['net/server_world.gd','combat/spell_fx.gd'],['Godot/spell_visual_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeSpellVisuals.cpp'],'installed_owner_review_deferred','Original effect-to-target-stage mapping, server point/timer, independent noncolliding world anchor. 25 state,15 private live,58 native plus236 weapon regression checks. Flight/audio/frontier world remain separate.')
     siege_world_receipt=workspace/'SiegeWorldLab/installed.json'
     if siege_world_receipt.exists() and json.loads(siege_world_receipt.read_text()).get('installed',False):
         row('Original siege world bodies and animation',['weapon_models.gd','npcs/npc.gd','net/server_world.gd'],['Godot/siege_visual_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp'],'installed_owner_review_deferred','Ten original bodies, seven animated and three originally static. Original server announcements, constant idle preservation, owner/non-owner lifecycle. 22 state,24 real,125 native checks. Projectile impacts/sound and full frontier world remain separate.')
         result['next_package']='CLIENT-SIEGE-IMPACT-EFFECTS'
+    if impact_receipt.exists() and json.loads(impact_receipt.read_text()).get('installed',False):result['next_package']='CLIENT-DIVE-CLIMB-AUDIT'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

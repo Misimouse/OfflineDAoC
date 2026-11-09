@@ -152,6 +152,7 @@ func _ready()->void:
     var native_models:Variant=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json")))
     player_models=load(folder.path_join("player_model_state.gd")).new()
     siege_visuals.configure(native_models)
+    spell_visuals.configure_siege(native_models,JSON.parse_string(FileAccess.get_file_as_string("res://content/spells/spell_fx.json")).effects)
     player_models.configure(JSON.parse_string(FileAccess.get_file_as_string("res://content/monsters/monsters.json")),native_models)
     combat_visual.configure(native_models,JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
@@ -287,6 +288,7 @@ func world_event(kind:String,data:Dictionary)->void:
         line_of_sight.request(data,server.client,positions,Time.get_ticks_msec())
     spell_cast.consume(kind,data,int(server.me_oid),adapter.oid_to_id,Time.get_ticks_msec())
     spell_visuals.consume(kind,data,int(server.me_oid),adapter.oid_to_id,Time.get_ticks_msec())
+    if kind=="siege_anim":spell_visuals.consume_siege(data,adapter.oid_to_id,adapter.entities,adapter.zone_info,Time.get_ticks_msec())
     concentration.observe(kind)
     pet.observe(kind,data)
     trainer.observe(kind,data,server)

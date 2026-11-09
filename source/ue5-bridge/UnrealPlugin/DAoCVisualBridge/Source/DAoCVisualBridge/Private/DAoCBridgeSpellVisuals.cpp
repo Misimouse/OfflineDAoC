@@ -39,7 +39,7 @@ float Random(int32 Seed,int32 Salt){return float(GetTypeHash(uint32(Seed)*747796
 // mesh/emitter, never one actor/draw per spark. These components cannot collide.
 class FBridgeSpellVisuals {
     struct FPart {TWeakObjectPtr<UProceduralMeshComponent> Mesh;TWeakObjectPtr<UMaterialInstanceDynamic> Material;J Spec;bool Particle=false,Created=false;TArray<FVector> Base,Normals;TArray<FVector2D> UV;TArray<FLinearColor> Colors;TArray<int32> Indices;TArray<TArray<FVector>> Morphs;int32 Slots=0;};
-    struct FEffect {TWeakObjectPtr<AActor> Actor;FString Owner,Target;J Def;TArray<FPart> Parts;double Began=0,Duration=3;bool Gather=false,Projectile=false,Weapon=false;TWeakObjectPtr<UMeshComponent> Attachment;FTransform WeaponFrame;int32 WeaponId=0;FVector Start;float Scale=1;};
+    struct FEffect {TWeakObjectPtr<AActor> Actor;FString Owner,Target;J Def;TArray<FPart> Parts;double Began=0,Duration=3;bool Gather=false,Projectile=false,Weapon=false,WorldAnchor=false;TWeakObjectPtr<UMeshComponent> Attachment;FTransform WeaponFrame;int32 WeaponId=0;FVector Start;float Scale=1;};
     UDAoCBridgeSubsystem* S;FString Folder;J Catalog;TMap<FString,J> Data;TArray<FEffect> Live;TMap<FString,double> Bursts;int64 LastSequence=0;int32 Created=0,Culled=0,Particles=0;double LastMs=0,PeakMs=0;
     AActor* Entity(const FString& Id)const{auto* P=S->Entities.Find(Id);return P&&IsValid(*P)?P->Get():nullptr;}
     FVector Anchor(AActor* A,const J& Def,FQuat& Rotation)const{
@@ -56,15 +56,15 @@ class FBridgeSpellVisuals {
             else{for(auto X:Array(Part.Spec,TEXT("positions")))Part.Base.Add(Point(X->AsArray()));for(auto X:Array(Part.Spec,TEXT("normals")))Part.Normals.Add(Point(X->AsArray(),1));for(auto X:Array(Part.Spec,TEXT("uvs"))){auto UV=X->AsArray();Part.UV.Add({At(UV,0),At(UV,1)});}for(auto X:Array(Part.Spec,TEXT("colors")))Part.Colors.Add(Color(X->AsArray()));for(auto X:Array(Part.Spec,TEXT("indices")))Part.Indices.Add(int32(X->AsNumber()));for(auto X:Array(Part.Spec,TEXT("morph_targets"))){TArray<FVector> Delta;for(auto Y:X->AsArray())Delta.Add(Point(Y->AsArray()));Part.Morphs.Add(Delta);}}
             E.Parts.Add(MoveTemp(Part));}
     }
-    void Add(int32 Fx,const FString& Owner,const FString& Target,double Age,bool Gather=false,double Duration=0,bool Projectile=false){
+    void Add(int32 Fx,const FString& Owner,const FString& Target,double Age,bool Gather=false,double Duration=0,bool Projectile=false,const FVector* FixedPoint=nullptr){
         auto* A=Entity(Owner);auto Def=Object(Object(Catalog,TEXT("fx")),*FString::FromInt(Fx));if(!A||!Def.IsValid())return;
         const int32 Limit=S->Quality==TEXT("accessible")?24:S->Quality==TEXT("balanced")?40:64;
-        if(Live.Num()>=Limit||FVector::DistSquared(A->GetActorLocation(),S->PlayerPosition)>FMath::Square(Owner==TEXT("player:local")?15000.:8000.)){++Culled;return;}
+        if(Live.Num()>=Limit||FVector::DistSquared(FixedPoint?*FixedPoint:A->GetActorLocation(),S->PlayerPosition)>FMath::Square(Owner==TEXT("player:local")?15000.:8000.)){++Culled;return;}
         const FString Id=String(Def,TEXT("data"));J Resource=Data.FindRef(Id);if(!Resource.IsValid()){Resource=Read(Folder/TEXT("Data")/(Id+TEXT(".json")));if(!Resource.IsValid())return;Data.Add(Id,Resource);}
-        FEffect E;E.Owner=Owner;E.Target=Target;E.Def=Def;E.Gather=Gather;E.Projectile=Projectile;E.Began=FPlatformTime::Seconds()-Age;E.Duration=Duration>0?Duration:Number(Def,TEXT("duration_s"),3);if(E.Duration<=0)E.Duration=3;
-        if(Age>E.Duration)return;FQuat Rotation;E.Start=Projectile?Chest(A):Anchor(A,Def,Rotation);if(Flag(Def,TEXT("autoscale")))if(auto* K=Cast<ASkeletalMeshActor>(A)){auto* Row=S->EntityRows.Find(Owner);const FString Model=FString::FromInt(int32(Row?Number(*Row,TEXT("model_id")):0));auto Figures=Object(Catalog,TEXT("figure_models"));E.Scale=Owner.StartsWith(TEXT("player:"))||(Figures.IsValid()&&Figures->HasField(Model))?A->GetActorScale3D().GetAbsMax():FMath::Clamp(float(K->GetSkeletalMeshComponent()->Bounds.BoxExtent.Z*2/185),.08f,3.f);}
+        FEffect E;E.Owner=Owner;E.Target=Target;E.Def=Def;E.Gather=Gather;E.Projectile=Projectile;E.WorldAnchor=FixedPoint!=nullptr;E.Began=FPlatformTime::Seconds()-Age;E.Duration=Duration>0?Duration:Number(Def,TEXT("duration_s"),3);if(E.Duration<=0)E.Duration=3;
+        if(Age>E.Duration)return;FQuat Rotation=FQuat::Identity;E.Start=FixedPoint?*FixedPoint:Projectile?Chest(A):Anchor(A,Def,Rotation);if(!FixedPoint&&Flag(Def,TEXT("autoscale")))if(auto* K=Cast<ASkeletalMeshActor>(A)){auto* Row=S->EntityRows.Find(Owner);const FString Model=FString::FromInt(int32(Row?Number(*Row,TEXT("model_id")):0));auto Figures=Object(Catalog,TEXT("figure_models"));E.Scale=Owner.StartsWith(TEXT("player:"))||(Figures.IsValid()&&Figures->HasField(Model))?A->GetActorScale3D().GetAbsMax():FMath::Clamp(float(K->GetSkeletalMeshComponent()->Bounds.BoxExtent.Z*2/185),.08f,3.f);}
         FActorSpawnParameters P;P.ObjectFlags|=RF_Transient;P.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;E.Actor=S->GetWorld()->SpawnActor<AActor>(E.Start,Rotation.Rotator(),P);if(!E.Actor.IsValid())return;
-        BuildParts(E,Resource);
+        BuildParts(E,Resource);E.Actor->SetActorHiddenInGame(Age<0);
         Live.Add(MoveTemp(E));++Created;
     }
     bool ReadWeaponFrame(const J& Def,FTransform& Out)const{
@@ -105,11 +105,23 @@ public:
     explicit FBridgeSpellVisuals(UDAoCBridgeSubsystem* Owner):S(Owner){Folder=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/SpellVisuals_v01");Catalog=Read(Folder/TEXT("catalog.json"));}
     ~FBridgeSpellVisuals(){Clear();}
     void Clear(){for(auto& E:Live)if(E.Actor.IsValid())E.Actor->Destroy();Live.Empty();Bursts.Empty();LastSequence=0;}
-    void Apply(const J& Snapshot){for(auto V:Array(Snapshot,TEXT("spell_visuals"))){if(V->Type!=EJson::Object)continue;auto E=V->AsObject();int64 Seq=int64(Number(E,TEXT("seq")));if(Seq<=LastSequence)continue;LastSequence=Seq;double Age=Number(E,TEXT("age_ms"))/1000;if(Age<0||Age>8)continue;FString Kind=String(E,TEXT("kind")),Caster=String(E,TEXT("caster")),Target=String(E,TEXT("target"));if(Kind==TEXT("cancel")){DropGather(Caster);continue;}int32 Id=int32(Number(E,TEXT("effect_id")));auto Def=Object(Object(Catalog,TEXT("effects")),*FString::FromInt(Id));if(!Def.IsValid())continue;
-            if(Kind==TEXT("cast")){DropGather(Caster);double Duration=Number(E,TEXT("duration_ms"))/1000;if(Duration>0)for(auto X:Array(Def,TEXT("gather")))Add(int32(X->AsNumber()),Caster,TEXT(""),Age,true,Duration+1.5);}
+    void Apply(const J& Snapshot){for(auto V:Array(Snapshot,TEXT("spell_visuals"))){if(V->Type!=EJson::Object)continue;auto E=V->AsObject();int64 Seq=int64(Number(E,TEXT("seq")));if(Seq<=LastSequence)continue;LastSequence=Seq;double Age=Number(E,TEXT("age_ms"))/1000;FString Kind=String(E,TEXT("kind"));double DelayMs=Number(E,TEXT("delay_ms"),-1);if(!FMath::IsFinite(Age)||Age<0||Age>(Kind==TEXT("world_impact")?65.535+8:8))continue;FString Caster=String(E,TEXT("caster")),Target=String(E,TEXT("target"));if(Kind==TEXT("cancel")){DropGather(Caster);continue;}int32 Id=int32(Number(E,TEXT("effect_id")));auto Def=Object(Object(Catalog,TEXT("effects")),*FString::FromInt(Id));if(!Def.IsValid())continue;
+            if(Kind==TEXT("world_impact")){
+                // Connacht's origin is validated by ApplySnapshot before events arrive.
+                // The packet point includes the server's +50 height; retain it exactly.
+                const auto Position=Array(E,TEXT("position_m"));bool Valid=Position.Num()==3;
+                for(const auto& Axis:Position)Valid&=Axis.IsValid()&&Axis->Type==EJson::Number&&FMath::IsFinite(Axis->AsNumber());
+                auto* Row=S->EntityRows.Find(Caster);const int32 Model=int32(Row?Number(*Row,TEXT("model_id")):0);
+                auto Entry=S->ModelCatalog.FindRef(FString::FromInt(Model));
+                const bool Allowed=(Id==2202&&(Model==2604||Model==2645))||(Id==2204&&(Model==2598||Model==2599||Model==2606))||(Id==2209&&Model==2607);
+                if(!Valid||!Allowed||!Flag(Entry,TEXT("siege"))||!FMath::IsFinite(DelayMs)||DelayMs<0||DelayMs>65535||DelayMs!=FMath::FloorToDouble(DelayMs)||Age>DelayMs/1000+8)continue;
+                FVector Fixed((At(Position,0)-1364)*100,(At(Position,2)-1263)*100,(At(Position,1)-130)*100);
+                Add(int32(Number(Def,TEXT("target"))),Caster,TEXT(""),Age-DelayMs/1000,false,0,false,&Fixed);
+            }
+            else if(Kind==TEXT("cast")){DropGather(Caster);double Duration=Number(E,TEXT("duration_ms"))/1000;if(Duration>0)for(auto X:Array(Def,TEXT("gather")))Add(int32(X->AsNumber()),Caster,TEXT(""),Age,true,Duration+1.5);}
             else if(Kind==TEXT("release")){DropGather(Caster);const FString Key=Caster+TEXT(":")+FString::FromInt(Id);double Now=FPlatformTime::Seconds();if(Now-Bursts.FindRef(Key)>.25){for(auto X:Array(Def,TEXT("cast_fx")))Add(int32(X->AsNumber()),Caster,Target,Age);Bursts.Add(Key,Now);}double Delay=Number(Def,TEXT("release_s"));int32 Projectile=int32(Number(Def,TEXT("projectile")));if(Projectile>0){auto* A=Entity(Caster);auto* B=Entity(Target);if(A&&B){double Travel=FVector::Distance(A->GetActorLocation(),B->GetActorLocation())/2125.;Add(Projectile,Caster,Target,Age-Delay,false,FMath::Max(.05,Travel),true);Delay+=Travel;}}Add(int32(Number(Def,Flag(E,TEXT("resisted"))?TEXT("resist"):TEXT("target"))),Target,Caster,Age-Delay);if(!Flag(E,TEXT("resisted")))Add(int32(Number(Def,TEXT("buildup"))),Target,Caster,Age-Delay);}
         }}
-    void Tick(float Dt){double Began=FPlatformTime::Seconds();Particles=0;SyncWeapons();for(auto It=Bursts.CreateIterator();It;++It)if(Began-It.Value()>2)It.RemoveCurrent();for(int32 I=Live.Num()-1;I>=0;--I){auto& E=Live[I];auto* Owner=Entity(E.Owner);double Age=Began-E.Began;if(!Owner||!E.Actor.IsValid()||Age>E.Duration){if(E.Actor.IsValid())E.Actor->Destroy();Live.RemoveAt(I);continue;}E.Actor->SetActorHiddenInGame(Age<0);if(Age<0)continue;if(E.Weapon){if(!E.Attachment.IsValid()){E.Actor->Destroy();Live.RemoveAt(I);continue;}const FTransform World=E.WeaponFrame*E.Attachment->GetComponentTransform();E.Actor->SetActorTransform(World);for(auto& Part:E.Parts)if(Part.Particle)Sprites(Part,Age,World,true);else Mesh(Part,Age);continue;}FQuat Rotation;FVector P=Anchor(Owner,E.Def,Rotation);auto* Target=Entity(E.Target);if(Target&&(E.Projectile||Number(E.Def,TEXT("track"))>0)){FVector Goal=Chest(Target);FVector Direction=(Goal-P).GetSafeNormal();if(!Direction.IsNearlyZero())Rotation=FRotationMatrix::MakeFromYZ(-Direction,FVector::UpVector).ToQuat();if(E.Projectile)P=FMath::Lerp(E.Start,Goal,FMath::Clamp(Age/E.Duration,0.,1.));}FTransform World(Rotation,P,FVector(E.Scale));E.Actor->SetActorTransform(World);double T=Age;if(E.Gather){double Cycle=Number(E.Def,TEXT("duration_s"),4);if(Cycle>0)T=FMath::Fmod(T,Cycle);}for(auto& Part:E.Parts)if(Part.Particle)Sprites(Part,T,World);else Mesh(Part,T);}LastMs=(FPlatformTime::Seconds()-Began)*1000;PeakMs=FMath::Max(PeakMs,LastMs);}
+    void Tick(float Dt){double Began=FPlatformTime::Seconds();Particles=0;SyncWeapons();for(auto It=Bursts.CreateIterator();It;++It)if(Began-It.Value()>2)It.RemoveCurrent();for(int32 I=Live.Num()-1;I>=0;--I){auto& E=Live[I];auto* Owner=Entity(E.Owner);double Age=Began-E.Began;if((!Owner&&!E.WorldAnchor)||!E.Actor.IsValid()||Age>E.Duration){if(E.Actor.IsValid())E.Actor->Destroy();Live.RemoveAt(I);continue;}E.Actor->SetActorHiddenInGame(Age<0);if(Age<0)continue;if(E.Weapon){if(!E.Attachment.IsValid()){E.Actor->Destroy();Live.RemoveAt(I);continue;}const FTransform World=E.WeaponFrame*E.Attachment->GetComponentTransform();E.Actor->SetActorTransform(World);for(auto& Part:E.Parts)if(Part.Particle)Sprites(Part,Age,World,true);else Mesh(Part,Age);continue;}FQuat Rotation=FQuat::Identity;FVector P=E.WorldAnchor?E.Start:Anchor(Owner,E.Def,Rotation);auto* Target=Entity(E.Target);if(!E.WorldAnchor&&Target&&(E.Projectile||Number(E.Def,TEXT("track"))>0)){FVector Goal=Chest(Target);FVector Direction=(Goal-P).GetSafeNormal();if(!Direction.IsNearlyZero())Rotation=FRotationMatrix::MakeFromYZ(-Direction,FVector::UpVector).ToQuat();if(E.Projectile)P=FMath::Lerp(E.Start,Goal,FMath::Clamp(Age/E.Duration,0.,1.));}FTransform World(Rotation,P,FVector(E.Scale));E.Actor->SetActorTransform(World);double T=Age;if(E.Gather){double Cycle=Number(E.Def,TEXT("duration_s"),4);if(Cycle>0)T=FMath::Fmod(T,Cycle);}for(auto& Part:E.Parts)if(Part.Particle)Sprites(Part,T,World);else Mesh(Part,T);}LastMs=(FPlatformTime::Seconds()-Began)*1000;PeakMs=FMath::Max(PeakMs,LastMs);}
     J Test(){int32 Checks=0;TArray<TSharedPtr<FJsonValue>> Failures;auto Check=[&](bool B,const FString& Label){++Checks;if(!B)Failures.Add(MakeShared<FJsonValueString>(Label));};
         Check(Catalog.IsValid()&&Object(Catalog,TEXT("effects"))->Values.Num()>5000,TEXT("original spell definition catalogue loaded"));
         auto Local=MakeShared<FJsonObject>();Local->SetStringField(TEXT("id"),TEXT("player:local"));Local->SetStringField(TEXT("kind"),TEXT("player"));Local->SetNumberField(TEXT("model_id"),0);Local->SetNumberField(TEXT("health"),1);Local->SetNumberField(TEXT("size"),50);S->EntityRows.Add(TEXT("player:local"),Local);Check(S->CreateEntity(TEXT("player:local"),Local,FVector::ZeroVector)!=nullptr,TEXT("original caster body loaded"));
@@ -144,6 +156,46 @@ public:
             const FString PreviousQuality=S->Quality;S->Quality=TEXT("accessible");Equip(1);
             for(int32 I=0;I<20;++I){const FString Id=FString::Printf(TEXT("npc:weapon-crowd-%d"),I);auto Row=MakeShared<FJsonObject>();Row->SetStringField(TEXT("id"),Id);Row->SetStringField(TEXT("kind"),TEXT("npc"));Row->SetNumberField(TEXT("model_id"),1984);Row->SetNumberField(TEXT("health"),1);Row->SetNumberField(TEXT("size"),50);S->EntityRows.Add(Id,Row);auto* Crowd=S->CreateEntity(Id,Row,FVector(400+I*30,0,0));if(!Crowd)continue;auto& State=S->RemoteEquipment.FindOrAdd(Id);State.Actor=Crowd;auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("model"),445);Item->SetNumberField(TEXT("effect"),1);int32 MissingModel=0,MissingBone=0;S->AttachEquipment(Crowd,10,Item,true,State.Bindings,MissingModel,MissingBone);}
             Tick(0);Tick(0);Check(Live.Num()==8,TEXT("accessible quality bounds a crowd to eight permanent effects"));bool LocalVisible=false;for(const auto& E:Live)LocalVisible|=E.Owner==TEXT("player:local");Check(LocalVisible,TEXT("crowd limit preserves the local player's own weapon effect"));S->Quality=TEXT("balanced");Tick(0);Check(Live.Num()==16,TEXT("balanced quality allows sixteen permanent effects"));S->Quality=TEXT("high");Tick(0);Check(Live.Num()==21,TEXT("high quality keeps all twenty-one nearby sample weapons within its cap"));S->Quality=PreviousQuality;
+        }
+        if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeSiegeImpactTest"))){
+            Clear();
+            auto Source=MakeShared<FJsonObject>();Source->SetStringField(TEXT("id"),TEXT("npc:impact-source"));Source->SetStringField(TEXT("kind"),TEXT("npc"));Source->SetNumberField(TEXT("model_id"),2598);Source->SetNumberField(TEXT("health"),1);Source->SetNumberField(TEXT("size"),50);
+            S->EntityRows.Add(TEXT("npc:impact-source"),Source);auto* Body=S->CreateEntity(TEXT("npc:impact-source"),Source,FVector::ZeroVector);
+            Check(Body!=nullptr,TEXT("original catapult source body loaded"));
+            Snapshot=MakeShared<FJsonObject>();Event=MakeShared<FJsonObject>();
+            Event->SetNumberField(TEXT("seq"),1);Event->SetStringField(TEXT("kind"),TEXT("world_impact"));Event->SetStringField(TEXT("caster"),TEXT("npc:impact-source"));Event->SetNumberField(TEXT("effect_id"),2204);Event->SetNumberField(TEXT("delay_ms"),1500);Event->SetNumberField(TEXT("age_ms"),0);
+            Event->SetArrayField(TEXT("position_m"),{MakeShared<FJsonValueNumber>(1367),MakeShared<FJsonValueNumber>(130),MakeShared<FJsonValueNumber>(1263)});
+            Snapshot->SetArrayField(TEXT("spell_visuals"),{MakeShared<FJsonValueObject>(Event)});
+            Apply(Snapshot);Check(Live.Num()==1,TEXT("effect 2204 resolves its original target FX 381"));
+            if(Live.Num()==1){
+                auto& Impact=Live[0];Check(Impact.WorldAnchor&&!Impact.Projectile&&!Impact.Gather,TEXT("impact is anchored independently of entity targeting"));
+                Check(Impact.Def==Object(Object(Catalog,TEXT("fx")),TEXT("381")),TEXT("effect namespace is resolved before graphics namespace"));
+                Check(Impact.Start.Equals(FVector(300,0,0),.001),TEXT("server point uses validated Connacht origin exactly once"));
+                Check(Impact.Actor->IsHidden(),TEXT("queued impact is hidden immediately before first tick"));Tick(0);Check(Impact.Actor->IsHidden(),TEXT("server milliseconds delay is preserved"));
+                Impact.Began=FPlatformTime::Seconds()-.5;Tick(0);Check(!Impact.Actor->IsHidden(),TEXT("original impact becomes visible after server delay"));
+                Check(!Impact.Parts.IsEmpty(),TEXT("original impact has renderable source parts"));
+                for(const auto& Part:Impact.Parts){Check(Part.Created&&Part.Material.IsValid(),TEXT("original impact texture and section loaded"));Check(Part.Mesh.IsValid()&&Part.Mesh->GetCollisionEnabled()==ECollisionEnabled::NoCollision,TEXT("impact never adds gameplay collision"));}
+                const int32 Count=Created;Apply(Snapshot);Check(Created==Count&&Live.Num()==1,TEXT("snapshot repetition does not duplicate a siege impact"));
+                Body->SetActorLocation(FVector(700,400,0));Tick(0);Check(Impact.Actor->GetActorLocation().Equals(FVector(300,0,0),.001),TEXT("impact does not follow the moving siege weapon"));
+                Body->Destroy();S->Entities.Remove(TEXT("npc:impact-source"));Tick(0);Check(Live.Num()==1&&Impact.Actor->GetActorLocation().Equals(FVector(300,0,0),.001),TEXT("already fired impact survives source disappearance"));
+                Impact.Began-=20;Tick(0);Check(Live.IsEmpty(),TEXT("impact expires without leaving a world anchor"));
+            }
+            Body=S->CreateEntity(TEXT("npc:impact-source"),Source,FVector::ZeroVector);
+            int32 Seq=2;
+            for(int32 Invalid=0;Invalid<5;++Invalid){
+                Event->SetNumberField(TEXT("seq"),Seq++);Event->SetNumberField(TEXT("delay_ms"),1500);Event->SetNumberField(TEXT("effect_id"),2204);Source->SetNumberField(TEXT("model_id"),2598);
+                Event->SetArrayField(TEXT("position_m"),{MakeShared<FJsonValueNumber>(1367),MakeShared<FJsonValueNumber>(130),MakeShared<FJsonValueNumber>(1263)});
+                if(Invalid==0)Event->SetNumberField(TEXT("delay_ms"),-1);
+                if(Invalid==1)Event->SetNumberField(TEXT("delay_ms"),1.5);
+                if(Invalid==2)Event->SetNumberField(TEXT("effect_id"),2202);
+                if(Invalid==3)Source->SetNumberField(TEXT("model_id"),118);
+                if(Invalid==4)Event->SetArrayField(TEXT("position_m"),{});
+                Apply(Snapshot);Check(Live.IsEmpty(),TEXT("malformed or incompatible impact is ignored"));
+            }
+            Source->SetNumberField(TEXT("model_id"),2598);Event->SetNumberField(TEXT("seq"),Seq++);Event->SetNumberField(TEXT("effect_id"),2204);Event->SetNumberField(TEXT("delay_ms"),60000);Event->SetNumberField(TEXT("age_ms"),9000);
+            Event->SetArrayField(TEXT("position_m"),{MakeShared<FJsonValueNumber>(1367),MakeShared<FJsonValueNumber>(130),MakeShared<FJsonValueNumber>(1263)});
+            Apply(Snapshot);Check(Live.Num()==1&&Live[0].Actor->IsHidden(),TEXT("valid long server delay is not expired after eight seconds"));
+            Clear();Check(Live.IsEmpty(),TEXT("session reset removes queued impacts"));
         }
         S->ClearEntities();Check(Live.IsEmpty(),TEXT("session cleanup leaves no floating spell visuals"));auto O=MakeShared<FJsonObject>();O->SetBoolField(TEXT("passed"),Failures.IsEmpty());O->SetNumberField(TEXT("checks"),Checks);O->SetArrayField(TEXT("failures"),Failures);O->SetBoolField(TEXT("real_server"),false);return O;}
     J Report()const{auto O=MakeShared<FJsonObject>();O->SetBoolField(TEXT("catalog_loaded"),Catalog.IsValid());O->SetNumberField(TEXT("active_effects"),Live.Num());int32 WeaponCount=0;for(const auto& E:Live)if(E.Weapon)++WeaponCount;O->SetNumberField(TEXT("weapon_effects"),WeaponCount);O->SetNumberField(TEXT("created"),Created);O->SetNumberField(TEXT("culled"),Culled);O->SetNumberField(TEXT("active_particles"),Particles);O->SetNumberField(TEXT("last_ms"),LastMs);O->SetNumberField(TEXT("peak_ms"),PeakMs);return O;}

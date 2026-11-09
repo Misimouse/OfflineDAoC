@@ -17,7 +17,14 @@ def asset_rows(workspace):
  assert len(out)==100 and len({r['target'] for r in out})==100
  return proof,out
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+ successor_rows=successor_rows or {}
+ def current_hash(path):
+  replacement=successor_rows.get(str(path))
+  if replacement:
+   assert digest(path)==replacement['after_sha256']
+   return replacement['before_sha256']
+  return digest(path)
  root=workspace/'SiegeWorldLab';path=root/'installed.json';data=read(path) if path.exists() else None
  if not data or not data.get('installed'):return None,{}
  assert data['phase']=='complete' and not data['database_modified'] and not data['server_rules_modified'] and not data['map_geometry_modified'] and not data['teleport_enabled']
@@ -32,15 +39,15 @@ def verify(workspace):
   row=rows[str(plugin/rel)];key=rel.removeprefix('Source/').replace('\\','/')
   expected_before=None if Path(rel).name in NEW_NAMES else previous[key] if rel.startswith('Source/') else before['binaries_sha256'][Path(rel).name]
   expected_after=current[key] if rel.startswith('Source/') else build['binaries_sha256'][Path(rel).name]
-  assert row['before_sha256']==expected_before and row['after_sha256']==expected_after==digest(Path(row['target']))
+  assert row['before_sha256']==expected_before and row['after_sha256']==expected_after==current_hash(Path(row['target']))
  assert data['native_after_sha256']==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
  real_path=Path(data['real_protocol_proof']);real=read(real_path);assert data['evidence'][str(real_path)]==digest(real_path) and real['passed'] and len(real['checks'])>=24 and all(real['checks'].values()) and real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged']
  prior=read(Path(old['real_protocol_proof']))
  for name in GODOT_TARGETS:
-  row=rows[str(workspace/'Godot'/name)];assert row['before_sha256']==(None if name in NEW_NAMES else prior['source_inputs'][row['source']]) and row['after_sha256']==real['source_inputs'][row['source']]==digest(Path(row['target']))
+  row=rows[str(workspace/'Godot'/name)];assert row['before_sha256']==(None if name in NEW_NAMES else prior['source_inputs'][row['source']]) and row['after_sha256']==real['source_inputs'][row['source']]==current_hash(Path(row['target']))
  for added_row in added:
-  row=rows[added_row['target']];assert row['before_sha256'] is None and row['after_sha256']==added_row['after_sha256']==digest(Path(row['target']))
+  row=rows[added_row['target']];assert row['before_sha256'] is None and row['after_sha256']==added_row['after_sha256']==current_hash(Path(row['target']))
  original_path=root/'catalogue_before.json';candidate_path=root/'models_candidate.json';original=read(original_path);candidate=read(candidate_path);additions={k:r['entry'] for k,r in assets['models'].items()}
  assert not(set(original)&set(additions)) and candidate==dict(original,**additions)
- row=rows[str(workspace/'models.json')];assert row['before_sha256']==digest(original_path) and row['after_sha256']==digest(candidate_path)==real['source_inputs'][str(candidate_path)]==digest(Path(row['target']))
+ row=rows[str(workspace/'models.json')];assert row['before_sha256']==digest(original_path) and row['after_sha256']==digest(candidate_path)==real['source_inputs'][str(candidate_path)]==current_hash(Path(row['target']))
  return data,rows

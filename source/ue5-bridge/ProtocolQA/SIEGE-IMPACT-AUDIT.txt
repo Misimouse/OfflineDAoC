@@ -1,0 +1,11 @@
+ORIGINAL SIEGE IMPACT EFFECTS — ACTIVE BLOCK
+
+Installed predecessor: SiegeWorldLab, commit 2b8d18b. Do not alter body models, server siege rules, played DB, maps or character artwork.
+
+Audit: DOL GameSiegeBallista.Effect=0x089A (2202), catapult/trebuchet=0x089C (2204), cauldron=0x08A1 (2209). PacketLib1124.SendSiegeWeaponFireAnimation sends effect as spells.csv client effect, action4, absolute region XYZ with Z+50, target OID, and timer in milliseconds. DOL schedules MakeDelayedDamage by that same timer. The packet's timer must not be multiplied by100 or treated as a new cooldown.
+
+Original Godot server_world._siege_anim calls SpellFx.play(d.effect,mark,1.8). But SpellFx._play looks up fx[ID], whereas these IDs are effects[ID]. fx[2202] is absent. Correct the mapping instead of retaining this defect. All relevant original visual data and textures already exist in the installed SpellVisuals_v01 catalogue: effect2202 target373, effect2204 target381, effect2209 target401. Body clips are already delivered separately.
+
+Next bounded delivery: authoritative impact announcements only. Resolve effect -> original target stage; use the server point and timer; separate fixed world anchors from living entity anchors; retain original procedural render data, caps, no collision and cleanup. Ground and creature impacts must work without creating fake target entities or applying damage. Existing ordinary spell/weapon visuals remain unchanged. Original flight/loading/ready effects and audio stay outside this impact-only scope unless independently proven.
+
+Required checks: actual source namespace lookup and original resource hashes; region conversion and millisecond delay; suppress ARM/aim/no-effect and unknown source; repeated snapshot identity and stale lifecycle; real original FIRE packet with ordinary controller/independent observer; native queued effect invisible until scheduled, correct fixed point after source moves/disappears, actual render, bounded cleanup, original spell/weapon visual regressions; guarded additive installation then installed check. Do not claim full siege or migration completion.

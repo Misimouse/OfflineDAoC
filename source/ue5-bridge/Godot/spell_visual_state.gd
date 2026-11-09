@@ -4,6 +4,29 @@ var events:Array=[]
 var sequence:=0
 var entered_at:=0
 var active:Dictionary={}
+const SIEGE_EFFECTS:={2645:[2202],2604:[2202],2598:[2204],2599:[2204],2606:[2204],2607:[2209]}
+var siege_models:Dictionary={}
+var siege_effects:Dictionary={}
+func configure_siege(models:Dictionary,effects:Dictionary)->void:siege_models=models;siege_effects=effects
+func siege_integer(value:Variant)->int:
+    if typeof(value) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(value)) or float(value)!=floor(float(value)) or float(value)<0 or float(value)>4294967295:return -1
+    return int(value)
+func consume_siege(data:Dictionary,ids:Dictionary,entities:Dictionary,zone:Dictionary,now:int)->void:
+    if siege_integer(data.get("action",-1))!=4:return
+    var oid:=siege_integer(data.get("oid",-1));var id:String=String(ids.get(oid,""))
+    if id.is_empty() or not entities.has(id):return
+    var row:Dictionary=entities[id];var model:=int(row.get("model_id",0));var effect:=siege_integer(data.get("effect",-1));var delay:=siege_integer(data.get("timer",-1))
+    if not bool(siege_models.get(str(model),{}).get("siege",false)) or effect not in SIEGE_EFFECTS.get(model,[]) or delay<0 or delay>65535:return
+    var definition:Dictionary=siege_effects.get(str(effect),{})
+    if int(definition.get("target",0))<=0:return
+    var x:=siege_integer(data.get("x",-1));var y:=siege_integer(data.get("y",-1));var z:=siege_integer(data.get("z",-1))
+    if not zone.has("x") or not zone.has("y"):return
+    var origin_x:float=float(zone.x)*8192.0;var origin_y:float=float(zone.y)*8192.0
+    if not is_finite(origin_x) or not is_finite(origin_y):return
+    if x<origin_x or x>origin_x+65536 or y<origin_y or y>origin_y+65536 or z<0 or z>65535:return
+    var point:Array=[(x-origin_x)*.025,z*.025,(y-origin_y)*.025]
+    append({"kind":"world_impact","caster":id,"effect_id":effect,"position_m":point,"delay_ms":delay,"ttl_ms":delay+8000},now)
+
 func reset(now:int=0)->void:events.clear();active.clear();entered_at=now
 func identify(oid:int,me:int,ids:Dictionary)->String:return "player:local" if oid>0 and oid==me else String(ids.get(oid,""))
 func consume(kind:String,d:Dictionary,me:int,ids:Dictionary,now:int)->void:
@@ -35,7 +58,8 @@ func append(row:Dictionary,now:int)->void:
     if events.size()>96:events.pop_front()
 func snapshot(now:int)->Array:
     var out:Array=[]
-    while not events.is_empty() and now-int(events[0].at_ms)>8000:events.pop_front()
+    for i in range(events.size()-1,-1,-1):
+        if now<int(events[i].at_ms) or now-int(events[i].at_ms)>int(events[i].get("ttl_ms",8000)):events.remove_at(i)
     for row in events:
-        var copy:Dictionary=row.duplicate(true);copy["age_ms"]=maxi(0,now-int(copy.at_ms));copy.erase("at_ms");out.append(copy)
+        var copy:Dictionary=row.duplicate(true);copy["age_ms"]=maxi(0,now-int(copy.at_ms));copy.erase("at_ms");copy.erase("ttl_ms");out.append(copy)
     return out
