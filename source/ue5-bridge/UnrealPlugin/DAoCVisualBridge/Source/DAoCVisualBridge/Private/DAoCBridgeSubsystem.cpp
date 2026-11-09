@@ -619,6 +619,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickRealmWarAcceptance())return;
     if(TickSiegeAcceptance())return;
     if(TickGroundTargetAcceptance())return;
+    if(TickSiegeWorldAcceptance())return;
     if(TickInventoryQuantityAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;

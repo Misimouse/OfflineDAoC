@@ -1,0 +1,9 @@
+ORIGINAL SIEGE BODIES AND BODY ANIMATIONS
+
+The ten original siege object models now have their own native library, including rams, scorpions/ballistae, cauldron, catapult and trebuchets. The seven original animated models retain their own idle/load/fire clips and ram locomotion. The three originally static models retain static bodies. No character art or map vegetation is replaced.
+
+When available, use a temporary original GM field ballista (/siegeweapon create ballista), right-click for control, and ARM. The actual ballista should replace the old cylinder and play its original loading motion, then return to idle. Another nearby player should see the same motion. RELEASE, reacquire, close/reopen the window, change character and check no old action replays. Existing ground targeting remains Ctrl+G unless rebound.
+
+Automatic checks cover all ten native actors, original sizes and clip durations, actual sampled bone movement, rendering, server announcement to owner and observer, original combat, controls, windows and ground targeting. The normal played database and map are untouched; installation has an exact backup and hash-checked predecessor chain. Owner gameplay acceptance remains pending.
+
+Projectile impact art/sound and full fortress warfare are separate remaining blocks; do not use this delivery as a claim of full client migration.

@@ -54,7 +54,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
             if(!Event->TryGetNumberField(TEXT("seq"),Seq)||!FMath::IsFinite(Seq)||Seq<1||Seq>9e15||FMath::FloorToDouble(Seq)!=Seq||int64(Seq)<=Pose.LastCombatSeq)continue;
             Pose.LastCombatSeq=int64(Seq);
             if(Dead||!Event->TryGetNumberField(TEXT("age_ms"),Age)||!FMath::IsFinite(Age)||Age<0||Age>5000||!Event->TryGetStringField(TEXT("clip"),EventClip)||!Event->TryGetStringField(TEXT("kind"),Kind))continue;
-            const bool Attack=Kind==TEXT("attack")||Kind==TEXT("style");const bool Defence=Kind==TEXT("parry")||Kind==TEXT("block")||Kind==TEXT("evade")||Kind==TEXT("flinch");if(!Attack&&!Defence)continue;
+            const bool Attack=Kind==TEXT("attack")||Kind==TEXT("style");const bool Defence=Kind==TEXT("parry")||Kind==TEXT("block")||Kind==TEXT("evade")||Kind==TEXT("flinch");const bool Siege=Kind==TEXT("siege")&&PoseFlag(*Entry,TEXT("siege"))&&(EventClip==TEXT("load")||EventClip==TEXT("fire"));if(!Attack&&!Defence&&!Siege)continue;
             auto* Animation=Clip(EventClip);if(!Animation)continue;
             const double Began=Now-Age/1000.,Until=Began+Animation->GetPlayLength();if(Until<=Now)continue;
             if(Defence&&(Pose.ActionUntil>Now||Pose.TransitionUntil>Now))continue;

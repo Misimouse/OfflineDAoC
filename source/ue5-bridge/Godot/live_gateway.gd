@@ -24,6 +24,7 @@ var gm_mode:RefCounted
 var release_state:RefCounted
 var realm_war:RefCounted
 var siege:RefCounted
+var siege_visuals:RefCounted
 var ground_target:RefCounted
 var concentration:RefCounted
 var pet:RefCounted
@@ -127,6 +128,7 @@ func _ready()->void:
     release_state=load(folder.path_join("player_release.gd")).new()
     realm_war=load(folder.path_join("realm_war_state.gd")).new()
     siege=load(folder.path_join("siege_state.gd")).new()
+    siege_visuals=load(folder.path_join("siege_visual_state.gd")).new()
     ground_target=load(folder.path_join("ground_target_state.gd")).new()
     concentration=load(folder.path_join("concentration_state.gd")).new()
     pet=load(folder.path_join("pet_state.gd")).new()
@@ -149,6 +151,7 @@ func _ready()->void:
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
     var native_models:Variant=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../models.json")))
     player_models=load(folder.path_join("player_model_state.gd")).new()
+    siege_visuals.configure(native_models)
     player_models.configure(JSON.parse_string(FileAccess.get_file_as_string("res://content/monsters/monsters.json")),native_models)
     combat_visual.configure(native_models,JSON.parse_string(FileAccess.get_file_as_string("res://content/weapons/weapons.json")).models,JSON.parse_string(FileAccess.get_file_as_string("res://content/rules/style_anims.json")),JSON.parse_string(FileAccess.get_file_as_string("res://content/characters/style_clips.json")))
     server=get_node("/root/Server");server.no_world=true
@@ -256,6 +259,7 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
 func world_event(kind:String,data:Dictionary)->void:
     realm_war.consume(kind,data)
     siege.consume(kind,data,Time.get_ticks_msec())
+    siege_visuals.consume(kind,data,adapter.oid_to_id,adapter.entities,Time.get_ticks_msec())
     ground_target.consume(kind)
     live_riding.consume(kind,data,Time.get_ticks_msec())
     player_models.consume(kind,data)
@@ -581,9 +585,10 @@ func _process(_delta:float)->void:
                 "position_m":[position.x,position.y,position.z],"forward_xz":[sin(angle),cos(angle)],"alive":not player_state.ready or player_state.alive(),"state":"dead" if player_state.ready and not player_state.alive() else "idle","health":health,"health_known":player_state.ready,"position_revision":entry_revision})
         if server.info is Dictionary:adapter.player_level=int(server.info.get("level",adapter.player_level))
         combat_visual.prune(adapter.entities)
+        siege_visuals.prune(adapter.entities)
         for row in rows:
             row["spell_cast"]=spell_cast.snapshot(String(row.id),now)
-            row["combat_visual"]=combat_visual.snapshot(String(row.id),now)
+            row["combat_visual"]=siege_visuals.snapshot(String(row.id),int(row.model_id),now) if siege_visuals.supports(int(row.model_id)) else combat_visual.snapshot(String(row.id),now)
             var fight:Dictionary=combat_visual.fighting.get(String(row.id),{})
             row["combat_active"]=now<int(fight.get("until_ms",0)) and float(row.get("health",1))>0
             row["combat_stance"]=String(fight.get("stance",""))

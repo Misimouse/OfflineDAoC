@@ -28,7 +28,14 @@ def backend_plan(workspace):
     assert rows[str(runtime/'MMOEngine.dll')]['after_sha256']==data['candidate_binary_sha256']
     return data,rows
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+    successor_rows=successor_rows or {}
+    def current_hash(path):
+        replacement=successor_rows.get(str(path))
+        if replacement:
+            assert digest(path)==replacement["after_sha256"]
+            return replacement["before_sha256"]
+        return digest(path)
     root=workspace/'GroundTargetLab';path=root/'installed.json'
     data=json.loads(path.read_text()) if path.exists() else None
     if not data or not data.get('installed'):return None,{}
@@ -45,13 +52,13 @@ def verify(workspace):
     backend_path=root/'backend_verified.json';assert data['evidence'][str(backend_path)]==digest(backend_path)
     expected={str(plugin/p) for p in NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in GODOT_TARGETS}|set(backend_rows)
     for target,r in backend_rows.items():
-        row=rows[target];assert row['before_sha256']==r['before_sha256'] and row['after_sha256']==r['after_sha256']==digest(Path(target))
+        row=rows[target];assert row['before_sha256']==r['before_sha256'] and row['after_sha256']==r['after_sha256']==current_hash(Path(target))
     assert len(rows)==len(data['files'])==len(expected) and set(rows)==expected
     for rel in NATIVE_TARGETS:
         row=rows[str(plugin/rel)];key=rel.removeprefix('Source/').replace('\\','/')
         before=None if Path(rel).name in NEW_NAMES else previous_sources[key] if rel.startswith('Source/') else previous['binaries_sha256'][Path(rel).name]
         after=current_sources[key] if rel.startswith('Source/') else build['binaries_sha256'][Path(rel).name]
-        assert row['before_sha256']==before and row['after_sha256']==after and digest(Path(row['target']))==after
+        assert row['before_sha256']==before and row['after_sha256']==after and current_hash(Path(row['target']))==after
     assert data['native_after_sha256']==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     real_path=Path(data['real_protocol_proof']);real=json.loads(real_path.read_text())
     assert data['evidence'][str(real_path)]==digest(real_path) and real['passed'] and real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged'] and len(real['checks'])>=21 and all(real['checks'].values())
@@ -59,7 +66,7 @@ def verify(workspace):
     before_path=Path(old['real_protocol_proof']);before=json.loads(before_path.read_text());assert old['evidence'][str(before_path)]==digest(before_path)
     for name in GODOT_TARGETS:
         row=rows[str(workspace/'Godot'/name)];expected_before=None if name in NEW_NAMES else before['source_inputs'][row['source']]
-        assert row['before_sha256']==expected_before and row['after_sha256']==real['source_inputs'][row['source']]==digest(Path(row['target']))
+        assert row['before_sha256']==expected_before and row['after_sha256']==real['source_inputs'][row['source']]==current_hash(Path(row['target']))
     art_path=root/'resources.json';art=json.loads(art_path.read_text());assert data['evidence'][str(art_path)]==digest(art_path)
     assert art['passed'] and not art['original_art_modified'] and not art['world_map_modified'] and len(art['files'])==2
     assert all(digest(Path(p))==h for p,h in art['source_inputs'].items())

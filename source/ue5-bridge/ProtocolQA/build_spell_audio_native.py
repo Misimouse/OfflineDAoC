@@ -10,7 +10,7 @@ from prepare_combined_expansion_data import digest
 
 def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -23,8 +23,11 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     if lab_name=='LiveRidingLab':
         from prepare_live_riding_content import prepare
         prepare(workspace)
+    if lab_name=='SiegeWorldLab':
+        from prepare_siege_world_content import prepare
+        prepare(workspace)
     for target,source in [(host/'Content',workspace.parent/'DAoC-Enhanced-Unreal/Content'),(plugin/'Content',central/'Content')]:
-        if lab_name=='LiveRidingLab' and target==plugin/'Content':continue
+        if lab_name in ['LiveRidingLab','SiegeWorldLab'] and target==plugin/'Content':continue
         if target.exists():assert target.is_junction() and target.resolve()==source.resolve()
         else:subprocess.run(['powershell.exe','-NoProfile','-Command','New-Item -ItemType Junction -Path '+quote(target)+' -Target '+quote(source)+' | Out-Null'],check=True,creationflags=subprocess.CREATE_NO_WINDOW)
     shutil.copy2(central/'DAoCVisualBridge.uplugin',plugin/'DAoCVisualBridge.uplugin')
@@ -38,7 +41,7 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     shutil.copytree(source,build_plugin/'Source',dirs_exist_ok=True)
     command=[str(engine/'Build/BatchFiles/Build.bat'),'UnrealEditor','Win64','Development',
         '-Project='+str(build_host/'HostProject.uproject'),'-Plugin='+str(build_plugin/'DAoCVisualBridge.uplugin'),
-        '-WaitMutex','-NoHotReload','-DisableLiveCoding']
+        '-WaitMutex','-NoHotReload','-DisableLiveCoding','-MaxParallelActions=3']
     with (root/'native_build.log').open('w',encoding='utf-8') as log:
         result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,timeout=600,creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode==0,'See SpellAudioLab/native_build.log'

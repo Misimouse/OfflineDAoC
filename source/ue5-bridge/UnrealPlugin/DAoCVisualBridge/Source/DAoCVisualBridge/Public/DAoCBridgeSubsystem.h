@@ -144,6 +144,7 @@ private:
     bool TickRealmWarAcceptance();
     bool TickSiegeAcceptance();
     bool TickGroundTargetAcceptance();
+    bool TickSiegeWorldAcceptance();
     bool TickStealthMaterialAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;

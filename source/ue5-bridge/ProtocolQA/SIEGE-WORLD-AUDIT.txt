@@ -1,0 +1,13 @@
+ORIGINAL SIEGE BODY MODELS AND ANIMATIONS
+
+Original references: Godot WeaponModels.make_animated / make_world and Npc.play_siege; server_world._siege_anim; weapons.json and original exported siege glTF; pipeline/build_siege_anims.py; DaocClient opcode 0xE3; DOL GameSiegeWeapon.PreAction/BroadcastAnimation and PacketLib1124.SendSiegeWeaponAnimation. No public database import or new spawn rules are required for this transport/library block.
+
+Ten original object-model IDs were missing from the native living catalogue: 2598,2599,2600,2601,2602,2604,2605,2606,2607,2645. The existing fallback displayed cylinders. Add these exact original bodies under their own SiegeWorld_v01 namespace; retain every existing catalogue entry byte-for-byte in the merge. Seven have actual original skinned clips; the original catapult and two trebuchet models have no such body clips and remain static, matching Godot.
+
+Reuse the original weapon loader and textures. Preserve custom vertex formats while baking static meshes, merge only compatible skinned surfaces, retain original skeletons, clip names and durations. Godot glTF omits constant idle tracks: restore those exact original values only after proving constant samples and identical local skeleton frames; do not synthesize a different pose. Original scorpion idle is not its bind pose and must be kept. Native geometry bounds agree with exported geometry within 0.2 cm.
+
+Original action 2 ARM and action 3 LOAD play load; action 4 FIRE plays fire. No invented body clip for aiming/none/other actions. Server timer is not animation duration or readiness. Announcements have stable sequence identity; original entity/OID/model, death/removal/region/menu cleanup prevents replay onto another living. A real non-owner observer receives the same announcement. Existing native body playback adds only the explicit siege kind, gated by approved siege catalogue metadata and load/fire keys.
+
+Validation: 22 state checks; 24 original private-server checks with ordinary controller and independent GM; 125 native checks on all ten actors, sampled original bone motion and actual rendered images; 25 existing combat,26 ground-target,26 siege-window,259 key checks. The interrupted run is explicitly unaccepted and recovered; its successful replacement restores private database/libraries/navigation and records normal runtime unchanged. No normal played data, map geometry, server rules or permanent siege placement is changed.
+
+Scope left open: original projectile/impact effect transport and siege sound, complete fortress combat, frontier content/coordinate conversion and optimization. This body/animation block does not certify full siege warfare.
