@@ -9,8 +9,10 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 
 
-def verify(workspace, engine):
+def verify(workspace, engine, materials=None):
     lab = workspace/'NpcVisualFlagsLab'
+    materials = materials or lab/'MaterialsCandidate/prepared.json'
+    material_sha = digest(materials)
     build_path = lab/'native_build.json'
     build = json.loads(build_path.read_text())
     assert build['passed']
@@ -24,7 +26,7 @@ def verify(workspace, engine):
     out = lab/'NativeAcceptance'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
     reports = []
-    cases = [('ghost', None, 'DaocBridgeNpcGhostMaterialsTest', '', 40),
+    cases = [('ghost', None, 'DaocBridgeNpcGhostMaterialsTest', '', 48),
              ('torch', None, 'DaocBridgePersonalTorchTest', '', 19),
              ('pose', None, 'DaocBridgePoseTest', '', 55),
              ('combat', workspace/'Reports/combat_visual/fixture.json', 'DaocBridgeCombatVisualTest', '.native.json', 25),
@@ -38,7 +40,7 @@ def verify(workspace, engine):
                 '-DaocBridgeCatalog='+str(workspace/'models.json'), '-'+flag+'='+str(fixture),
                 '-unattended', '-nosound', '-nosplash', '-abslog='+str(out/(name+'.log'))]
         if name == 'ghost':
-            args += ['-DaocBridgeNpcGhostMaterials='+str(lab/'MaterialsCandidate/prepared.json'),
+            args += ['-DaocBridgeNpcGhostMaterials='+str(materials),
                      '-DaocBridgeNpcGhostSamples='+str(lab/'samples_imported.json')]
         args += ['-DaocBridgeRemotePlayerTest', '-d3d11', '-RenderOffscreen', '-windowed',
                  '-ResX=1280', '-ResY=720'] if name == 'pose' else ['-nullrhi']
@@ -54,8 +56,9 @@ def verify(workspace, engine):
         data = json.loads(report.read_text(encoding='utf-8-sig'))
         assert data['passed'] and data['checks'] >= minimum, data
         reports.append(dict(name=name, report=str(report), sha256=digest(report), checks=data['checks']))
-    assert digest(normal) == build['normal_binary_sha256']
+    assert digest(normal) == build['normal_binary_sha256'] and digest(materials) == material_sha
     result = dict(passed=True, installed=False, real_server=False, reports=reports,
+                  material_manifest=str(materials), material_sha256=material_sha,
                   build_sha256=digest(build_path), normal_binary_unchanged=True,
                   owner_gameplay_accepted=False)
     (out/'verified.json').write_text(json.dumps(result, indent=2))
@@ -66,5 +69,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
+    parser.add_argument('--materials', type=Path)
     options = parser.parse_args()
-    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve())))
+    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials)))

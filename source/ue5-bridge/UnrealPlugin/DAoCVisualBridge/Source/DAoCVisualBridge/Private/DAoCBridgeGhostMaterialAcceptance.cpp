@@ -43,6 +43,9 @@ bool UDAoCBridgeSubsystem::TickNpcGhostMaterialAcceptance(){
             Body->SetCullDistance(4321.f);Body->SetBoundsScale(1.2f);Ghost.Apply(A,true,true,Id==TEXT("307"));
             Check(Depth&&FMath::IsNearlyEqual(Depth->LDMaxDrawDistance,4321.f)&&FMath::IsNearlyEqual(Depth->BoundsScale,1.2f),TEXT("proxy respects source draw distance and bounds ")+Id);
             const int32 Slots=Ghost.ChangedSlots();Ghost.Apply(A,true,true,Id==TEXT("307"));Check(Ghost.ChangedSlots()==Slots&&Ghost.DepthProxies()==1,TEXT("repeat snapshot does not duplicate materials or proxies ")+Id);
+            Ghost.Apply(A,true,true,Id==TEXT("307"),101);const int32 Updates=Ghost.MaterialUpdates();
+            Ghost.Apply(A,true,true,Id==TEXT("307"),101);Check(Ghost.MaterialUpdates()==Updates&&Ghost.DepthProxies()==1,TEXT("same snapshot reuses materials while animation follows leader pose ")+Id);
+            Ghost.Apply(A,true,true,Id==TEXT("307"),102);Check(Ghost.MaterialUpdates()==Updates+1,TEXT("new snapshot refreshes equipment uniforms ")+Id);
             Ghost.Apply(A,false,true,true);Check(Ghost.ChangedSlots()==0&&Ghost.DepthProxies()==0&&Body->GetMaterial(0)==Originals[0],TEXT("unknown state restores exact original materials ")+Id);
             if(auto* CustomDepth=IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth"))){const int32 Previous=CustomDepth->GetInt();CustomDepth->Set(0,ECVF_SetByCode);Check(!Ghost.Apply(A,true,true,false)&&Ghost.ChangedSlots()==0&&Body->GetMaterial(0)==Originals[0],TEXT("disabled depth pass preserves ordinary visible appearance ")+Id);CustomDepth->Set(Previous,ECVF_SetByCode);}
             auto* Tint=UMaterialInstanceDynamic::Create(Originals[0],Body);Tint->SetScalarParameterValue(TEXT("RoughnessFactor"),.61f);Body->SetMaterial(0,Tint);Ghost.Apply(A,true,true,false);

@@ -9,7 +9,7 @@ from prepare_combined_expansion_data import digest
 from verify_stealth_render_native import png_rgb
 
 
-def verify(workspace, engine):
+def verify(workspace, engine, materials=None):
     lab = workspace/'NpcVisualFlagsLab'
     build_path = lab/'native_build.json'
     build = json.loads(build_path.read_text())
@@ -21,7 +21,7 @@ def verify(workspace, engine):
     assert digest(normal) == build['normal_binary_sha256']
     source = Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/path) == sha for path, sha in build['source_sha256'].items())
-    materials = lab/'MaterialsCandidate/prepared.json'
+    materials = materials or lab/'MaterialsCandidate/prepared.json'
     samples = lab/'samples_imported.json'
     inputs = {str(p): digest(p) for p in [build_path, binary, normal, materials, samples]}
     private = lab/'RenderHost/Plugins/DAoCVisualBridge/Content/GhostAppearance_v01'
@@ -83,5 +83,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
+    parser.add_argument('--materials', type=Path)
     options = parser.parse_args()
-    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve())))
+    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials)))

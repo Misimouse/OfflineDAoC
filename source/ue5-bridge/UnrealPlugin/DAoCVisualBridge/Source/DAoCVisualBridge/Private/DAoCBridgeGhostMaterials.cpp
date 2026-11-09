@@ -65,14 +65,14 @@ UMeshComponent* FBridgeGhostMaterials::ProxyFor(UMeshComponent* Source){
     if(auto* Skeletal=Cast<USkeletalMeshComponent>(Source)){
         auto* Copy=CastChecked<USkeletalMeshComponent>(Proxy);
         if(Copy->GetSkeletalMeshAsset()!=Skeletal->GetSkeletalMeshAsset())Copy->SetSkeletalMeshAsset(Skeletal->GetSkeletalMeshAsset());
-        Copy->SetLeaderPoseComponent(Skeletal,true,true);
+        if(Copy->LeaderPoseComponent.Get()!=Skeletal)Copy->SetLeaderPoseComponent(Skeletal,true,true);
     }else if(auto* Static=Cast<UStaticMeshComponent>(Source)){
         auto* Copy=CastChecked<UStaticMeshComponent>(Proxy);
         if(Copy->GetStaticMesh()!=Static->GetStaticMesh())Copy->SetStaticMesh(Static->GetStaticMesh());
     }
     if(!Proxy->IsRegistered())Proxy->RegisterComponent();
-    Proxy->SetCullDistance(Source->LDMaxDrawDistance);
-    Proxy->SetBoundsScale(Source->BoundsScale);
+    if(!FMath::IsNearlyEqual(Proxy->LDMaxDrawDistance,Source->LDMaxDrawDistance))Proxy->SetCullDistance(Source->LDMaxDrawDistance);
+    if(!FMath::IsNearlyEqual(Proxy->BoundsScale,Source->BoundsScale))Proxy->SetBoundsScale(Source->BoundsScale);
     return Proxy;
 }
 
@@ -84,14 +84,17 @@ void FBridgeGhostMaterials::Restore(){
         if(auto* Owner=Depth->GetOwner())Owner->RemoveInstanceComponent(Depth);
         Depth->DestroyComponent();
     }
-    Proxies.Empty();Slots.Empty();CurrentActor.Reset();
+    Proxies.Empty();Slots.Empty();CurrentActor.Reset();LastSnapshotRevision=MIN_int64;
 }
 
-bool FBridgeGhostMaterials::Apply(AActor* Actor,bool Confirmed,bool Ghost,bool RaceFigure){
+bool FBridgeGhostMaterials::Apply(AActor* Actor,bool Confirmed,bool Ghost,bool RaceFigure,int64 SnapshotRevision){
     Missing=0;
     if(!Confirmed||!Ghost||!IsValid(Actor)){Restore();return true;}
     auto* CustomDepth=IConsoleManager::Get().FindConsoleVariable(TEXT("r.CustomDepth"));
     if(!CustomDepth||CustomDepth->GetInt()==0){++Missing;Restore();return false;}
+    // Leader-pose components follow animation without rebuilding material state
+    // every frame. New snapshots/equipment still refresh the original uniforms.
+    if(SnapshotRevision!=INDEX_NONE&&CurrentActor.Get()==Actor&&LastSnapshotRevision==SnapshotRevision&&bLastRaceFigure==RaceFigure&&!Slots.IsEmpty())return true;
     if(CurrentActor.Get()!=Actor){Restore();CurrentActor=Actor;}
     Proxies.RemoveAll([](const FProxy& Pair){return !Pair.Depth.IsValid();});
     struct FPending{UMeshComponent* Component;int32 Index;UMaterialInterface* Source;UMaterialInterface* Parent;};
@@ -130,5 +133,5 @@ bool FBridgeGhostMaterials::Apply(AActor* Actor,bool Confirmed,bool Ghost,bool R
     for(int32 I=Proxies.Num()-1;I>=0;--I)if(!Active.Contains(Proxies[I].Source.Get())){
         if(auto* C=Proxies[I].Depth.Get()){if(auto* Owner=C->GetOwner())Owner->RemoveInstanceComponent(C);C->DestroyComponent();}Proxies.RemoveAt(I);
     }
-    return true;
+    ++Updates;LastSnapshotRevision=SnapshotRevision;bLastRaceFigure=RaceFigure;return true;
 }

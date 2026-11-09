@@ -12,11 +12,12 @@ class FBridgeGhostMaterials
 public:
     ~FBridgeGhostMaterials();
     bool Load(const FString& Manifest);
-    bool Apply(AActor* Actor,bool Confirmed,bool Ghost,bool RaceFigure);
+    bool Apply(AActor* Actor,bool Confirmed,bool Ghost,bool RaceFigure,int64 SnapshotRevision=INDEX_NONE);
     void Restore();
     int32 ChangedSlots() const {return Slots.Num();}
     int32 DepthProxies() const {return Proxies.Num();}
     int32 MissingSlots() const {return Missing;}
+    int32 MaterialUpdates() const {return Updates;}
     static const FName DepthTag;
 private:
     struct FSlot {
@@ -35,6 +36,9 @@ private:
     TMap<FString,FString> Mapping;
     TMap<FString,TStrongObjectPtr<UMaterialInterface>> Loaded;
     int32 Missing=0;
+    int32 Updates=0;
+    int64 LastSnapshotRevision=MIN_int64;
+    bool bLastRaceFigure=false;
     UMaterialInterface* Variant(UMaterialInterface* Source);
     UMeshComponent* ProxyFor(UMeshComponent* Source);
 };
