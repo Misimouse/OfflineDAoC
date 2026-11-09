@@ -88,6 +88,13 @@ def audit(workspace,install):
     if (workspace/'RemotePlayerLab/verified.json').exists() and json.loads((workspace/'RemotePlayerLab/verified.json').read_text()).get('passed',False):
         row('Original remote player position and recovery',['net/DaocClient.cs','net/server_world.gd'],['Godot/decoded_world_adapter.gd','Godot/live_gateway.gd'],'installed_owner_review_deferred','Original1.127 absolute position and separate player-session recovery; two ordinary accounts verified appearance/movement/stop/sit/stand/logout.73network,69state,18real,55native pose,387NPC collision and25combat checks. No full RvR or all remote states live acceptance claim.')
         result['next_package']='CLIENT-PERSONAL-TORCH'
+    torch_receipt=workspace/'PersonalTorchLab/installed.json'
+    if torch_receipt.exists() and json.loads(torch_receipt.read_text()).get('installed',False):
+        row('Original personal and peer torch',['player.gd','zone_loader.gd','sky_system.gd'],['Godot/personal_torch_state.gd','Godot/live_gateway.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePersonalTorch.cpp'],'installed_owner_review_deferred','Editable Shift+T preserves Training T and saved assignments; merged persistent preference, original player action flag0x80, original day/storm weighting. Bounded white no-shadow sources.1502state,338gateway/regression,23real,486native,260controls checks and rendered off/day/night. World/building lights and character materials unchanged.')
+        result['next_package']='CLIENT-NPC-VISUAL-FLAGS-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_69_supported_controls',notes='69 supported actions, two bindings per action, saved assignment precedence. Full original presets and unsupported actions remain separate.')
+            if feature['feature']=='Realm war map and siege windows':feature.update(status='installed_owner_review_deferred',notes='Original bounded realm-war/siege UI contracts delivered separately. Full frontier world and battle-scale performance remain separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

@@ -17,6 +17,7 @@ var weapon_mode_audio:RefCounted
 var door_audio:RefCounted
 var server_sound:RefCounted
 var movement_flags:RefCounted
+var personal_torch:RefCounted
 var target_tracking:RefCounted
 var live_riding:RefCounted
 var travel_routes:RefCounted
@@ -103,6 +104,7 @@ func _ready()->void:
     door_audio=load(folder.path_join("door_audio_state.gd")).new()
     server_sound=load(folder.path_join("server_sound_state.gd")).new()
     movement_flags=load(folder.path_join("movement_flags_state.gd")).new()
+    personal_torch=load(folder.path_join("personal_torch_state.gd")).new()
     target_tracking=load(folder.path_join("target_tracking_state.gd")).new()
     live_riding=load(folder.path_join("live_riding_state.gd")).new()
     travel_routes=load(folder.path_join("live_travel_routes.gd")).new()
@@ -354,6 +356,10 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action=="personal_torch":
+        if personal_torch.apply_request(value,player_state.generation,player_state.ready):
+            send_position(last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0.0)
+        return
     if action=="ground_target_sight":
         var now:=Time.get_ticks_msec();var before:int=ground_target.flags(now)
         if ground_target.update_visibility(value,now) and before!=ground_target.flags(now):send_position(last_move_speed if now-last_position_send<300 else 0.0)
@@ -509,6 +515,7 @@ func return_to_character_menu(data:Dictionary)->void:
     target_tracking.reset()
     adapter.clear_world()
     entered=false;leaving=false;home_jump_requested=false;local_model_id=0
+    personal_torch.reset_session()
     test_return_attempts=0;test_return_at=-10000;door_states.clear()
     target_sight_id="";target_sight=false;target_sight_at=0
     classic_ui.skill_rows.clear();classic_ui.spell_rows.clear();classic_ui.skills_received=false
@@ -541,6 +548,10 @@ func recover_test_region(now:int)->void:
 
 func _process(_delta:float)->void:
     var now:=Time.get_ticks_msec()
+    if personal_torch!=null:
+        var clock:Dictionary=world_clock_snapshot()
+        var storm:float=float(server.call("storm_at",position.x*40.0+35*8192)) if server!=null and server.has_method("storm_at") and server.playing else 0.0
+        personal_torch.advance(float(clock.get("hour",-1.0)),storm,_delta)
     recover_test_region(now)
     player_state.advance(now)
     var gm_revision:int=gm_mode.revision
@@ -630,6 +641,7 @@ func _process(_delta:float)->void:
         player_snapshot["release"]=release_state.snapshot()
         transport.snapshot_metadata["player_status"]=player_snapshot
         transport.snapshot_metadata["world_clock"]=world_clock_snapshot()
+        transport.snapshot_metadata["personal_torch"]=personal_torch.snapshot()
         transport.snapshot_metadata["realm_war"]=realm_war.snapshot()
         transport.snapshot_metadata["siege"]=siege.snapshot(now)
         transport.snapshot_metadata["ground_target"]=ground_target.snapshot(now)
@@ -666,13 +678,16 @@ func sync_attack_visibility()->void:
     var now:=Time.get_ticks_msec();var visible:=target_visible(now)
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var oid:=int(interaction.selected_id.get_slice(":",1)) if not interaction.selected_id.is_empty() else 0
-    server.client.Heading(heading,oid,(0x30 if visible else 0)|ground_target.flags(now),(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)))
+    server.client.Heading(heading,oid,personal_action_flags((0x30 if visible else 0)|ground_target.flags(now)),(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)))
     attack_visibility_syncs+=1
     last_attack_visibility={"target":interaction.selected_id,"native_target":target_sight_id,"visible":visible,"age_ms":now-target_sight_at,"at_ms":now}
 
+func personal_action_flags(flags:int)->int:
+    return personal_torch.action_flags(flags) if personal_torch!=null else flags
+
 func send_position(speed:float)->void:
     var valid:bool=target_visible(Time.get_ticks_msec())
-    var flags:int=(0x30 if valid else 0)|ground_target.flags(Time.get_ticks_msec())
+    var flags:int=personal_action_flags((0x30 if valid else 0)|ground_target.flags(Time.get_ticks_msec()))
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var health:=int(player_state.vitals.get("health_pct",100)) if player_state.ready else 100
     server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,movement_flags.vertical_speed_mps/.025,207,(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)),movement_flags.on_ground,heading,flags,health,server.me_oid)

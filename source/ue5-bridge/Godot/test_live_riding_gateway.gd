@@ -38,6 +38,8 @@ func _initialize()->void:
     check(gateway.live_riding.local_steed==20,"chat command cannot fake unmount acknowledgement")
     check(gateway.dispatch_chat("/dismount") and client.requests==1,"duplicate chat cannot flood protocol")
     var adapter:=Adapter.new();gateway.adapter=adapter;gateway.interaction=Interaction.new();gateway.player_state=Player.new()
+    gateway.ground_target=load(folder.path_join("ground_target_state.gd")).new()
+    gateway.personal_torch=load(folder.path_join("personal_torch_state.gd")).new()
     gateway.movement_flags=load(folder.path_join("movement_flags_state.gd")).new();gateway.movement_flags.swimming=true
     gateway.send_position(0);gateway.sync_attack_visibility()
     check(client.position_state==0x18 and client.heading_state==0x18,"both original position and heading carry server-confirmed riding bits")

@@ -10,7 +10,7 @@ from prepare_combined_expansion_data import digest
 
 def build(workspace, engine, lab_name='SpellAudioLab'):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab','PersonalTorchLab']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -43,7 +43,7 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
         '-Project='+str(build_host/'HostProject.uproject'),'-Plugin='+str(build_plugin/'DAoCVisualBridge.uplugin'),
         '-WaitMutex','-NoHotReload','-DisableLiveCoding','-MaxParallelActions=3']
     with (root/'native_build.log').open('w',encoding='utf-8') as log:
-        result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,timeout=600,creationflags=subprocess.CREATE_NO_WINDOW)
+        result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT,timeout=900,creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode==0,'See SpellAudioLab/native_build.log'
     assert all(digest(source/path)==sha and digest(build_plugin/'Source'/path)==sha for path,sha in hashes.items())
     binary=plugin/'Binaries/Win64'

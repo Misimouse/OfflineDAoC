@@ -14,7 +14,14 @@ def backend_rows(workspace):
  for target,row in rows.items():assert row['before_sha256']==previous[target]['after_sha256'] and digest(Path(row['source']))==row['after_sha256']
  assert data['candidate_binary_sha256']==rows[str(runtime/'MMOEngine.dll')]['after_sha256'];return data,rows
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+ successor_rows=successor_rows or {}
+ def current_hash(path):
+  replacement=successor_rows.get(str(path))
+  if replacement:
+   assert digest(path)==replacement['after_sha256']
+   return replacement['before_sha256']
+  return digest(path)
  root=workspace/'RemotePlayerLab';path=root/'installed.json';data=read(path) if path.exists() else None
  if not data or not data.get('installed'):return None,{}
  assert data['phase']=='complete' and not any(data[k] for k in ['database_modified','server_rules_modified','map_geometry_modified','teleport_enabled'])
@@ -26,11 +33,11 @@ def verify(workspace):
  expected={str(plugin/p) for p in NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in GODOT_TARGETS}|set(network);assert len(rows)==len(data['files'])==len(expected) and set(rows)==expected
  for rel in NATIVE_TARGETS:
   row=rows[str(plugin/rel)];key=rel.removeprefix('Source/');before=before_sources[key] if rel.startswith('Source/') else previous['binaries_sha256'][Path(rel).name];after=current[key] if rel.startswith('Source/') else build['binaries_sha256'][Path(rel).name]
-  assert row['before_sha256']==before and row['after_sha256']==after==digest(Path(row['target']))
+  assert row['before_sha256']==before and row['after_sha256']==after==current_hash(Path(row['target']))
  real_path=Path(data['real_protocol_proof']);real=read(real_path);assert data['evidence'][str(real_path)]==digest(real_path) and real['passed'] and len(real['checks'])>=18 and all(real['checks'].values()) and real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged']
  assert real['source_inputs'][str(root/'backend_verified.json')]==digest(root/'backend_verified.json')
  prior=read(Path(old['real_protocol_proof']))
  for name in GODOT_TARGETS:
-  row=rows[str(workspace/'Godot'/name)];assert row['before_sha256']==prior['source_inputs'][row['source']] and row['after_sha256']==real['source_inputs'][row['source']]==digest(Path(row['target']))
+  row=rows[str(workspace/'Godot'/name)];assert row['before_sha256']==prior['source_inputs'][row['source']] and row['after_sha256']==real['source_inputs'][row['source']]==current_hash(Path(row['target']))
  for target,row in network.items():assert rows[target]['before_sha256']==row['before_sha256'] and rows[target]['after_sha256']==row['after_sha256']==digest(Path(target))
  assert data['native_after_sha256']==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll'];return data,rows

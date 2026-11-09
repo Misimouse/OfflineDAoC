@@ -100,6 +100,7 @@ void UDAoCBridgeSubsystem::Initialize(FSubsystemCollectionBase& C) {
     if(FFileHelper::LoadFileToString(ControlText,*ControlsFile)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ControlText),ControlSettings)&&ControlSettings.IsValid()){
         double Sensitivity;if(ControlSettings->TryGetNumberField(TEXT("mouse_sensitivity"),Sensitivity)&&FMath::IsFinite(Sensitivity))MouseSensitivity=FMath::Clamp(float(Sensitivity),.05f,1.5f);
         ControlSettings->TryGetBoolField(TEXT("invert_mouse"),bInvertMouse);
+        ControlSettings->TryGetBoolField(TEXT("personal_torch"),bPersonalTorchEnabled);
     }
     FParse::Value(FCommandLine::Get(),TEXT("DaocBridgePort="),Port);
     bControls=!FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeReadOnly"));
@@ -140,6 +141,7 @@ void UDAoCBridgeSubsystem::Initialize(FSubsystemCollectionBase& C) {
 }
 void UDAoCBridgeSubsystem::Deinitialize() {
     FWorldDelegates::LevelAddedToWorld.RemoveAll(this);FWorldDelegates::LevelRemovedFromWorld.RemoveAll(this);
+    ClearPersonalTorch();
     RemoveWorldPointerInput();
     SetMouseLook(false);
     if(bConnected&&!bExiting)Send(TEXT("logout"));
@@ -149,7 +151,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){WorldClockHour=-1.;ClearLiveRiding();if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){ClearPersonalTorch();WorldClockHour=-1.;ClearLiveRiding();if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -291,6 +293,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     TArray<FString> Gone;for(auto& Pair:Entities)if(!Seen.Contains(Pair.Key))Gone.Add(Pair.Key);
     for(auto& Id:Gone){if(IsValid(Entities[Id]))Entities[Id]->Destroy();Entities.Remove(Id);EntityModels.Remove(Id);RemoteMotion.Remove(Id);EntityRows.Remove(Id);NameplateVisibility.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);}
     if(!Seen.Contains(TEXT("player:local")))bLocalAvailable=false;
+    const TSharedPtr<FJsonObject>* Torch=nullptr;ApplyPersonalTorch(M->TryGetObjectField(TEXT("personal_torch"),Torch)?*Torch:nullptr);
     ApplyTargetTracking(M);
     ApplyLiveRiding(M);
     ApplySpellVisuals(M);
@@ -307,7 +310,7 @@ float UDAoCBridgeSubsystem::GroundHeight(float X,float Y) const {
 void UDAoCBridgeSubsystem::SaveControls(){
     auto O=MakeShared<FJsonObject>();FString Existing;TSharedPtr<FJsonObject> Previous;
     if(FFileHelper::LoadFileToString(Existing,*ControlsFile)&&FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Existing),Previous)&&Previous.IsValid())O=Previous.ToSharedRef();
-    O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);O->SetBoolField(TEXT("invert_mouse"),bInvertMouse);
+    O->SetNumberField(TEXT("mouse_sensitivity"),MouseSensitivity);O->SetBoolField(TEXT("invert_mouse"),bInvertMouse);O->SetBoolField(TEXT("personal_torch"),bPersonalTorchEnabled);
     FString Text;auto W=TJsonWriterFactory<>::Create(&Text);FJsonSerializer::Serialize(O,W);FFileHelper::SaveStringToFile(Text,*ControlsFile);
 }
 void UDAoCBridgeSubsystem::SetMouseLook(bool Enabled){
@@ -392,6 +395,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     PlayerPawn->GetCharacterMovement()->MaxWalkSpeed=ServerRunSpeed*Keys.SpeedFactor;
     FVector Desired=FVector::ZeroVector;
     if(bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&!bChatOpen&&!Typing&&FPlatformTime::Seconds()-ChatClosedAt>.2){
+        if(Focused&&KeyConfiguration->Pressed(PC,TEXT("personal_torch"))){bPersonalTorchEnabled=!bPersonalTorchEnabled;SaveControls();RequestPersonalTorch();}
         if(InputAvailable)for(const TCHAR* Action:{TEXT("face"),TEXT("follow"),TEXT("stick")})if(KeyConfiguration->Pressed(PC,Action))RequestTargetTracking(Action);
         float Fwd=Keys.Forward;
         float Right=Keys.Right;
@@ -621,6 +625,8 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickGroundTargetAcceptance())return;
     if(TickSiegeWorldAcceptance())return;
     if(TickInventoryQuantityAcceptance())return;
+    if(TickPersonalTorchVisual())return;
+    if(TickPersonalTorchAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;
     if(TickPlayerVitalsAcceptance())return;
@@ -660,6 +666,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickInventoryAcceptance())return;
     if(TickRemoteMotionAcceptance())return;
     if(TickNameplateRenderTest())return;
+    TickPersonalTorch();
     TickDoors(Dt);
     if(TickInteractionAcceptance())return;
     if(TickEntityAcceptance())return;
