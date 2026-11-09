@@ -236,6 +236,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     const TSharedPtr<FJsonObject>* PlayerStatus=nullptr;if(M->TryGetObjectField(TEXT("player_status"),PlayerStatus))ApplyPlayerStatus(*PlayerStatus);
     const TSharedPtr<FJsonObject>* Clock=nullptr;ApplyWorldClock(M->TryGetObjectField(TEXT("world_clock"),Clock)?*Clock:nullptr);
     const TSharedPtr<FJsonObject>* Classic=nullptr;if(M->TryGetObjectField(TEXT("classic_ui"),Classic))ApplyClassicUI(*Classic);
+    const TSharedPtr<FJsonObject>* Ground=nullptr;ApplyGroundTarget(M->TryGetObjectField(TEXT("ground_target"),Ground)?*Ground:nullptr);
     const TSharedPtr<FJsonObject>* Siege=nullptr;ApplySiege(M->TryGetObjectField(TEXT("siege"),Siege)?*Siege:nullptr);
     const TSharedPtr<FJsonObject>* War=nullptr;ApplyRealmWar(M->TryGetObjectField(TEXT("realm_war"),War)?*War:nullptr);
     ApplyChat(M);
@@ -434,6 +435,7 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
     if(!Dead&&!bChatOpen&&!Typing&&bControls&&bLocalAvailable&&!Session.IsEmpty()&&!bExiting&&FPlatformTime::Seconds()-LastMove>.1){
         auto Values=MakeShared<FJsonObject>();Values->SetArrayField(TEXT("position_m"),JsonPoint(PlayerPosition));
         Values->SetArrayField(TEXT("forward_xz"),{MakeShared<FJsonValueNumber>(FMath::Cos(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw))),MakeShared<FJsonValueNumber>(FMath::Sin(FMath::DegreesToRadians(PlayerPawn->GetActorRotation().Yaw)))});
+        Values->SetNumberField(TEXT("ground_target_revision"),GroundTargetRevision);Values->SetBoolField(TEXT("ground_target_in_view"),GroundTargetVisible());
         Values->SetStringField(TEXT("target_entity_id"),CurrentTarget());Values->SetBoolField(TEXT("target_in_view"),PlayerSeesTarget());
         Values->SetBoolField(TEXT("swimming"),bLocalSwimming);Values->SetBoolField(TEXT("on_ground"),!bLocalMounted&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround());Values->SetNumberField(TEXT("vertical_speed_mps"),bLocalMounted?0:PlayerPawn->GetCharacterMovement()->IsMovingOnGround()&&PlayerPawn->PendingLandingSpeedMps>0?-PlayerPawn->PendingLandingSpeedMps:PlayerPawn->GetVelocity().Z/100);
         Values->SetNumberField(TEXT("speed_mps"),bLocalMounted?RidingSpeedMps:PlayerPawn->GetVelocity().Size2D()/100);Send(TEXT("move"),Values);PlayerPawn->PendingLandingSpeedMps=0;LastMove=FPlatformTime::Seconds();
@@ -616,6 +618,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickStealthMaterialAcceptance())return;
     if(TickRealmWarAcceptance())return;
     if(TickSiegeAcceptance())return;
+    if(TickGroundTargetAcceptance())return;
     if(TickInventoryQuantityAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;
@@ -687,7 +690,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
         }else if(State==SCS_ConnectionError||Now>RetryAt+2){Disconnect();}
     }
     TickRemoteMotion(Dt);
-    NetworkFrameMs=(FPlatformTime::Seconds()-NetworkBegan)*1000;UpdateControls(Dt);const double GearBegan=FPlatformTime::Seconds();UpdateLocalEquipment();UpdateRemoteEquipment();TickEquipmentAnimations();TickLocalStealthMaterials();EquipmentFrameMs=(FPlatformTime::Seconds()-GearBegan)*1000;TickSpellVisuals(Dt);TickFootsteps();TickSpellAudio();const double ClassicBegan=FPlatformTime::Seconds();TickClassicUI();ClassicFrameMs=(FPlatformTime::Seconds()-ClassicBegan)*1000;
+    NetworkFrameMs=(FPlatformTime::Seconds()-NetworkBegan)*1000;UpdateControls(Dt);TickGroundTargetSight();const double GearBegan=FPlatformTime::Seconds();UpdateLocalEquipment();UpdateRemoteEquipment();TickEquipmentAnimations();TickLocalStealthMaterials();EquipmentFrameMs=(FPlatformTime::Seconds()-GearBegan)*1000;TickSpellVisuals(Dt);TickFootsteps();TickSpellAudio();const double ClassicBegan=FPlatformTime::Seconds();TickClassicUI();ClassicFrameMs=(FPlatformTime::Seconds()-ClassicBegan)*1000;
     if(PlayerStartedAt>0&&Now-PlayerStartedAt>15)ProbeNavigation();
     ApplyQuality();
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0){MaximumGameplayFrameMs=FMath::Max(MaximumGameplayFrameMs,WallMs);if(WallMs>=2000)++GameplayStalls;}

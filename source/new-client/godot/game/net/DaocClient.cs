@@ -331,11 +331,16 @@ public partial class DaocClient : Node
 
 	// The movement header UseSkill / UseSpell / UseSlot start with (1.124+): where you are and which way you face;
 	// the flags say your target is in view (0xA000) and your ground target too (0x1000) - the server checks them.
+	// The UE bridge supplies its own physical ground-target visibility. Keep the
+	// legacy default for existing Godot callers until they opt into this setter.
+	bool _bridgeGroundTargetInView = true;
+	public void BridgeGroundTargetSight(bool visible) => _bridgeGroundTargetInView = visible;
+
 	void UseHeader(Writer w, float x, float y, float z, float speed, int heading, bool targetInView)
 	{
 		w.FloatLE(x); w.FloatLE(y); w.FloatLE(z); w.FloatLE(speed);
 		w.Short((ushort)(heading & 0xFFF));
-		w.Short((ushort)(targetInView ? 0xB000 : 0x1000));
+		w.Short((ushort)((targetInView ? 0xA000 : 0) | (_bridgeGroundTargetInView ? 0x1000 : 0)));
 	}
 
 	// UseSkillHandler: a skill by its place in your usable skills (type 1: counted from the first one that isn't a spec).

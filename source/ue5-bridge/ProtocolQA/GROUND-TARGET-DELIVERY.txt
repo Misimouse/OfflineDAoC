@@ -1,0 +1,9 @@
+ORIGINAL GROUND TARGET
+
+Ctrl+G selects a point on physical world geometry; the original yellow four-arrow marker shows the requested point. Rebind Ground Target under Targeting if desired. Existing Ctrl+G assignments are preserved and F5 remains camera sensitivity. Chat and windows block world selection.
+
+Terrain visibility is tested separately from enemy visibility, refreshed even without moving, and sent in both original movement flags and original skill/spell/item headers. Obstructed or stale terrain no longer receives an unconditional visibility flag. The original server still validates navigation, range and ability rules. Character/menu/region changes clear the point.
+
+For later owner review: place a point on clear ground with Ctrl+G; try while chat or a window has focus; check the marker follows slopes and does not block clicks; rebind and return to the saved controls. With a disposable field siege weapon under original server control, setting a point should request movement, while subsequent MOVE toward an occluded point should be refused. Do not infer complete siege combat or frontier delivery from this block.
+
+This delivery includes the marker, configurable action, physical sight and original packet path. World siege animation/projectiles, full fortress warfare, and region-wide frontier assets remain separate blocks. No permanent siege object, played database or world geometry is changed.

@@ -70,6 +70,10 @@ def audit(workspace,install):
     if pet_proof.exists() and json.loads(pet_proof.read_text()).get('passed',False):
         row('Original owned-pet lifecycle',['net/server.gd','ui/game_ui.gd'],['Godot/pet_state.gd'],'installed_existing_runtime_verified_owner_review_pending','17 real ordinary-account checks, 28 state and 80 installed native checks. Original summon/model/ownership, seven orders, mode acknowledgements, release and safe quickbar rebinding. Live combat/navigation and every class pet remain separate.')
         result['next_package']='CLIENT-COMPASS: audit original compass art, character heading, visibility and retained layout before adding the missing native surface'
+    ground_receipt=workspace/'GroundTargetLab/installed.json'
+    if ground_receipt.exists() and json.loads(ground_receipt.read_text()).get('installed',False):
+        row('Original physical ground target',['zone_viewer.gd','net/DaocClient.cs'],['Godot/ground_target_state.gd','Godot/live_gateway.gd'],'installed_owner_review_deferred','Ctrl+G configurable; original yellow geometry/bitmap; physical ray and independent terrain sight; original ground target and ability header bits. 26 state,21 private live checks,8 production header checks,26 native checks; original navigation rules retained. No full siege/world frontier claim.')
+        result['next_package']='CLIENT-SIEGE-WORLD-ANIMATION-AUDIT'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

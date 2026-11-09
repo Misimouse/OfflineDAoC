@@ -143,6 +143,7 @@ private:
     bool TickInventoryQuantityAcceptance();
     bool TickRealmWarAcceptance();
     bool TickSiegeAcceptance();
+    bool TickGroundTargetAcceptance();
     bool TickStealthMaterialAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
@@ -441,6 +442,19 @@ private:
     bool CloseClassicQuantity();
     void RefreshClassicQuantity();
     void AcceptClassicQuantity();
+    TSharedPtr<FJsonObject> GroundTargetState;
+    TWeakObjectPtr<AActor> GroundTargetMarker;
+    FVector GroundTargetPoint=FVector::ZeroVector;
+    int64 GroundTargetRevision=-1;
+    bool bHasGroundTarget=false;
+    double LastGroundTargetSight=-10000;
+    void TickGroundTargetSight();
+    void ApplyGroundTarget(TSharedPtr<FJsonObject> State);
+    void RequestGroundTarget();
+    bool PickGroundTargetRay(const FVector& Origin,const FVector& Direction,FVector& Point) const;
+    bool SendGroundTargetPoint(const FVector& Point,bool Visible);
+    bool GroundTargetVisible() const;
+    void ResetGroundTarget();
     TSharedPtr<FJsonObject> SiegeState;
     TSharedPtr<SWidget> SiegeOverlay,SiegePanel;
     FVector2D SiegePosition=FVector2D(120,50);

@@ -28,6 +28,7 @@ FBridgeKeyConfiguration::FBridgeKeyConfiguration(){
     UI(TEXT("show_map"),TEXT("Map Window"),TEXT("M"));
     UI(TEXT("show_journal"),TEXT("Quest Journal"),TEXT("L"));
     UI(TEXT("show_trainer"),TEXT("Training Window"),TEXT("T"));
+    UI(TEXT("ground_target"),TEXT("Ground Target"),TEXT("Ctrl+G"),TEXT("Targeting"));
     UI(TEXT("target_self"),TEXT("Target Self"),TEXT("F7"),TEXT("Targeting"));
     UI(TEXT("target_enemy"),TEXT("Nearest Enemy"),TEXT("Tab"),TEXT("Targeting"));
     UI(TEXT("interact"),TEXT("Interact"),TEXT("E"),TEXT("Targeting"));
@@ -84,6 +85,6 @@ void FBridgeKeyConfiguration::Load(const FString& File){
     Path=File;Reset();FConfigFile Config;Config.Read(File);
     // Stage the entire saved map first so swaps do not conflict with defaults. Invalid files keep defaults.
     TSet<FString> Explicit;auto Saved=Actions;for(auto& A:Actions)for(int32 I=0;I<2;++I){FString V;if(Config.GetString(TEXT("Bindings"),*(A.Id+FString::FromInt(I)),V)){Explicit.Add(A.Id+FString::FromInt(I));FChord D;if(!V.IsEmpty()&&!Parse(V,D)){Actions=Saved;return;}while(A.Bindings.Num()<2)A.Bindings.Add(TEXT(""));A.Bindings[I]=V;}}
-    for(int32 I=0;I<Actions.Num();++I)for(int32 J=I;J<Actions.Num();++J)for(int32 X=0;X<Actions[I].Bindings.Num();++X)for(int32 Y=0;Y<Actions[J].Bindings.Num();++Y){if(I==J&&X>=Y)continue;FChord C,D;if(Parse(Actions[I].Bindings[X],C)&&Parse(Actions[J].Bindings[Y],D)&&C.Key==D.Key&&((I!=J&&(Actions[I].Held||Actions[J].Held))||(C.Shift==D.Shift&&C.Ctrl==D.Ctrl&&C.Alt==D.Alt))){const bool A=Explicit.Contains(Actions[I].Id+FString::FromInt(X)),B=Explicit.Contains(Actions[J].Id+FString::FromInt(Y));if(A!=B&&(A?Actions[J].Id:Actions[I].Id)==TEXT("show_guild")){(A?Actions[J].Bindings[Y]:Actions[I].Bindings[X]).Empty();continue;}Actions=Saved;return;}}
+    for(int32 I=0;I<Actions.Num();++I)for(int32 J=I;J<Actions.Num();++J)for(int32 X=0;X<Actions[I].Bindings.Num();++X)for(int32 Y=0;Y<Actions[J].Bindings.Num();++Y){if(I==J&&X>=Y)continue;FChord C,D;if(Parse(Actions[I].Bindings[X],C)&&Parse(Actions[J].Bindings[Y],D)&&C.Key==D.Key&&((I!=J&&(Actions[I].Held||Actions[J].Held))||(C.Shift==D.Shift&&C.Ctrl==D.Ctrl&&C.Alt==D.Alt))){const bool A=Explicit.Contains(Actions[I].Id+FString::FromInt(X)),B=Explicit.Contains(Actions[J].Id+FString::FromInt(Y));if(A!=B&&((A?Actions[J].Id:Actions[I].Id)==TEXT("show_guild")||(A?Actions[J].Id:Actions[I].Id)==TEXT("ground_target"))){(A?Actions[J].Bindings[Y]:Actions[I].Bindings[X]).Empty();continue;}Actions=Saved;return;}}
 }
 bool FBridgeKeyConfiguration::Save()const{if(Path.IsEmpty())return false;IFileManager::Get().MakeDirectory(*FPaths::GetPath(Path),true);FConfigFile Config;Config.SetString(TEXT("KeyConfiguration"),TEXT("Version"),TEXT("1"));for(const auto& A:Actions)for(int32 I=0;I<2;++I)Config.SetString(TEXT("Bindings"),*(A.Id+FString::FromInt(I)),A.Bindings.IsValidIndex(I)?*A.Bindings[I]:TEXT(""));return Config.Write(Path);}

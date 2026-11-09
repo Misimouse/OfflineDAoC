@@ -24,6 +24,7 @@ var gm_mode:RefCounted
 var release_state:RefCounted
 var realm_war:RefCounted
 var siege:RefCounted
+var ground_target:RefCounted
 var concentration:RefCounted
 var pet:RefCounted
 var trainer:RefCounted
@@ -126,6 +127,7 @@ func _ready()->void:
     release_state=load(folder.path_join("player_release.gd")).new()
     realm_war=load(folder.path_join("realm_war_state.gd")).new()
     siege=load(folder.path_join("siege_state.gd")).new()
+    ground_target=load(folder.path_join("ground_target_state.gd")).new()
     concentration=load(folder.path_join("concentration_state.gd")).new()
     pet=load(folder.path_join("pet_state.gd")).new()
     trainer=load(folder.path_join("trainer_state.gd")).new()
@@ -141,6 +143,7 @@ func _ready()->void:
     classic_ui.macro_request=func(line:String)->bool:return dispatch_chat(line)
     original_spec_actions=load(folder.path_join("original_spec_actions.gd")).new()
     classic_ui.spec_request=func(entry:Dictionary)->bool:
+        sync_ground_action_sight()
         return original_spec_actions.use(entry,server,position,heading,last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0.0,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()))
     classic_ui.pet_request=func(value:Dictionary)->bool:return pet.request(value,server.client,interaction,adapter.entities,Time.get_ticks_msec(),player_state.alive())
     ui_pose=load(folder.path_join("ui_player_pose.gd")).new();add_child(ui_pose)
@@ -253,6 +256,7 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
 func world_event(kind:String,data:Dictionary)->void:
     realm_war.consume(kind,data)
     siege.consume(kind,data,Time.get_ticks_msec())
+    ground_target.consume(kind)
     live_riding.consume(kind,data,Time.get_ticks_msec())
     player_models.consume(kind,data)
     server_sound.consume(kind,data,int(server.entry.get("zone",-1)) if server.playing else -1,position,Time.get_ticks_msec())
@@ -342,6 +346,12 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action=="ground_target_sight":
+        var now:=Time.get_ticks_msec();var before:int=ground_target.flags(now)
+        if ground_target.update_visibility(value,now) and before!=ground_target.flags(now):send_position(last_move_speed if now-last_position_send<300 else 0.0)
+        return
+    if action=="ground_target":
+        ground_target.request(value,server,position,Time.get_ticks_msec());return
     if action in ["siege_command","siege_hide"]:
         siege.request(value,server.client,server.playing,Time.get_ticks_msec());return
     if action in ["warmap_request","warmap_close"]:
@@ -399,6 +409,7 @@ func command(value:Dictionary)->void:
         var seen=value.get("target_in_view",false)
         if seen is bool:
             target_sight_id=String(value.get("target_entity_id",""));target_sight=seen;target_sight_at=Time.get_ticks_msec()
+        ground_target.update_visibility(value,Time.get_ticks_msec())
         send_position(speed)
         last_position_send=Time.get_ticks_msec()
     elif action in ["target","interact","keyword","dialog_response","dismiss_interaction"]:
@@ -411,6 +422,7 @@ func command(value:Dictionary)->void:
     elif action in ["ui_bank","ui_assign","ui_clear","ui_use","ui_use_slot","ui_detail","ui_hover","ui_detail_close","ui_server_window_close"]:
         sync_inventory(Time.get_ticks_msec());classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec())
         ui_pose.global_position=position;ui_pose.heading=heading;ui_pose.velocity=Vector3(0,0,last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0)
+        sync_ground_action_sight()
         classic_ui.request(value,server,ui_pose,int(server.entry.get("zone",-1)),target_visible(Time.get_ticks_msec()),player_state.alive())
     elif action=="player_release":
         if int(server.entry.get("zone",-1))==207:
@@ -611,6 +623,7 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["world_clock"]=world_clock_snapshot()
         transport.snapshot_metadata["realm_war"]=realm_war.snapshot()
         transport.snapshot_metadata["siege"]=siege.snapshot(now)
+        transport.snapshot_metadata["ground_target"]=ground_target.snapshot(now)
         transport.publish(rows,207,"live-offlinedaoc")
     character_lobby.tick(now,server)
     if now-last_report>1000:last_report=now;write_report()
@@ -634,19 +647,23 @@ func target_visible(now:int)->bool:
     var row:Dictionary=adapter.entities.get(interaction.selected_id,{})
     return target_sight and not target_sight_id.is_empty() and target_sight_id==interaction.selected_id and not row.is_empty() and float(row.get("health",1))>0 and bool(row.get("targetable",true)) and now-target_sight_at<=1500
 
+func sync_ground_action_sight()->void:
+    if server!=null and server.client!=null and server.client.has_method("BridgeGroundTargetSight"):
+        server.client.call("BridgeGroundTargetSight",ground_target.visible(Time.get_ticks_msec()))
+
 func sync_attack_visibility()->void:
     # Use the latest native geometry result, not an unconditional visibility grant.
     # Refresh the server heading/action flags immediately before the attack request.
     var now:=Time.get_ticks_msec();var visible:=target_visible(now)
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var oid:=int(interaction.selected_id.get_slice(":",1)) if not interaction.selected_id.is_empty() else 0
-    server.client.Heading(heading,oid,0x30 if visible else 0,(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)))
+    server.client.Heading(heading,oid,(0x30 if visible else 0)|ground_target.flags(now),(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)))
     attack_visibility_syncs+=1
     last_attack_visibility={"target":interaction.selected_id,"native_target":target_sight_id,"visible":visible,"age_ms":now-target_sight_at,"at_ms":now}
 
 func send_position(speed:float)->void:
     var valid:bool=target_visible(Time.get_ticks_msec())
-    var flags:=0x30 if valid else 0
+    var flags:int=(0x30 if valid else 0)|ground_target.flags(Time.get_ticks_msec())
     var sitting:bool=player_state.ready and bool(player_state.vitals.get("sitting",false))
     var health:=int(player_state.vitals.get("health_pct",100)) if player_state.ready else 100
     server.client.Position(position.x/.025+35*8192,position.z/.025+51*8192,position.y/.025,speed/.025,movement_flags.vertical_speed_mps/.025,207,(0x18 if live_riding.local_steed>0 else movement_flags.state(sitting)),movement_flags.on_ground,heading,flags,health,server.me_oid)

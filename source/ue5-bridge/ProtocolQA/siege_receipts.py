@@ -11,7 +11,8 @@ NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win
 GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd','siege_state.gd']
 NEW_NAMES={'DAoCBridgeSiege.inl','DAoCBridgeSiegeAcceptance.cpp','siege_state.gd'}
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+    successor_rows=successor_rows or {}
     root=workspace/'SiegeWindowLab';path=root/'installed.json'
     data=json.loads(path.read_text()) if path.exists() else None
     if not data or not data.get('installed'):return None,{}
@@ -30,14 +31,14 @@ def verify(workspace):
         row=rows[str(plugin/rel)];key=rel.removeprefix('Source/').replace('\\','/')
         before=None if Path(rel).name in NEW_NAMES else previous_sources[key] if rel.startswith('Source/') else previous['binaries_sha256'][Path(rel).name]
         after=current_sources[key] if rel.startswith('Source/') else build['binaries_sha256'][Path(rel).name]
-        assert row['before_sha256']==before and row['after_sha256']==after and digest(Path(row['target']))==after
+        assert row['before_sha256']==before and row['after_sha256']==after and digest(Path(row['target']))==latest(successor_rows,row,after)
     assert data['native_after_sha256']==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     real_path=Path(data['real_protocol_proof']);real=json.loads(real_path.read_text())
     assert data['evidence'][str(real_path)]==digest(real_path) and real['passed'] and real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged'] and len(real['checks'])>=11 and all(real['checks'].values())
     before_path=Path(old['real_protocol_proof']);before=json.loads(before_path.read_text());assert old['evidence'][str(before_path)]==digest(before_path)
     for name in GODOT_TARGETS:
         row=rows[str(workspace/'Godot'/name)];expected_before=None if name in NEW_NAMES else before['source_inputs'][row['source']]
-        assert row['before_sha256']==expected_before and row['after_sha256']==real['source_inputs'][row['source']]==digest(Path(row['target']))
+        assert row['before_sha256']==expected_before and row['after_sha256']==real['source_inputs'][row['source']] and digest(Path(row['target']))==latest(successor_rows,row,row['after_sha256'])
     art_path=workspace/'RvRWindowsLab/resources.json';art=json.loads(art_path.read_text());assert data['evidence'][str(art_path)]==digest(art_path)
     assert art['passed'] and not art['original_art_modified'] and not art['world_map_modified']
     for r in art['files']:assert digest(Path(r['target']))==r['sha256']
