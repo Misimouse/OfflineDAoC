@@ -1,0 +1,13 @@
+MOVEMENT GAP AUDIT — DIVING AND CLIMBING
+
+Original sources inspected locally: Godot player.gd, zone_loader.gd, zone_viewer.gd; DOL PlayerPositionUpdateHandler, GamePlayer.IsDiving and WorldMgr zone configuration. Reproducible read-only inventory: audit_dive_climb.py; private evidence: DiveClimbLab/audit.json.
+
+Godot implements surface swimming and ladder/vine climbing. Its marked ClimbBodies surfaces start climbing on forward contact at 0.5m or1.2m height; speed85 original units/s=2.125m/s. Forward/up, backward/down, jump/water/crowd-control/death stop climbing. The complete original state is0x1C, not swimming or sitting independently. Thirty-seven currently installed native model entries already include their original ladder clip. Native vertical climbing and marked climb-surface import are still missing.
+
+Connacht zone207 original exported model GLTFs contain no climb_ nodes. Decorative hclimbvine textures do not establish a climbable surface. Do not turn arbitrary trees/walls into climb walls or plant a ladder in Ardee to claim world integration. Relevant-zone geometry, original flags, matching native reverse/held ladder animation and collision/lifecycle tests are required in a later traversal delivery.
+
+Godot's diving exclusion is explicit. DOL supports diving, breath-hold and drowning, but the installed data disables diving for Connacht (zone DivingFlag0, region DivingEnabled0). The read-only inventory finds no installed zone override enabling diving. This is a server/world-data policy, not proof that UE cannot support underwater movement. Preserve the current approved surface swimming. Do not enable diving or edit zone rules to pass a test.
+
+For a future diving delivery: server zone permission must be communicated from original packets, validated before input, and preserved across zone/session changes. Input action bit0x02 means diving, output bit0x04 means diving; output bit0x02 instead means stealth. Reusing incoming/outgoing flags would corrupt stealth. Original holding-breath30s and drowning15s timer windows must remain server-owned. Existing ground/target sight, swim/death/ride flags and original collision must remain intact.
+
+Audit is complete; traversal implementation remains explicitly pending relevant world data and its own acceptance. Next independent missing client feature: original personal torch toggle and its server flags, beginning with an audit of original controls/lights and remote visibility. This does not change interior building lights or the day/night system.

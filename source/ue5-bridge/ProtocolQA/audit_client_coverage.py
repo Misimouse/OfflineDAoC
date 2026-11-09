@@ -82,6 +82,9 @@ def audit(workspace,install):
         row('Original siege world bodies and animation',['weapon_models.gd','npcs/npc.gd','net/server_world.gd'],['Godot/siege_visual_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeAnimation.cpp'],'installed_owner_review_deferred','Ten original bodies, seven animated and three originally static. Original server announcements, constant idle preservation, owner/non-owner lifecycle. 22 state,24 real,125 native checks. Projectile impacts/sound and full frontier world remain separate.')
         result['next_package']='CLIENT-SIEGE-IMPACT-EFFECTS'
     if impact_receipt.exists() and json.loads(impact_receipt.read_text()).get('installed',False):result['next_package']='CLIENT-DIVE-CLIMB-AUDIT'
+    if (workspace/'DiveClimbLab/audit.json').exists():
+        row('Original diving and climbing contracts',['player.gd','zone_loader.gd','zone_viewer.gd'],['Godot/movement_flags_state.gd'],'audited_implementation_pending_relevant_world','Connacht diving disabled by original zone/region data; no original climb_ surfaces in its GLTFs.37 installed original ladder clips already present. Preserve surface swimming and server permissions; do not invent climbable walls or change world rules.')
+        result['next_package']='CLIENT-TORCH-AUDIT'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
