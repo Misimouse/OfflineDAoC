@@ -1,20 +1,13 @@
-# Client coverage review, 7 November
+# Client coverage checkpoint, 9 November
 
-The original local Godot client has 27 UI source files. The current bridge transport advertises 66 gameplay actions and 23 snapshot metadata fields. These counts describe code surfaces, not a completion percentage or full end-to-end acceptance.
+The original Godot client has 27 UI source files. Current transport exposes 75 gameplay actions and 28 snapshot metadata fields. These are source contracts, not a migration percentage. Reproduce the inventory and evidence links with audit_client_coverage.py.
 
-Run `audit_client_coverage.py --workspace ... --install ...` to reproduce the source inventory, feature evidence and input hashes in `Reports/client_coverage/coverage.json`.
+The latest installed delivery is the original personal/peer torch (593df25): editable Shift+T, retained Training T, merged persistent preference, authoritative player action flags, original time/storm weighting, bounded no-shadow sources and installed native regressions. Owner gameplay review remains deferred. See PERSONAL-TORCH-DELIVERY.md.
 
-Recent scoped movement/audio deliveries have separate installed proofs and owner checklists. Character creation, equipment, quickbars, merchants, trainers, journal, vault, party and Realm Exchange have explicit source paths through the bridge, but source presence alone does not certify all class/item/world combinations. Appearance acceptance remains separate. Realm Exchange is the marketplace, not proof of player-to-player trading.
+Recent installed packages also cover original remote player position/recovery, physical ground targets, siege windows/world bodies/impacts, compass/time, ordinary group and pet/concentration lifecycle, inventory quantities, local stealth presentation, vitals, interface scale/window recovery, original item services, controls, display and sound. Each has its own receipts, checks and owner review scope; do not infer full RvR, all equipment/class combinations or complete world coverage.
 
-Confirmed gaps or partial surfaces:
+The current bounded package audits original NPC visual flags. Godot ghost appearance uses its own original textures, front-surface depth treatment and restrained white rim, distinct from player stealth. Metadata has 1,815 private candidate checks; original Zombie/Celt samples are imported in a private host. Ghost rendering remains uninstalled until material/render acceptance. Original NPC torch is stored metadata without a light renderer in Godot; this is not authority to invent map illumination. See NPC-VISUAL-FLAGS-AUDIT.md.
 
-- Original local `/face`, `/follow`, `/stick` now have a native controller, original stopping ranges, state cancellation and real-server evidence. Owner accepted face/follow/stick and cancellation on 7 November; direct movement does not include obstacle pathfinding.
-- Bounded live stable transport is now installed: original Riding0xC8, actual posed/instance-scaled saddle, original ride_horse animation, server-owned movement, Space and /dismount, original hoof audio, grounded recovery and unavailable-route purchase gating. The completed Carsten-to-Druim-Ligen itinerary stays within Connacht; five routes outside the loaded world remain unavailable. This does not close unrestricted cross-zone stable travel, personal mounts, boats or multiple seats. Owner accepted the reported Carsten ticket journey on 7 November. See LIVE-RIDING-DELIVERY.md.
+Remaining separate work includes full original controls presets/unsupported actions, appearance review, cross-zone transport/world coverage, effect-only creature presentation, complete spell/equipment variants and battle-scale RvR performance. Diving/climbing audits preserve original Connacht permissions. Quest/crafting/poison UX modernization, Housing/decorations and expansion world population remain explicit later requirements.
 
-- Esc provides sound and 66 supported editable controls across movement, targeting, combat, existing windows and quickbars (two slots, capture, persistence, sensitivity/inversion). See KEY-CONFIGURATION-DELIVERY.md and INTERFACE-KEYS-DELIVERY.md. Full original presets, character-specific maps, unsupported original actions and other settings pages remain separate gaps.
-- Guild/alliance roster is installed with the original social packet, Shift+G and server permissions. The emblem editor is the active private candidate with original picker/packet/cost evidence. Realm-war/siege and player-to-player trade remain distinct gaps requiring their own world/server contracts.
-- Quest interface modernization and expansion world-population import remain deferred according to the owner's instructions.
-
-Basic display settings are now delivered separately: resolution, window mode and original frame caps, confirmed persistence, rollback and launcher-override restart checks. UE borderless uses desktop size. Owner monitor review remains pending. See DISPLAY-SETTINGS-DELIVERY.md. Full render-quality tuning remains separate.
-
-The active bounded package is CLIENT-EMBLEM: original guild emblem editor, server permissions and payment confirmation. See EMBLEM-WINDOW-DELIVERY.md. Item handover to an emblemeer is separate from choosing a guild emblem. World population import remains deferred.
+Use source and DOL evidence before changing runtime. Close each bounded delivery with isolated/live/native proof and recovery before moving on. Record discovered unrelated issues without interrupting the current block.

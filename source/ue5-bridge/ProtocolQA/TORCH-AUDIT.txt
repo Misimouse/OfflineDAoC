@@ -1,3 +1,6 @@
+HISTORICAL AUDIT: the following notes describe the pre-implementation checkpoint.
+CURRENT STATUS: personal torch installed, verified and pushed in593df25. See PERSONAL-TORCH-DELIVERY.md for current behavior and owner checks.
+
 PERSONAL TORCH — AUDITED, DEFERRED UNTIL REMOTE PLAYER PACKET DELIVERY
 
 Original Godot personal torch is white,3.2m above the figure,30m range, no shadows, on by default and saved. Original controls accept torch binding or itsShift form. Current bridge T already opens Training Window. Preserve saved mappings and training T; proposed new editable default isShift+T.
