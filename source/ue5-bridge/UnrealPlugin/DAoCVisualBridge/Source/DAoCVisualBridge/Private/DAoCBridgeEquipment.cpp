@@ -73,6 +73,7 @@ bool UDAoCBridgeSubsystem::BuildEmblemPickerShield(UStaticMeshComponent* Compone
     return ApplyOriginalEmblem(Component,GearObj(Row,TEXT("info")),Value)>0;
 }
 void UDAoCBridgeSubsystem::ClearLocalEquipment(){
+    ResetLocalStealthMaterials();
     for(auto& Pair:LocalEquipment)if(Pair.Value.Component.IsValid())Pair.Value.Component->DestroyComponent();
     LocalEquipment.Empty();EquipmentActor.Reset();EquipmentFingerprint.Empty();EquipmentMissingModels=0;EquipmentMissingBones=0;
     for(auto& Pair:RemoteEquipment)for(auto& Gear:Pair.Value.Bindings)if(Gear.Value.Component.IsValid())Gear.Value.Component->DestroyComponent();RemoteEquipment.Empty();

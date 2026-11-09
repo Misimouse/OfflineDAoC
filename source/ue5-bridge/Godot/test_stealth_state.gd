@@ -46,6 +46,10 @@ func _initialize()->void:
     var e:Dictionary=ui.entries["srv:spec:1"].duplicate(true)
     check(e.name=="Stealth" and e.kind=="ability","original specialization is exposed in existing Abilities UI")
     check(ui.entries["srv:skill:0"].name=="Sprint","adding spec action preserves original non-spec indexes")
+    check(ui.request({"action":"ui_hover","entry_id":e.id,"entry_token":e.token},server,player,207,false,true) and ui.hover.status=="ready" and ui.hover.lines==["Specialization level: 1"],"hover displays the actual specialization rank")
+    check(ui.request({"action":"ui_detail","entry_id":e.id,"entry_token":e.token},server,player,207,false,true) and ui.detail.status=="ready" and ui.detail.caption=="Stealth","original detail panel displays specialization metadata")
+    check(server.queries.is_empty(),"specialization details never query an unrelated server ability index")
+    check(not ui.request({"action":"ui_detail","entry_id":e.id,"entry_token":"old"},server,player,207,false,true),"stale rank identity cannot open specialization details")
     var use:={"action":"ui_use","entry_id":e.id,"entry_token":e.token}
     check(ui.request(use,server,player,207,false,true),"current original spec action is usable")
     check(client.calls.size()==1 and client.calls[0]==[286760.0,417912.0,80.0,100.0,1024,false,1,0],"exact original type-zero UseSkill packet arguments")

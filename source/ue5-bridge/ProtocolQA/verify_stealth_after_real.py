@@ -105,6 +105,13 @@ try:
  wait(lambda:any(e.get('name')=='Stealth' for e in ui().get('entries',[])),'Original Stealth action reaches native UI catalogue')
  base=a.snapshot['max_speed_mps'];result['checks']['original_stealth_action_is_available']=stealth_entry()['kind']=='ability'
  result['checks']['ordinary_druid_does_not_receive_stealth']=not any(e.get('name')=='Stealth' for e in ui(b).get('entries',[]))
+ e=stealth_entry();a.send('ui_hover',entry_id=e['id'],entry_token=e['token'])
+ wait(lambda:ui().get('hover',{}).get('entry_id')==e['id'] and ui()['hover'].get('status')=='ready','Original specialization hover metadata')
+ result['checks']['hover_displays_actual_spec_rank']=ui()['hover'].get('lines')==['Specialization level: '+str(e['level'])]
+ a.send('ui_detail',entry_id=e['id'],entry_token=e['token'])
+ wait(lambda:ui().get('detail',{}).get('entry_id')==e['id'] and ui()['detail'].get('status')=='ready','Specialization detail panel')
+ result['checks']['detail_displays_actual_spec_rank']=ui()['detail'].get('lines')==['Specialization level: '+str(e['level'])]
+ a.send('ui_detail_close')
  e=stealth_entry();a.send('ui_use',entry_id=e['id'],entry_token='stale');settle(.3)
  result['checks']['stale_ui_action_refused']=not hidden()
  use_stealth();wait(lambda:hidden() and a.snapshot['max_speed_mps']<base,'Original Stealth effect and speed confirmed')

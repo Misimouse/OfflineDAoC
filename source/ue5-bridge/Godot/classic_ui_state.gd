@@ -265,6 +265,11 @@ func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,al
         if not hover.is_empty() and hover.entry_id==e.id and hover.entry_token==e.token and (hover.status!="unavailable" or Time.get_ticks_msec()-hover_started<5000):return true
         if e.kind=="macro":
             hover={"entry_id":e.id,"entry_token":e.token,"key":"macro-local","caption":e.name,"lines":[String(e.macro_command)],"status":"ready"};return true
+        if String(e.id).begins_with("srv:spec:"):
+            # The original detail protocol has no ability-index delve for a
+            # specialization. Display its authoritative rank, not a guessed ID.
+            hover_request.clear()
+            hover={"entry_id":e.id,"entry_token":e.token,"key":"spec-rank","caption":e.name,"lines":["Specialization level: %d" % int(e.level)],"status":"ready"};return true
         var request:Array=[5,int(e.effect_icon)] if e.kind=="effect" else [1,int(String(e.id).trim_prefix("srv:"))] if e.kind=="item" else server.skill_detail(e)
         if request.is_empty():return false
         var key:Variant=int(request[1]) if e.kind=="item" else "fx:%d" % int(request[1]) if e.kind=="effect" else "sk:%d:%d" % [int(request[0]),int(request[1])]
@@ -282,6 +287,8 @@ func request(value:Dictionary,server:Node,player:Node3D,zone:int,visible:bool,al
         if e.kind=="macro":
             server_window.clear();detail={"entry_id":e.id,"entry_token":e.token,"key":"macro-local","caption":e.name,"lines":[String(e.macro_command)],"status":"ready"};revision+=1;return true
         if zone!=207 or catalog_loading:return fail("Wait for the list to finish updating.")
+        if String(e.id).begins_with("srv:spec:"):
+            server_window.clear();detail={"entry_id":e.id,"entry_token":e.token,"key":"spec-rank","caption":e.name,"lines":["Specialization level: %d" % int(e.level)],"status":"ready"};revision+=1;return true
         var request:Array=[5,int(e.effect_icon)] if e.kind=="effect" else [1,int(String(e.id).trim_prefix("srv:"))] if e.kind=="item" else server.skill_detail(e)
         if request.is_empty():return fail("No information is available for this entry.")
         var key:="bridge-ui:"+String(e.token)

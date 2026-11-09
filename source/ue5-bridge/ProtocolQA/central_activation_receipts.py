@@ -141,6 +141,64 @@ WORLD_CLOCK_NEW_NAMES={'DAoCBridgeWorldClock.inl','DAoCBridgeWorldClockAcceptanc
 WORLD_CLOCK_GODOT_TARGETS=['live_gateway.gd','visual_bridge.gd']
 WORLD_CLOCK_ART_SHA256='1f68440ba402de202272ad3df59392737411feb31493f22517691c858e9206ff'
 
+STEALTH_NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules',
+    'Source/DAoCVisualBridge/Public/DAoCBridgeSubsystem.h','Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeEquipment.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeStealthMaterials.h',
+    'Source/DAoCVisualBridge/Private/DAoCBridgeStealthMaterials.cpp','Source/DAoCVisualBridge/Private/DAoCBridgeStealthMaterialAcceptance.cpp']
+STEALTH_NEW_NAMES={'DAoCBridgeStealthMaterials.h','DAoCBridgeStealthMaterials.cpp','DAoCBridgeStealthMaterialAcceptance.cpp',
+    'original_spec_actions.gd','stealth_materials.json'}
+STEALTH_GODOT_TARGETS=['classic_ui_state.gd','live_gateway.gd','decoded_world_adapter.gd','live_riding_state.gd',
+    'original_spec_actions.gd','player_model_state.gd']
+
+def verify_stealth_successor(workspace,clock,clock_path):
+    """Validate the exact successor scope before applying its receipt overlay."""
+    path=workspace/'StealthLab/installed.json'
+    data=json.loads(path.read_text()) if path.exists() else None
+    if not data or not data.get('installed'):return None,{}
+    assert clock and data['phase']=='complete' and not data['database_modified'] and not data['server_rules_modified']
+    assert data['predecessor_receipt_sha256']==digest(clock_path) and data['native_before_sha256']==clock['native_after_sha256']
+    assert data['evidence'] and all(digest(Path(p))==h for p,h in data['evidence'].items())
+    plugin=workspace/'Client/Plugins/DAoCVisualBridge'
+    rows={r['target']:r for r in data['files']}
+    catalog=plugin/'Content/ClassicUI/stealth_materials.json'
+    expected={str(plugin/p) for p in STEALTH_NATIVE_TARGETS}|{str(workspace/'Godot'/p) for p in STEALTH_GODOT_TARGETS}|{str(catalog)}
+    assert len(rows)==len(data['files'])==len(expected) and set(rows)==expected
+    previous=workspace/'WorldClockLab/native_build.json';build_path=workspace/'StealthLab/native_build.json'
+    assert clock['evidence'][str(previous)]==digest(previous) and data['evidence'][str(build_path)]==digest(build_path)
+    old=json.loads(previous.read_text());build=json.loads(build_path.read_text())
+    assert build['passed'] and build['normal_binary_sha256']==data['native_before_sha256']
+    old_sources={Path(p).as_posix():h for p,h in old['source_sha256'].items()}
+    sources={Path(p).as_posix():h for p,h in build['source_sha256'].items()}
+    for relative in STEALTH_NATIVE_TARGETS:
+        row=rows[str(plugin/relative)]
+        key=relative.removeprefix('Source/')
+        before=None if Path(relative).name in STEALTH_NEW_NAMES else old_sources[key] if relative.startswith('Source/') else old['binaries_sha256'][Path(relative).name]
+        after=sources[key] if relative.startswith('Source/') else build['binaries_sha256'][Path(relative).name]
+        assert row['before_sha256']==before and row['after_sha256']==after and digest(Path(row['target']))==after
+    assert rows[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]['after_sha256']==data['native_after_sha256']
+    before_path=Path(clock['godot_before_proof']);assert clock['evidence'][str(before_path)]==digest(before_path)
+    before=json.loads(before_path.read_text());after_path=Path(data['godot_after_proof'])
+    assert data['evidence'][str(after_path)]==digest(after_path)
+    after=json.loads(after_path.read_text());assert after['passed'] and after['normal_runtime_unchanged'] and after['database_restored']
+    clock_rows={r['target']:r for r in clock['files']}
+    for name in STEALTH_GODOT_TARGETS:
+        row=rows[str(workspace/'Godot'/name)]
+        previous_row=clock_rows.get(row['target'])
+        expected_before=None if name in STEALTH_NEW_NAMES else previous_row['after_sha256'] if previous_row else before['source_inputs'][row['target']]
+        assert row['before_sha256']==expected_before and row['after_sha256']==after['source_inputs'][row['source']]
+        assert digest(Path(row['target']))==row['after_sha256']
+    row=rows[str(catalog)];assert row['before_sha256'] is None and digest(catalog)==row['after_sha256']
+    definition=json.loads(catalog.read_text());assert definition['passed'] and not definition.get('diagnostic_only')
+    library=definition['library'];assert library.startswith('/DAoCVisualBridge/Stealth_v01/') and '..' not in library
+    assets={str(plugin/'Content'/(p.split('.')[0].removeprefix('/DAoCVisualBridge/')+'.uasset')) for p in definition['materials'].values()}
+    assert assets and len(assets)<=20000 and set(data['material_assets'])==assets
+    proof=Path(data['material_proof']);assert data['evidence'][str(proof)]==digest(proof)
+    material=json.loads(proof.read_text());assert material['passed'] and material['checks']>=400
+    for asset in assets:
+        target=Path(asset);assert target.resolve().is_relative_to((plugin/'Content/Stealth_v01').resolve())
+        assert data['material_assets'][asset]==material['source_inputs'][asset]==digest(target)
+    return data,rows
+
 def verify_files(workspace):
     base=workspace/'ExpansionRaceLab/CentralDelivery'
     original_path=base/'MinotaurActivation/installed.json'
@@ -262,6 +320,11 @@ def verify_files(workspace):
     clock_path=workspace/'WorldClockLab/installed.json'
     clock=json.loads(clock_path.read_text()) if clock_path.exists() else None
     if clock and not clock.get('installed'):clock=None
+    stealth,stealth_replacements=verify_stealth_successor(workspace,clock,clock_path)
+    def latest_stealth(row,expected):
+        changed=stealth_replacements.get(row['target'])
+        if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
+        return expected
     clock_replacements={}
     if clock:
         assert compass and clock['phase']=='complete' and not clock['database_modified'] and not clock['server_rules_modified']
@@ -277,10 +340,10 @@ def verify_files(workspace):
         for relative in WORLD_CLOCK_NATIVE_TARGETS:
             row=clock_replacements[str(plugin/relative)]
             before=None if Path(relative).name in WORLD_CLOCK_NEW_NAMES else old_source[relative.removeprefix('Source/')] if relative.startswith('Source/') else old_build['binaries_sha256'][Path(relative).name]
-            assert row['before_sha256']==before and digest(Path(row['target']))==row['after_sha256']
+            assert row['before_sha256']==before and digest(Path(row['target']))==latest_stealth(row,row['after_sha256'])
         for name in WORLD_CLOCK_GODOT_TARGETS:
             row=clock_replacements[str(workspace/'Godot'/name)]
-            assert row['before_sha256']==before_data['source_inputs'][str(workspace/'Godot'/name)] and digest(Path(row['target']))==row['after_sha256']
+            assert row['before_sha256']==before_data['source_inputs'][str(workspace/'Godot'/name)] and digest(Path(row['target']))==latest_stealth(row,row['after_sha256'])
         assert clock_replacements[str(plugin/'Content/ClassicUI/timedisp.png')]['after_sha256']==WORLD_CLOCK_ART_SHA256
         binary=clock_replacements[str(plugin/'Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')]
         assert binary['before_sha256']==clock['native_before_sha256'] and binary['after_sha256']==clock['native_after_sha256']
@@ -288,7 +351,7 @@ def verify_files(workspace):
     def latest_clock(row,expected):
         changed=clock_replacements.get(row['target'])
         if changed:assert changed['before_sha256']==expected;expected=changed['after_sha256']
-        return expected
+        return latest_stealth(row,expected)
     compass_replacements={}
     if compass:
         assert player_vitals and compass['phase']=='complete' and not compass['database_modified'] and not compass['server_rules_modified']
@@ -386,7 +449,7 @@ def verify_files(workspace):
         target=str(workspace/'Godot/classic_ui_state.gd');consumable_replacements={r['target']:r for r in consumable['files']}
         assert len(consumable['files'])==len(consumable_replacements)==1 and set(consumable_replacements)=={target}
         row=consumable_replacements[target];prior=next(r for r in hover['files'] if r['target']==target)
-        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==row['after_sha256']
+        assert row['before_sha256']==prior['after_sha256'] and digest(Path(target))==latest_ui_scale(row,row['after_sha256'])
         assert consumable['evidence'] and all(digest(Path(p))==h for p,h in consumable['evidence'].items())
     def latest_consumable(row,expected):
         changed=consumable_replacements.get(row['target'])
@@ -781,4 +844,4 @@ def verify_files(workspace):
     if combat:
         changed_original=[row for row in original['files'] if row['target'] in replacements]
         assert len(changed_original)==1 and Path(changed_original[0]['target'])==workspace/'Godot/live_gateway.gd'
-    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'player_vitals_installed':bool(player_vitals),'compass_installed':bool(compass),'world_clock_installed':bool(clock),'verified_files':len(original['files'])}
+    return {'passed':True,'minotaur_installed':True,'spellclasses_installed':bool(successor),'shar_installed':bool(shar),'combat_audio_installed':bool(combat),'weapon_mode_audio_installed':bool(mode),'target_selection_installed':bool(selection),'options_audio_installed':bool(options),'door_audio_installed':bool(door),'footstep_audio_installed':bool(foot),'server_sound_audio_installed':bool(server),'water_movement_installed':bool(water),'jump_landing_installed':bool(jump),'movement_keys_installed':bool(keys),'target_tracking_installed':bool(tracking),'live_riding_installed':bool(riding),'key_configuration_installed':bool(configuration),'interface_keys_installed':bool(interface),'display_settings_installed':bool(display),'guild_window_installed':bool(guild),'emblem_window_installed':bool(emblem),'item_handover_installed':bool(handover),'weapon_poison_installed':bool(poison),'equipment_refusals_installed':bool(refusal),'hover_details_installed':bool(hover),'consumable_use_installed':bool(consumable),'ui_scale_installed':bool(ui_scale),'window_recovery_installed':bool(window_recovery),'player_vitals_installed':bool(player_vitals),'compass_installed':bool(compass),'world_clock_installed':bool(clock),'stealth_installed':bool(stealth),'verified_files':len(original['files'])}

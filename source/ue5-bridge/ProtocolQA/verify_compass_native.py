@@ -10,7 +10,7 @@ from verify_options_audio_native import read
 
 
 def verify(workspace, engine, installed=False, lab_name="CompassLab"):
-    assert lab_name in ["CompassLab","WorldClockLab"]
+    assert lab_name in ["CompassLab","WorldClockLab","StealthLab"]
     root = workspace / lab_name
     bp = root / 'native_build.json'
     build = read(bp)

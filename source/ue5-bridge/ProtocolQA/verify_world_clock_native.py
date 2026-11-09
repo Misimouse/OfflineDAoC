@@ -9,8 +9,9 @@ from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
 
-def verify(workspace, engine, installed=False):
-    root = workspace / 'WorldClockLab'
+def verify(workspace, engine, installed=False, lab_name="WorldClockLab"):
+    assert lab_name in ['WorldClockLab','StealthLab']
+    root = workspace / lab_name
     bp = root / 'native_build.json'
     build = read(bp)
     assert build['passed']
@@ -22,7 +23,7 @@ def verify(workspace, engine, installed=False):
     if installed:
         from central_activation_receipts import verify_files
         assert verify_files(workspace)['world_clock_installed']
-    original = root / 'Art/timedisp.png'
+    original = workspace / 'WorldClockLab/Art/timedisp.png'
     art_hash = '1f68440ba402de202272ad3df59392737411feb31493f22517691c858e9206ff'
     assert digest(original) == art_hash
     out = root / ('InstalledWorldClockAcceptance' if installed else 'WorldClockAcceptance') / datetime.now().strftime('%Y%m%d-%H%M%S-%f')
