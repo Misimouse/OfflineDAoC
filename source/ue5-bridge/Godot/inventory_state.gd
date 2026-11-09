@@ -138,6 +138,14 @@ func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictio
             destination=first_free()
             if destination<0:return fail("Your backpack is full.")
         if destination==source or not allowed_slots().has(destination):return fail("Invalid destination slot.")
+        if value.has("count"):
+            var selected_count:=input_integer(value,"count")
+            if action!="inventory_move" or selected_count<1 or selected_count>count:return fail("Invalid item quantity.")
+            if selected_count<count:
+                # Split only into an empty storage slot. Never turn a quantity
+                # choice into equipment, poison application or a guessed merge.
+                if (source<40 or (source>79 and not vault_slot(source))) or (destination<40 or (destination>79 and not vault_slot(destination))) or items.has(destination):return fail("Choose an empty backpack or vault slot to split a stack.")
+            count=selected_count
         if source>=110 or destination>=110:
             if action!="inventory_move" or String(value.get("vault_token",""))!=String(vault.get("token","")) or not bool(vault.get("valid",false)):return fail("The vault has changed or is closed.")
             if (not vault_slot(source) and (source<40 or source>79)) or (not vault_slot(destination) and (destination<40 or destination>79)):return fail("Move the item between backpack and vault.")

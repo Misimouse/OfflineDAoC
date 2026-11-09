@@ -140,6 +140,7 @@ private:
     bool TickPlayerVitalsAcceptance();
     bool TickCompassAcceptance();
     bool TickWorldClockAcceptance();
+    bool TickInventoryQuantityAcceptance();
     bool TickStealthMaterialAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
@@ -429,6 +430,15 @@ private:
     void RefreshClassicVault();
     bool CloseClassicVault(bool Notify=true);
     void ClassicVaultSlotClicked(int32 Slot);
+    TSharedPtr<SWidget> ClassicQuantityOverlay,ClassicQuantityPanel;
+    TSharedPtr<FJsonObject> ClassicQuantityCommand;
+    FString ClassicQuantitySession;
+    int32 ClassicQuantityMaximum=0,ClassicQuantitySelected=1;
+    void MoveClassicInventoryDrag(int32 Source,int32 Destination,bool ChooseQuantity);
+    bool ClassicQuantityValid() const;
+    bool CloseClassicQuantity();
+    void RefreshClassicQuantity();
+    void AcceptClassicQuantity();
     void ActivateClassicInventorySlot(int32 Slot);
     int32 ClassicLastInventorySlot=-1;
     double ClassicLastInventoryClickAt=0;

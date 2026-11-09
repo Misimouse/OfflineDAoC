@@ -612,6 +612,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickStealthMaterialAcceptance())return;
+    if(TickInventoryQuantityAcceptance())return;
     if(TickWorldClockAcceptance())return;
     if(TickCompassAcceptance())return;
     if(TickPlayerVitalsAcceptance())return;
