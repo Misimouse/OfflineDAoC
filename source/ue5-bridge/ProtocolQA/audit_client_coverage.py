@@ -85,6 +85,9 @@ def audit(workspace,install):
     if (workspace/'DiveClimbLab/audit.json').exists():
         row('Original diving and climbing contracts',['player.gd','zone_loader.gd','zone_viewer.gd'],['Godot/movement_flags_state.gd'],'audited_implementation_pending_relevant_world','Connacht diving disabled by original zone/region data; no original climb_ surfaces in its GLTFs.37 installed original ladder clips already present. Preserve surface swimming and server permissions; do not invent climbable walls or change world rules.')
         result['next_package']='CLIENT-TORCH-AUDIT'
+    if (workspace/'RemotePlayerLab/verified.json').exists() and json.loads((workspace/'RemotePlayerLab/verified.json').read_text()).get('passed',False):
+        row('Original remote player position and recovery',['net/DaocClient.cs','net/server_world.gd'],['Godot/decoded_world_adapter.gd','Godot/live_gateway.gd'],'installed_owner_review_deferred','Original1.127 absolute position and separate player-session recovery; two ordinary accounts verified appearance/movement/stop/sit/stand/logout.73network,69state,18real,55native pose,387NPC collision and25combat checks. No full RvR or all remote states live acceptance claim.')
+        result['next_package']='CLIENT-PERSONAL-TORCH'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

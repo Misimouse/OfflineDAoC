@@ -22,9 +22,16 @@ def backend_plan(workspace):
     expected={str(runtime/'MMOEngine.dll'),str(runtime/'MMOEngine.pdb'),str(normal/'game/net/DaocClient.cs')}
     rows={r['target']:r for r in data['backend_files']}
     assert len(rows)==3 and set(rows)==expected
-    assert all(digest(Path(p))==h for p,h in data['source_inputs'].items())
+    # Historical network-source proof refers to the frozen producer snapshot,
+    # not the mutable checkout used to prepare the next network delivery.
+    network_row=rows[str(normal/'game/net/DaocClient.cs')]
+    frozen=workspace/'GroundTargetLab/BackendSource/game/net/DaocClient.cs'
+    assert digest(frozen)==data['source_inputs'][network_row['source']]==network_row['after_sha256']
+    for p,h in data['source_inputs'].items():
+        assert digest(frozen if p==network_row['source'] else Path(p))==h
     for r in rows.values():
-        assert digest(Path(r['source']))==r['after_sha256'] and r['before_sha256'] and r['after_sha256']
+        origin=frozen if r is network_row else Path(r['source'])
+        assert digest(origin)==r['after_sha256'] and r['before_sha256'] and r['after_sha256']
     assert rows[str(runtime/'MMOEngine.dll')]['after_sha256']==data['candidate_binary_sha256']
     return data,rows
 

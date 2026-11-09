@@ -1,0 +1,11 @@
+REMOTE PLAYER POSITION — INSTALLED, OWNER REVIEW DEFERRED
+
+Original client announces1.127 but did not decodePlayerPosition0xA9. Exact original40-byte payload now decoded: absolute region floats, signed speeds, separate OID/session, state/seat/heading/action, health high-bit combat and vitals. Preserve original TCP fallback; no new UDP.
+
+Unknown player recovery uses originalCreatePlayerRequest0xD5 and the little-endian session ID. GenericRequestObject0xBE uses an OID and returns a static object for a GamePlayer; it must not be used here. Original server handler sends the player's appearance and equipment. Session-throttled requests reset on login. No server modification required.
+
+Adapter validates identities, preserves local/NPC records, forwards player packets, decodes original body states and reuses bounded interpolation. Negative speed and strafe control prediction without changing body facing. Mounted heading is the steed OID. Native original sit/stand, swim, ladder, ride, backward and death clips preserved. Combat state remains authoritative. No new permissions, teleport, damage, navigation or world geometry.
+
+Verified:73production network checks (65decoder+8action headers),69adapter checks,18real checks with two ordinary accounts,55native pose checks,387NPC-motion/collision checks,25combat checks and40installation-guard cases. The installed client repeated55/387/25native checks. Exact ten-file installation with verified backup and predecessor composition. Old GroundTarget compiler proof now uses its frozen original producer snapshot, while current installed runtime remains guarded by the explicit successor.
+
+Real evidence covers appearance, movement and stop in both directions, sit/stand and saved logout/removal. Swimming/climbing/riding here have state/native tests; this does not claim every multiplayer/RvR scenario or a fully migrated client. Original Connacht diving restriction remains. Played database, world map, gameplay rules and WORK graphics unchanged. Next: personal torch, following TORCH-AUDIT.txt.

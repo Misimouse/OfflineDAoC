@@ -41,7 +41,12 @@ void UDAoCBridgeSubsystem::ApplyRemoteMotion(const FString& Id,AActor* Actor,TSh
     if(!(*Data)->TryGetNumberField(TEXT("seq"),Seq)||!FMath::IsFinite(Seq)||Seq<0||Seq>9e15)return;
     (*Data)->TryGetNumberField(TEXT("age_ms"),Age);(*Data)->TryGetNumberField(TEXT("speed_mps"),Speed);(*Data)->TryGetNumberField(TEXT("interval_ms"),Interval);
     if(!FMath::IsFinite(Age)||!FMath::IsFinite(Speed)||!FMath::IsFinite(Interval))return;
-    const auto& Forward=Row->GetArrayField(TEXT("forward_xz"));const FVector Direction(Forward[0]->AsNumber(),Forward[1]->AsNumber(),0);
+    const auto& Forward=Row->GetArrayField(TEXT("forward_xz"));FVector Direction(Forward[0]->AsNumber(),Forward[1]->AsNumber(),0);
+    FString PredictionKind;Row->TryGetStringField(TEXT("kind"),PredictionKind);
+    const TArray<TSharedPtr<FJsonValue>>* PredictDirection=nullptr;
+    if(PredictionKind==TEXT("player")&&(*Data)->TryGetArrayField(TEXT("direction_xz"),PredictDirection)&&PredictDirection->Num()==2){
+        double X=0,Y=0;if((*PredictDirection)[0]->TryGetNumber(X)&&(*PredictDirection)[1]->TryGetNumber(Y)&&FMath::IsFinite(X)&&FMath::IsFinite(Y)&&FMath::Abs(X)<=1.01&&FMath::Abs(Y)<=1.01)Direction=FVector(X,Y,0).GetSafeNormal2D();
+    }
     FVector Goal;const bool HasGoal=MotionPoint(*Data,TEXT("destination_m"),Goal);FString State;Row->TryGetStringField(TEXT("state"),State);
     auto& Motion=RemoteMotion.FindOrAdd(Id);
     bool PositionValid=true;(*Data)->TryGetBoolField(TEXT("position_valid"),PositionValid);const FVector SamplePosition=(!PositionValid&&Motion.Initialized)?Motion.Rendered:Position;
@@ -68,7 +73,14 @@ void UDAoCBridgeSubsystem::TickRemoteMotion(float Dt){
         if(Motion.ConstrainToWorld&&FVector::DistSquared(PlayerPosition,Previous)<Range*Range&&!Desired.Equals(Previous,.01))Desired=ConstrainRemote(GetWorld(),Actor,PlayerPawn,Previous,Desired,Motion);
         Motion.Rendered=Desired;Actor->SetActorLocation(Desired);
         if(Desired.Equals(Previous,.05)&&Motion.MovingFrames>BeforeFrames)--Motion.MovingFrames;
-        SetEntityAnimation(Pair.Key,Motion.Dead?TEXT("dead"):Motion.ForecastActive(Now)?(Motion.Speed>375?TEXT("run"):TEXT("walk")):TEXT("idle"));
+        FString Pose=Motion.Dead?TEXT("dead"):Motion.ForecastActive(Now)?(Motion.Speed>375?TEXT("run"):TEXT("walk")):TEXT("idle");
+        auto Row=EntityRows.FindRef(Pair.Key);FString Kind;if(Row.IsValid())Row->TryGetStringField(TEXT("kind"),Kind);
+        if(!Motion.Dead&&Kind==TEXT("player")){
+            auto Flag=[&](const TCHAR* Name){bool B=false;Row->TryGetBoolField(Name,B);return B;};
+            if(Flag(TEXT("remote_sitting")))Pose=TEXT("sit_idle");else if(Flag(TEXT("remote_swimming")))Pose=TEXT("swim");else if(Flag(TEXT("remote_climbing")))Pose=TEXT("ladder");else if(Flag(TEXT("remote_riding")))Pose=TEXT("ride_horse");
+            else if(Motion.ForecastActive(Now)){FString Requested;Row->TryGetStringField(TEXT("state"),Requested);if(Requested==TEXT("walk_back"))Pose=Requested;}
+        }
+        SetEntityAnimation(Pair.Key,Pose);
     }
     RemoteMotionLastMs=(FPlatformTime::Seconds()-TickBegan)*1000;RemoteMotionPeakMs=FMath::Max(RemoteMotionPeakMs,RemoteMotionLastMs);
 }

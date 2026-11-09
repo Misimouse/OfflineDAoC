@@ -320,6 +320,15 @@ public partial class DaocClient : Node
 		Send(0xBE, w);
 	}
 
+	// PlayerCreationRequestHandler uses a session ID, unlike RequestObject (OID).
+	public void RequestPlayer(int session)
+	{
+		if (session < 1 || session > ushort.MaxValue) return;
+		var w = new Writer();
+		w.ShortLE((ushort)session);
+		Send(0xD5, w);
+	}
+
 	// PlayerRegionChangeRequestHandler (1.126+): walking into a zone exit (its ZonePoint id).
 	public void ZonePoint(int id)
 	{
@@ -811,6 +820,16 @@ public partial class DaocClient : Node
 				d["name"] = r.Pascal(); d["guild"] = r.Pascal(); d["last_name"] = r.Pascal();
 				d["prefix"] = r.Pascal(); d["title"] = r.Pascal();
 				return d;
+			case 0xA9:                                    // PlayerPosition1127: absolute region floats, never NPC offsets
+                if (!TryReadPlayerPosition1127(r, out var position)) return null;
+                d["kind"] = "player_move";
+                d["x"] = position.X; d["y"] = position.Y; d["z"] = position.Z;
+                d["speed"] = position.Speed; d["speed_z"] = position.VerticalSpeed;
+                d["session"] = position.Session; d["oid"] = position.ObjectId; d["zone"] = position.Zone;
+                d["state_flags"] = position.State; d["seat"] = position.Seat; d["heading"] = position.Heading;
+                d["action_flags"] = position.Action; d["health"] = position.Health;
+                d["combat_active"] = position.Combat; d["mana"] = position.Mana; d["endurance"] = position.Endurance;
+                return d;
 			case 0xA1:                                    // ObjectUpdate (168): a living's position (zone offsets), speed, health
 			{
 				d["kind"] = "move";
@@ -1680,6 +1699,25 @@ public partial class DaocClient : Node
 		}
 		return list;
 	}
+
+    // This client announces 1.127. Keep its exact 40-byte player update separate
+    // from NPC ObjectUpdate and the shorter pre-1.127 session-only format.
+    public readonly record struct PlayerPosition1127(float X, float Y, float Z, float Speed, float VerticalSpeed,
+        int Session, int ObjectId, int Zone, int State, int Seat, int Heading, int Action, int Health,
+        bool Combat, int Mana, int Endurance);
+    public static bool TryReadPlayerPosition1127(Reader r, out PlayerPosition1127 position)
+    {
+        position = default;
+        if (r == null || r.Left != 40) return false;
+        float x=r.FloatLE(), y=r.FloatLE(), z=r.FloatLE(), speed=r.FloatLE(), vertical=r.FloatLE();
+        int session=r.Short(), oid=r.Short(), zone=r.Short(), state=r.Byte(); r.Byte();
+        int seat=r.Short(), heading=r.Short(), action=r.Byte(); r.Byte(); r.Byte();
+        int health=r.Byte(), mana=r.Byte(), endurance=r.Byte(); r.Short();
+        if (!float.IsFinite(x)||!float.IsFinite(y)||!float.IsFinite(z)||!float.IsFinite(speed)||!float.IsFinite(vertical)
+            ||session==0||oid==0||(health&127)>100||mana>100||endurance>100) return false;
+        position=new(x,y,z,speed,vertical,session,oid,zone,state,seat,heading,action,health&127,(health&128)!=0,mana,endurance);
+        return true;
+    }
 
 	// ---------------------------------------------------------------- byte helpers
 

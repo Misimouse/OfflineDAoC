@@ -5,7 +5,14 @@ from prepare_combined_expansion_data import digest
 NATIVE_TARGETS=['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/Win64/UnrealEditor.modules','Source/DAoCVisualBridge/Private/DAoCBridgeSpellVisuals.cpp']
 GODOT_TARGETS=['live_gateway.gd','spell_visual_state.gd']
 def read(p):return json.loads(p.read_text(encoding='utf-8-sig'))
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+    successor_rows=successor_rows or {}
+    def current_hash(path):
+        replacement=successor_rows.get(str(path))
+        if replacement:
+            assert digest(path)==replacement['after_sha256']
+            return replacement['before_sha256']
+        return digest(path)
     root=workspace/'SiegeImpactLab';path=root/'installed.json'
     data=read(path) if path.exists() else None
     if not data or not data.get('installed'):return None,{}
@@ -22,11 +29,11 @@ def verify(workspace):
         r=rows[str(plugin/rel)];key=rel.removeprefix('Source/')
         before=previous_sources[key] if rel.startswith('Source/') else previous['binaries_sha256'][Path(rel).name]
         after=current[key] if rel.startswith('Source/') else build['binaries_sha256'][Path(rel).name]
-        assert r['before_sha256']==before and r['after_sha256']==after==digest(Path(r['target']))
+        assert r['before_sha256']==before and r['after_sha256']==after==current_hash(Path(r['target']))
     real_path=Path(data['real_protocol_proof']);real=read(real_path)
     assert data['evidence'][str(real_path)]==digest(real_path) and real['passed'] and len(real['checks'])>=15 and all(real['checks'].values()) and real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged']
     prior=read(Path(old['real_protocol_proof']))
     for name in GODOT_TARGETS:
-        r=rows[str(workspace/'Godot'/name)];assert r['before_sha256']==prior['source_inputs'][r['source']] and r['after_sha256']==real['source_inputs'][r['source']]==digest(Path(r['target']))
+        r=rows[str(workspace/'Godot'/name)];assert r['before_sha256']==prior['source_inputs'][r['source']] and r['after_sha256']==real['source_inputs'][r['source']]==current_hash(Path(r['target']))
     assert data['native_after_sha256']==build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     return data,rows

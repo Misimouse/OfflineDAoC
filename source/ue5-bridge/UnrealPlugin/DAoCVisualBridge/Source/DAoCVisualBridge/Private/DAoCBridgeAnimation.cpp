@@ -29,9 +29,9 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     if(PlayerState.IsValid()&&PlayerState->TryGetObjectField(TEXT("vitals"),VitalsPtr))Vitals=*VitalsPtr;
     const bool Ready=Local&&PoseFlag(PlayerState,TEXT("ready"));
     const bool Dead=Local?(Ready?PlayerIsDead():Pose.Dead):Requested==TEXT("dead");
-    const bool Mounted=!Dead&&(Local?(bLocalMounted&&bLocalSeatReady):(*Row)->HasField(TEXT("riding_steed_entity_id")));
-    const bool Sitting=Ready&&!Mounted&&!Dead&&PoseFlag(Vitals,TEXT("sitting"));
-    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump")||Requested==TEXT("walk_back");
+    const bool Mounted=!Dead&&(Local?(bLocalMounted&&bLocalSeatReady):((*Row)->HasField(TEXT("riding_steed_entity_id"))||PoseFlag(*Row,TEXT("remote_riding"))));
+    const bool Sitting=!Mounted&&!Dead&&(Local?(Ready&&PoseFlag(Vitals,TEXT("sitting"))):PoseFlag(*Row,TEXT("remote_sitting")));
+    const bool Moving=Requested==TEXT("walk")||Requested==TEXT("run")||Requested==TEXT("swim")||Requested==TEXT("jump")||Requested==TEXT("walk_back")||Requested==TEXT("ladder");
     auto Clip=[&](const FString& Key)->UAnimSequenceBase*{FString Path;return (*Entry)->TryGetStringField(Key,Path)?LoadObject<UAnimSequenceBase>(nullptr,*Path):nullptr;};
     if(Dead){
         if(!Pose.Dead){
@@ -40,7 +40,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
         }
         Pose.Transition.Empty();Pose.TransitionUntil=0;Pose.ActionClip.Empty();Pose.ActionUntil=0;
     }
-    else if(Pose.Initialized&&Local&&Ready&&Sitting!=Pose.Sitting){
+    else if(Pose.Initialized&&(Local?Ready:(*Row)->GetStringField(TEXT("kind"))==TEXT("player"))&&Sitting!=Pose.Sitting){
         if(auto* Sit=Clip(TEXT("sit_down"))){Pose.Transition=Sitting?TEXT("sit_down"):TEXT("sit_down_reverse");Pose.TransitionUntil=Now+Sit->GetPlayLength();}
         else{Pose.Transition.Empty();Pose.TransitionUntil=0;}
     }
@@ -94,7 +94,7 @@ void UDAoCBridgeSubsystem::SetEntityAnimation(const FString& Id,const FString& R
     }
     if(Key==TEXT("jump"))Loop=false;
     if(!(*Entry)->HasField(Key)&&!Dead&&!Sitting&&Pose.Transition.IsEmpty())Key=Moving&&(*Entry)->HasField(TEXT("walk"))?TEXT("walk"):TEXT("idle");
-    const float PlayRate=Local&&Key==TEXT("walk_back")&&MovementKeys&&PlayerPawn?MovementKeys->BackwardRate((*Row)->GetIntegerField(TEXT("model_id")),PlayerPawn->GetVelocity().Size2D()/100):1.f;
+    const float PlayRate=!Local&&Key==TEXT("ladder")?FMath::Clamp(float(PoseNum(*Row,TEXT("remote_ladder_rate"))),-2.f,2.f):Local&&Key==TEXT("walk_back")&&MovementKeys&&PlayerPawn?MovementKeys->BackwardRate((*Row)->GetIntegerField(TEXT("model_id")),PlayerPawn->GetVelocity().Size2D()/100):1.f;
     Mesh->SetPlayRate(Reverse?-PlayRate:PlayRate);
     const FString StateKey=Reverse?TEXT("sit_down_reverse"):Key;
     const bool NewAction=Action&&Pose.PlayedActionSeq!=Pose.ActiveActionSeq;

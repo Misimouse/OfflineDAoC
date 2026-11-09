@@ -1,6 +1,8 @@
 extends Node
 ## Decoded living state only. Networking remains in the original client.
 signal missing_entity(oid: int)
+signal missing_player(session: int)
+var requested_players:Dictionary={}
 var requested:Dictionary={}
 var non_living:Dictionary={}
 var bridge: Node
@@ -35,6 +37,7 @@ func clear_world() -> void:
     entities.clear()
     oid_to_id.clear()
     requested.clear()
+    requested_players.clear()
     non_living.clear()
     local_oid=-1
 
@@ -73,8 +76,55 @@ func _update(row: Dictionary, data: Dictionary) -> void:
         row.show_name=(int(data.flags2)&2)==0
     if data.has("level"):row.level=int(data.level)&127
 
+func _player_position(data:Dictionary)->void:
+    for key in ["oid","session"]:
+        var v:Variant=data.get(key)
+        if typeof(v) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(v)) or float(v)!=floor(float(v)) or float(v)<1 or float(v)>65535:return
+    var oid:=int(data.get("oid",0))
+    if oid<=0 or oid>65535 or oid==local_oid:return
+    if not oid_to_id.has(oid):
+        var session:=int(data.session)
+        var now:=Time.get_ticks_msec()
+        if now-int(requested_players.get(session,-100000))>=3000:
+            if requested_players.size()>=2048:requested_players.clear()
+            requested_players[session]=now;missing_player.emit(session)
+        return
+    var id:String=String(oid_to_id[oid]);var row:Dictionary=entities.get(id,{})
+    if row.get("kind","")!="player" or int(row.get("session_id",0))<=0 or int(data.get("session",0))!=int(row.session_id):return
+    for key in ["x","y","z","speed","speed_z","heading","state_flags","action_flags","health"]:
+        var v:Variant=data.get(key)
+        if typeof(v) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(v)):return
+    for key in ["session","oid","zone","heading","state_flags","action_flags","health"]:
+        var v:Variant=data.get(key)
+        if typeof(v) not in [TYPE_INT,TYPE_FLOAT] or not is_finite(float(v)) or float(v)!=floor(float(v)) or float(v)<0 or float(v)>65535:return
+    if int(data.health)>100 or int(data.state_flags)>255 or int(data.action_flags)>255 or not data.get("combat_active") is bool:return
+    if int(data.zone)!=207:_erase(oid);return
+    var p:=_position(data)
+    if not _inside(p):_erase(oid);return
+    var mode:=int(data.state_flags)&0x1c
+    var values:Dictionary=data.duplicate()
+    if mode==0x18:values.erase("heading") # while riding, heading contains a steed OID
+    row.position_m=[p.x,p.y,p.z];_update(row,values)
+    row.remote_sitting=mode==0x10;row.remote_swimming=mode==4;row.remote_climbing=mode==0x1c;row.remote_riding=mode==0x18
+    row.torch_on=(int(data.action_flags)&0x80)!=0;row.diving=(int(data.action_flags)&4)!=0;row.stealthed=(int(data.action_flags)&2)!=0
+    row.combat_active=data.combat_active;row.remote_combat_active=data.combat_active;row.remote_ladder_rate=clampf(float(data.speed_z)/85.0,-2.0,2.0)
+    if float(row.health)>0:
+        if row.remote_sitting:row.state="sit_idle"
+        elif row.remote_swimming:row.state="swim"
+        elif row.remote_climbing:row.state="ladder"
+        elif row.remote_riding:row.state="ride_horse"
+        elif float(data.speed)<0:row.state="walk_back"
+    _motion_sample(row,data,"move")
+    var direction:Array=row.forward_xz.duplicate();var strafe:=int(data.state_flags)&0xc0
+    if strafe==0x40:direction=[-float(direction[1]),float(direction[0])]
+    elif strafe==0x80:direction=[float(direction[1]),-float(direction[0])]
+    if float(data.speed)<0:direction=[-float(direction[0]),-float(direction[1])]
+    row.motion.direction_xz=direction;row.motion.speed_mps=absf(float(data.speed)*.025)
+    row.motion.source_packet="player_position1127"
+
 func consume_world(kind: String, data: Dictionary) -> void:
     events += 1
+    if kind=="player_move":_player_position(data);return
     if kind in ["region_changed","quit"]:
         clear_world();return
     if kind == "you":
@@ -141,6 +191,8 @@ func consume_world(kind: String, data: Dictionary) -> void:
         row.position_m=[p.x,p.y,p.z]
         if equipment_packets.has(oid):row["equipment"]=equipment_packets[oid].duplicate(true)
         _update(row,data)
+        if kind=="player":
+            row.session_id=int(data.get("session",0));row.realm=(int(data.get("flags",0))>>2)&3
         if kind=="npc" and data.has("flags"):
             row.realm=int(data.flags)>>6;row.flying=(int(data.flags)&32)!=0
         _motion_sample(row,data,kind)
