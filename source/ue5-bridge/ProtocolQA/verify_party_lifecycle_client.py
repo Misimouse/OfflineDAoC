@@ -5,10 +5,17 @@ from pathlib import Path
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine):
+def verify(workspace,install,engine,lab_name=None,installed=False):
     assert verify_files(workspace)['player_vitals_installed']
     source=Path(__file__).resolve().parents[1]
-    root=workspace/'PartyLifecycleLab/Client'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    build=None
+    if lab_name:
+        assert lab_name=='GroupTargetKeysLab'
+        build=json.loads((workspace/lab_name/'native_build.json').read_text())
+        assert build['passed']
+        assert digest(workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')==(build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll'] if installed else build['normal_binary_sha256'])
+        if installed:assert verify_files(workspace)['group_target_keys_installed']
+    root=(workspace/lab_name/('InstalledPartyLifecycle' if installed else 'PartyLifecycle') if lab_name else workspace/'PartyLifecycleLab/Client')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     project=root/'Godot';project.mkdir(parents=True);(root/'Reports/group').mkdir(parents=True)
     (project/'project.godot').write_text('[application]\nconfig/name="Private Party QA"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
     inputs={}
@@ -23,12 +30,12 @@ def verify(workspace,install,engine):
     state=json.loads((root/'Reports/group/godot_tests.json').read_text());assert state['passed'] and state['checks']>=30
     fixture=root/'fixture.json';group=json.loads((root/'Reports/group/fixture.json').read_text());group['classic_ui']['character']='IsolatedParty'+datetime.now().strftime('%Y%m%d%H%M%S');fixture.write_text(json.dumps(group),encoding='utf-8');assert group['party_fixture']
     receipt=workspace/'PlayerVitalsLab/installed.json';inputs[str(receipt)]=digest(receipt)
-    args=[str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'),str(workspace/'Client/DAoCBridgeClient.uproject'),'/Engine/Maps/Entry','-game','-DaocBridge','-DaocBridgeReadOnly','-DaocBridgeClassicTest='+str(fixture),'-DaocBridgeCatalog='+str(workspace/'models.json'),'-DaocBridgeInterfaceSettings='+str(root/'interface.ini'),'-DaocBridgeDisplaySettings='+str(root/'display.ini'),'-DaocBridgeKeyConfiguration='+str(root/'keys.ini'),'-DaocBridgeAudioSettings='+str(root/'audio.ini'),'-nullrhi','-unattended','-nosound','-nosplash','-abslog='+str(root/'engine.log')]
+    args=[str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'),(build['project'] if build and not installed else str(workspace/'Client/DAoCBridgeClient.uproject')),'/Engine/Maps/Entry','-game','-DaocBridge','-DaocBridgeReadOnly','-DaocBridgeClassicTest='+str(fixture),'-DaocBridgeCatalog='+str(workspace/'models.json'),'-DaocBridgeInterfaceSettings='+str(root/'interface.ini'),'-DaocBridgeDisplaySettings='+str(root/'display.ini'),'-DaocBridgeKeyConfiguration='+str(root/'keys.ini'),'-DaocBridgeAudioSettings='+str(root/'audio.ini'),'-nullrhi','-unattended','-nosound','-nosplash','-abslog='+str(root/'engine.log')]
     with (root/'stdout.log').open('w') as log:r=subprocess.run(args,stdout=log,stderr=subprocess.STDOUT,timeout=180,creationflags=subprocess.CREATE_NO_WINDOW)
     native_path=Path(str(fixture)+'.native.json');assert r.returncode==0 and native_path.exists(),str(root)
     native=json.loads(native_path.read_text(encoding='utf-8-sig'));assert native['passed'] and not native['failures'],native
     assert all(digest(Path(p))==sha for p,sha in inputs.items());verify_files(workspace)
-    report=dict(passed=True,state_checks=state['checks'],native_checks=native['checks'],source_inputs=inputs,normal_installation_modified=False,server_started=False)
+    report=dict(passed=True,build_receipt_sha256=digest(workspace/lab_name/'native_build.json') if lab_name else None,state_checks=state['checks'],native_checks=native['checks'],source_inputs=inputs,normal_installation_modified=False,server_started=False)
     (root/'verified.json').write_text(json.dumps(report,indent=2),encoding='utf-8');return dict(passed=True,state_checks=state['checks'],native_checks=native['checks'],output=str(root))
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)

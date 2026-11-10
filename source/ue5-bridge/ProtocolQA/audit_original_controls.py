@@ -21,6 +21,7 @@ def audit(workspace, install):
     editable = set(re.findall(r'(?:Add|UI)\(TEXT\("([^"]+)"\)',text))
     editable.update(f'qb{bar}_{slot}' for bar in range(1,4) for slot in range(1,11))
     editable.update(f'qbank_{bank}' for bank in range(1,11))
+    if 'FString::Printf(TEXT("target_group_%d"),I+2)' in text:editable.update(f'target_group_{slot}' for slot in range(2,9))
     assert len(editable) >= 69
     aliases = {'torch':'personal_torch','delve':'inspect_item','target_group_1':'target_self'}
     rows = []

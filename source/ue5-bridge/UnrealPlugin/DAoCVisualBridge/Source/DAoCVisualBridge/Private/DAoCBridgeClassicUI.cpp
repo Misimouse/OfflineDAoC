@@ -1,3 +1,4 @@
+#include "DAoCBridgeGroupTargeting.h"
 #include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeCharacter.h"
 #include "HAL/FileManager.h"
@@ -271,6 +272,9 @@ void UDAoCBridgeSubsystem::UpdateClassicInput(){
  if(KeyConfiguration->Pressed(PC,TEXT("inspect_item"))){auto E=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));if(E.IsValid())ClassicInspect(CS(E,TEXT("id")),CS(E,TEXT("token")));}
  if(KeyConfiguration->Pressed(PC,TEXT("ground_target")))RequestGroundTarget();
  if(KeyConfiguration->Pressed(PC,TEXT("target_self")))SelectEntity(TEXT("player:local"));
+ const auto GroupRows=FBridgeGroupTargeting::Ordered(CA(ClassicState,TEXT("group")));
+ for(int32 Slot=1;Slot<8;++Slot)if(KeyConfiguration->Pressed(PC,FString::Printf(TEXT("target_group_%d"),Slot+1))){auto Member=FBridgeGroupTargeting::Member(GroupRows,Slot);if(Member.IsValid())SendGroupAction(TEXT("group_target"),Member);}
+
  if(KeyConfiguration->Pressed(PC,TEXT("show_stats")))SetClassicTab(TEXT("character"));
  if(KeyConfiguration->Pressed(PC,TEXT("show_skills")))SetClassicTab(TEXT("skills"));
  if(KeyConfiguration->Pressed(PC,TEXT("show_spells")))SetClassicTab(TEXT("magic"));
@@ -381,7 +385,7 @@ void UDAoCBridgeSubsystem::RefreshClassicCasting(){
 }
 
 TSharedRef<SWidget> UDAoCBridgeSubsystem::MakeClassicGroupRows(bool Mini){
- auto Canvas=SNew(SCanvas);auto Members=CA(ClassicState,TEXT("group"));if(Members.IsEmpty())At(Canvas,{8,12},{176,28},CT(TEXT("YOU ARE NOT IN A GROUP"),8));
+ auto Canvas=SNew(SCanvas);auto Members=FBridgeGroupTargeting::Ordered(CA(ClassicState,TEXT("group")));if(Members.IsEmpty())At(Canvas,{8,12},{176,28},CT(TEXT("YOU ARE NOT IN A GROUP"),8));
  for(int32 I=0;I<FMath::Min(Members.Num(),8);++I){if(Members[I]->Type!=EJson::Object)continue;auto M=Members[I]->AsObject();auto Row=SNew(SCanvas);bool Me=false;M->TryGetBoolField(TEXT("me"),Me);const int32 Oid=int32(CN(M,TEXT("oid")));
   At(Row,{8,1},{101,11},SNew(STextBlock).Text(FText::FromString((CS(M,TEXT("name"))+(Me?TEXT(" \u00b7 ME"):TEXT(""))).ToUpper())).Font(CF(7)).ColorAndOpacity(Cream));
   At(Row,{110,1},{76,11},SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s %.0f"),*CS(M,TEXT("class_name")).ToUpper(),CN(M,TEXT("level"))))).Font(CF(6)).ColorAndOpacity(Gold).Justification(ETextJustify::Right));

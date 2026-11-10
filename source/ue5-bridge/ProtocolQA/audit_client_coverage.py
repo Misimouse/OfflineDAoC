@@ -111,6 +111,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-GROUP-TARGET-SHORTCUT-AUDIT'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_75_supported_controls',notes='75 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'GroupTargetKeysLab/installed.json').exists() and json.loads((workspace/'GroupTargetKeysLab/installed.json').read_text()).get('installed',False):
+        row('Group targeting shortcuts and original self-first rows',['ui/player_data.gd','ui/game_ui.gd','zone_viewer.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeGroupTargeting.h','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp'],'installed_owner_review_deferred','Seven editable keypad shortcuts reuse original group_target with current OID/token. Shared self-first display order, unknown/dead slots preserved, no adjacent-target substitution.475 installed native and43 party-state checks; no new server action or database rule.')
+        result['next_package']='CLIENT-GROUND-OBJECTS-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_82_supported_controls',notes='82 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
