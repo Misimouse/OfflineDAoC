@@ -175,6 +175,22 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
         row(feature,[],bridge,'bounded_automated_evidence_owner_review_pending' if lab!='NativeSightHarnessLab' else 'geometry_harness_verified_not_render_acceptance',notes)
         result['next_package']='CLIENT-REMOTE-MODEL-ROUNDTRIP-AUDIT: inspect original model-change, equipment retention and native restoration before expanding multiplayer transformation claims'
+    path=workspace/'RemoteModelRoundtripLab/roundtrip_verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed']
+        for key in ['real_proof','native_proof']:
+            proof=Path(summary[key]).resolve();assert proof.is_relative_to((workspace/'RemoteModelRoundtripLab').resolve())
+            evidence=json.loads(proof.read_text(encoding='utf-8-sig'));assert evidence['passed']
+            inputs[str(proof)]=digest(proof)
+            if key=='real_proof':
+                assert len(evidence['checks'])>=25 and all(evidence['checks'].values())
+                assert evidence['database_restored'] and evidence['normal_shutdown'] and evidence['normal_runtime_unchanged']
+            else:
+                assert evidence['checks']>=34 and not evidence['normal_runtime_modified']
+                assert not evidence['rendered_acceptance'] and not evidence['weapon_attachment_acceptance']
+        inputs[str(path)]=digest(path)
+        row('Ordinary remote Bainshee model roundtrip',[],['ProtocolQA/verify_remote_player_real.py','ProtocolQA/verify_remote_model_native.py'],'server_roundtrip_and_native_actor_replay_verified','25 ordinary two-player checks;34 installed UE actor replay checks. Packet equipment retention is verified; per-frame native weapon/armour attachments and rendered quality remain separate.')
+        result['next_package']='CLIENT-REMOTE-EQUIPMENT-MORPH-ACCEPTANCE: reproduce native per-frame attachment behavior through transformation and return before changing its policy'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

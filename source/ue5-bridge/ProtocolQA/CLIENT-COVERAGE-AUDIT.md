@@ -78,3 +78,5 @@ Owner gameplay review is pending.
 # Remote model size follow-up
 
 `REMOTE-MODEL-SIZE-AUDIT.md` closes original zero-size ModelChange interpretation with a guarded one-file installation and 105 state/regression checks repeated against installed files. Real two-player transformation, supported model coverage and native equipment restoration remain separate acceptance gates.
+
+`REMOTE-MODEL-ROUNDTRIP-AUDIT.md` adds an ordinary two-player Bainshee cast/timer roundtrip (25 checks) and installed UE actor replay (34). It proves packet retention and actor replacement separately; native per-frame weapon/armour attachment acceptance remains open.
