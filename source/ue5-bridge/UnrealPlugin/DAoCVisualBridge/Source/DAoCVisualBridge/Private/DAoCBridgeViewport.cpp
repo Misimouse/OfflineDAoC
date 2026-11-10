@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeInterfaceSettings.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "Widgets/SViewport.h"
@@ -46,4 +47,13 @@ void UDAoCBridgeSubsystem::UpdateUILayout(){
     UILayoutUnits=Current;
     for(const auto& W:{ClassicOverlay,ChatOverlay,ClassicJournalOverlay,ClassicTrainerOverlay,ClassicVaultOverlay,ZoneMapOverlay})if(W.IsValid())W->Invalidate(EInvalidateWidgetReason::Layout);
     if(bZoneMapOpen&&bZoneMapFollow)FollowZoneMap();
+}
+
+void UDAoCBridgeSubsystem::ApplyInterfaceVisibility(){
+    LoadInterfaceSettings();
+    if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||bExiting)InterfaceSettings->SetHidden(false);
+    InterfaceSettings->ApplyVisibility({ClassicOverlay,ChatOverlay,ClassicDetailOverlay,ClassicGroupConfirmOverlay,
+        ClassicJournalOverlay,ClassicTrainerOverlay,ClassicVaultOverlay,ClassicMerchantOverlay,GuildOverlay,
+        EmblemPickerOverlay,ExchangeOverlay,ClassicQuantityOverlay,SiegeOverlay,RealmWarOverlay,ZoneMapOverlay,
+        PlayerStatusOverlay,InventoryOverlay,InteractionOverlay,WorldMessageOverlay});
 }

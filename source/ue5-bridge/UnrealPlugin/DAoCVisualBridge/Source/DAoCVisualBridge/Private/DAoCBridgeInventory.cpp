@@ -24,7 +24,7 @@ TSharedPtr<FJsonObject> UDAoCBridgeSubsystem::InventoryItem(int32 Slot) const {
     if(InventoryState.IsValid()&&InventoryState->TryGetArrayField(TEXT("items"),Rows))for(const auto& V:*Rows)if(V->Type==EJson::Object&&InvNum(V->AsObject(),TEXT("slot"),-1)==Slot)return V->AsObject();
     return nullptr;
 }
-bool UDAoCBridgeSubsystem::InventoryHovered() const{return bInventoryOpen&&InventoryPanel.IsValid()&&InventoryPanel->IsHovered();}
+bool UDAoCBridgeSubsystem::InventoryHovered() const{return bInventoryOpen&&InventoryOverlay.IsValid()&&InventoryOverlay->GetVisibility().IsVisible()&&InventoryPanel.IsValid()&&InventoryPanel->IsHovered();}
 void UDAoCBridgeSubsystem::RemoveInventoryUI(){
     if(InventoryOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(InventoryOverlay.ToSharedRef());
     InventoryOverlay.Reset();InventoryPanel.Reset();

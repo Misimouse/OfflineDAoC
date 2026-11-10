@@ -31,7 +31,7 @@ void UDAoCBridgeSubsystem::RemovePlayerStatusUI(){
     if(PlayerStatusOverlay.IsValid()&&GetWorld()&&GetWorld()->GetGameViewport())GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(PlayerStatusOverlay.ToSharedRef());
     PlayerStatusOverlay.Reset();PlayerStatusPanel.Reset();PlayerControlsArea.Reset();
 }
-bool UDAoCBridgeSubsystem::PlayerStatusHovered() const{return PlayerStatusPanel.IsValid()&&PlayerStatusPanel->IsHovered();}
+bool UDAoCBridgeSubsystem::PlayerStatusHovered() const{return PlayerStatusOverlay.IsValid()&&PlayerStatusOverlay->GetVisibility().IsVisible()&&PlayerStatusPanel.IsValid()&&PlayerStatusPanel->IsHovered();}
 bool UDAoCBridgeSubsystem::PlayerIsDead() const{
     const auto Vitals=PlayerVitals(PlayerState);bool Alive=false;
     if(Vitals&&Vitals->TryGetBoolField(TEXT("alive"),Alive))return !Alive;

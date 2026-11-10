@@ -722,6 +722,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     TickRemoteMotion(Dt);
     NetworkFrameMs=(FPlatformTime::Seconds()-NetworkBegan)*1000;UpdateControls(Dt);TickGroundTargetSight();const double GearBegan=FPlatformTime::Seconds();UpdateLocalEquipment();UpdateRemoteEquipment();TickEquipmentAnimations();TickLocalStealthMaterials();TickNpcGhostMaterials();EquipmentFrameMs=(FPlatformTime::Seconds()-GearBegan)*1000;TickSpellVisuals(Dt);TickFootsteps();TickSpellAudio();const double ClassicBegan=FPlatformTime::Seconds();TickClassicUI();ClassicFrameMs=(FPlatformTime::Seconds()-ClassicBegan)*1000;
     if(PlayerStartedAt>0&&Now-PlayerStartedAt>15)ProbeNavigation();
+    ApplyInterfaceVisibility();
     ApplyQuality();
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0){MaximumGameplayFrameMs=FMath::Max(MaximumGameplayFrameMs,WallMs);if(WallMs>=2000)++GameplayStalls;}
     if(bHavePlayer&&Now-PlayerStartedAt>8&&WallMs>0&&WallMs<2000){RollingFrameMs.Add(WallMs);if(RollingFrameMs.Num()>600)RollingFrameMs.RemoveAt(0,1,EAllowShrinking::No);}

@@ -1,0 +1,34 @@
+if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeInterfaceVisibilityTest"))){
+    LoadInterfaceSettings();InterfaceSettings->SetHidden(false);
+    ApplyChat(MakeShared<FJsonObject>());const auto OldClassic=ClassicOverlay;const auto OldChat=ChatOverlay;
+    const auto PreviousClassic=ClassicOverlay->GetVisibility(),PreviousChat=ChatOverlay->GetVisibility();
+    const auto OldOptions=OptionsOverlay,OldWorld=WorldMessageOverlay;
+    OptionsOverlay=SNew(SBox);WorldMessageOverlay=SNew(SBox).Visibility(EVisibility::SelfHitTestInvisible);
+    const auto BeforeOutgoing=Outgoing;const auto BeforePosition=ClassicPositions[0];
+    Press(TEXT("Alt+Z"));UpdateChatInput();
+    Check(InterfaceSettings->Hidden,TEXT("actual editable original Alt Z hides interface"));
+    Check(ClassicOverlay->GetVisibility()==EVisibility::Collapsed&&ChatOverlay->GetVisibility()==EVisibility::Collapsed,TEXT("existing game and chat roots stop painting and hit testing"));
+    const auto OldQuantity=ClassicQuantityPanel;ClassicQuantityPanel=SNew(SBox);
+    Check(!WorldPointerBlocked(FVector2D(20,20))&&!ClassicUIHovered(),TEXT("hidden windows and quantity panels cannot block world pointer or camera"));
+    bOptionsOpen=true;Check(WorldPointerBlocked(FVector2D(20,20)),TEXT("visible options still block world clicks while interface hidden"));bOptionsOpen=false;ClassicQuantityPanel=OldQuantity;
+    Check(WorldMessageOverlay->GetVisibility()==EVisibility::Collapsed,TEXT("world bubble root follows original interface hide"));
+    Check(OptionsOverlay->GetVisibility().IsVisible(),TEXT("escape options stay available while game interface is hidden"));
+    Check(Outgoing==BeforeOutgoing&&ClassicPositions[0]==BeforePosition,TEXT("hiding is presentation only and does not move windows or send commands"));
+    const auto OldMerchant=ClassicMerchantOverlay;ClassicMerchantOverlay=SNew(SBox);ApplyInterfaceVisibility();
+    Check(ClassicMerchantOverlay->GetVisibility()==EVisibility::Collapsed,TEXT("server-created window is hidden during continuing snapshots"));
+    Press(TEXT("Alt+Z"));UpdateChatInput();
+    Check(!InterfaceSettings->Hidden&&ClassicOverlay==OldClassic&&ChatOverlay==OldChat,TEXT("show restores same existing widgets"));
+    Check(ClassicOverlay->GetVisibility()==PreviousClassic&&ChatOverlay->GetVisibility()==PreviousChat&&WorldMessageOverlay->GetVisibility()==EVisibility::SelfHitTestInvisible,TEXT("original individual visibility and bubble hit testing are preserved"));
+    Check(ClassicMerchantOverlay->GetVisibility().IsVisible(),TEXT("window received while hidden becomes visible on show"));
+    Press(TEXT("Alt+Z"));UpdateChatInput();OpenChat();Check(bChatOpen&&!InterfaceSettings->Hidden&&ChatOverlay->GetVisibility()==PreviousChat,TEXT("typing reveals existing chat without invisible keyboard focus"));CloseChat();
+    bChatOpen=true;Press(TEXT("Alt+Z"));UpdateChatInput();Check(!InterfaceSettings->Hidden,TEXT("typed shortcut cannot hide active chat"));bChatOpen=false;
+    bOptionsOpen=true;Press(TEXT("Alt+Z"));UpdateChatInput();Check(!InterfaceSettings->Hidden,TEXT("options editing cannot toggle game interface"));bOptionsOpen=false;
+    const auto SavedSession=Session;Session.Empty();Press(TEXT("Alt+Z"));UpdateChatInput();Check(!InterfaceSettings->Hidden,TEXT("disconnected session cannot hide interface"));Session=SavedSession;
+    FString VisibilityMessage;Check(KeyConfiguration->Bind(TEXT("toggle_interface"),0,TEXT("Ctrl+Z"),VisibilityMessage),TEXT("interface shortcut is editable"));
+    Press(TEXT("Alt+Z"));UpdateChatInput();Check(!InterfaceSettings->Hidden,TEXT("old chord becomes inactive after rebinding"));Press(TEXT("Ctrl+Z"));UpdateChatInput();Check(InterfaceSettings->Hidden,TEXT("new chord dispatches interface toggle"));
+    bLocalAvailable=false;ApplyInterfaceVisibility();Check(!InterfaceSettings->Hidden&&ClassicOverlay->GetVisibility()==PreviousClassic,TEXT("character exit restores transient hidden state"));bLocalAvailable=true;
+    FBridgeInterfaceSettings Isolated;auto InitiallyHidden=SNew(SBox).Visibility(EVisibility::Hidden);auto InitiallyCollapsed=SNew(SBox).Visibility(EVisibility::Collapsed);
+    Isolated.SetHidden(true);Isolated.ApplyVisibility({InitiallyHidden,InitiallyCollapsed});Isolated.SetHidden(false);
+    Check(InitiallyHidden->GetVisibility()==EVisibility::Hidden&&InitiallyCollapsed->GetVisibility()==EVisibility::Collapsed,TEXT("unrelated closed roots are not opened by show"));
+    InterfaceSettings->SetHidden(false);OptionsOverlay=OldOptions;WorldMessageOverlay=OldWorld;ClassicMerchantOverlay=OldMerchant;KeyConfiguration->Reset();Outgoing.Empty();PC->PlayerInput->FlushPressedKeys();
+}

@@ -24,3 +24,18 @@ bool FBridgeInterfaceSettings::Save()const{
     // Nine significant digits preserve every float slider step on reload.
     Config.SetString(TEXT("Interface"),TEXT("Version"),TEXT("1"));Config.SetString(TEXT("Interface"),TEXT("UIScale"),*FString::Printf(TEXT("%.9g"),double(Scale)));return Config.Write(File);
 }
+
+void FBridgeInterfaceSettings::SetHidden(bool Value){
+    Hidden=Value;
+    if(!Hidden){for(auto& Row:HiddenRoots)if(auto W=Row.Widget.Pin())W->SetVisibility(Row.Previous);HiddenRoots.Empty();}
+}
+void FBridgeInterfaceSettings::ApplyVisibility(const TArray<TSharedPtr<SWidget>>& Roots){
+    if(!Hidden)return;
+    HiddenRoots.RemoveAll([](const FHiddenRoot& Row){return !Row.Widget.IsValid();});
+    for(const auto& W:Roots)if(W.IsValid()){
+        auto* Existing=HiddenRoots.FindByPredicate([&](const FHiddenRoot& Row){return Row.Widget.Pin()==W;});
+        if(!Existing)HiddenRoots.Add({W,W->GetVisibility()});
+        else if(W->GetVisibility()!=EVisibility::Collapsed)Existing->Previous=W->GetVisibility();
+        W->SetVisibility(EVisibility::Collapsed);
+    }
+}

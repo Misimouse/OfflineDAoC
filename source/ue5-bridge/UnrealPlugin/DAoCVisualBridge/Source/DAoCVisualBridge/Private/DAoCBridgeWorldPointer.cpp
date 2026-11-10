@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeInterfaceSettings.h"
 #include "Engine/World.h"
 #include "Engine/GameViewportClient.h"
 #include "GameFramework/PlayerController.h"
@@ -28,8 +29,9 @@ void UDAoCBridgeSubsystem::InstallWorldPointerInput(){
 }
 void UDAoCBridgeSubsystem::RemoveWorldPointerInput(){if(WorldPointerInput.IsValid()&&FSlateApplication::IsInitialized())FSlateApplication::Get().UnregisterInputPreProcessor(WorldPointerInput);WorldPointerInput.Reset();bLeftPointerHeld=bRightPointerHeld=bRightPointerDragged=false;}
 bool UDAoCBridgeSubsystem::WorldPointerBlocked(FVector2D Absolute)const{
+ if(bOptionsOpen||bChatOpen||ExchangeTyping()||FSlateApplication::Get().AnyMenusVisible())return true;
+ if(InterfaceSettings&&InterfaceSettings->Hidden)return false;
  if(ClassicQuantityPanel.IsValid())return true;
- if(bOptionsOpen)return true;
  auto Hit=[&](const TSharedPtr<SWidget>& W){return W.IsValid()&&W->GetVisibility().IsVisible()&&W->GetCachedGeometry().IsUnderLocation(Absolute);};
  if(bChatOpen||ExchangeTyping()||FSlateApplication::Get().AnyMenusVisible())return true;
  if(bClassicTimeOpen&&Hit(ClassicTimeBox))return true;

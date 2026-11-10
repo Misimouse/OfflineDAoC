@@ -126,6 +126,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-REMAINING-ORIGINAL-INTERFACE-CONTROLS'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_85_supported_controls',notes='85 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'InterfaceVisibilityLab/installed.json').exists() and json.loads((workspace/'InterfaceVisibilityLab/installed.json').read_text()).get('installed',False):
+        row('Original interface visibility',['ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeViewport.cpp','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeInterfaceSettings.cpp'],'installed_owner_review_pending','Editable Alt+Z hides nineteen existing game roots without closing/recreating windows or changing saved positions. Hidden roots cannot block world pointer/camera. Options remain reachable; chat and character return restore transient visibility. No new server action or database/art resources.')
+        result['next_package']='CLIENT-REMAINING-ORIGINAL-CONTROLS-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_86_supported_controls',notes='86 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

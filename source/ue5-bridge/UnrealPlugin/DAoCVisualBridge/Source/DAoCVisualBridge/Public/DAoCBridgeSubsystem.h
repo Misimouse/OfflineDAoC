@@ -559,6 +559,7 @@ private:
     FVector2D UIViewportSize() const;
     FVector2D UILayoutUnits;
     void UpdateUILayout();
+    void ApplyInterfaceVisibility();
     void ReflowUILayout(FVector2D Previous,FVector2D Current);
     TSharedPtr<FJsonObject> ZoneMaps;
     TSharedPtr<SWidget> ZoneMapOverlay,ZoneMapPanel;
