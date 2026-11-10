@@ -95,6 +95,12 @@ def audit(workspace,install):
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_69_supported_controls',notes='69 supported actions, two bindings per action, saved assignment precedence. Full original presets and unsupported actions remain separate.')
             if feature['feature']=='Realm war map and siege windows':feature.update(status='installed_owner_review_deferred',notes='Original bounded realm-war/siege UI contracts delivered separately. Full frontier world and battle-scale performance remain separate.')
+    if (workspace/'NpcVisualFlagsLab/installed.json').exists() and json.loads((workspace/'NpcVisualFlagsLab/installed.json').read_text()).get('installed',False):
+        row('Original NPC ghost appearance',['npcs/npc.gd'],['Godot/npc_visual_flags.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeNpcGhostPresentation.cpp'],'installed_owner_review_deferred','Separate original create bit; actor-local original materials and atomic outfit fallback. 534 installed native,21 coordinator replay,16 capture checks. Not a world-model import.')
+        result['next_package']='CLIENT-NPC-EFFECT-BODIES'
+    if (workspace/'NpcEffectsLab/installed.json').exists() and json.loads((workspace/'NpcEffectsLab/installed.json').read_text()).get('installed',False):
+        row('Original effect-only NPC bodies',['npcs/npc.gd','nif_particles.gd','nif_scene.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeNpcEffects.inl'],'installed_two_exported_models_owner_review_deferred','Wisp966 and Flies2020: original geometry/particles/textures, billboard/float/scale/range, bounded independent budgets, physical draw bounds for selection/names.595 installed native checks and32 captures.44 prepared resources are not44 fully accepted creatures; other warnings and Catacombs population remain separate.')
+        result['next_package']='CLIENT-ORIGINAL-CONTROLS-AUDIT'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
