@@ -142,7 +142,15 @@ void UDAoCBridgeSubsystem::UpdateRemoteEquipment(){
     for(auto It=RemoteEquipment.CreateIterator();It;++It)if(!Entities.Contains(It.Key())||!It.Value().Actor.IsValid()){for(auto& Pair:It.Value().Bindings)if(Pair.Value.Component.IsValid())Pair.Value.Component->DestroyComponent();It.RemoveCurrent();}
     for(auto& Pair:Entities){
         if(Pair.Key==TEXT("player:local")||!IsValid(Pair.Value))continue;auto* Actor=Cast<ASkeletalMeshActor>(Pair.Value.Get());auto* Row=EntityRows.Find(Pair.Key);if(!Actor||!Row)continue;
-        auto Gear=GearObj(*Row,TEXT("equipment"));if(!Gear.IsValid()){if(auto* Old=RemoteEquipment.Find(Pair.Key)){for(auto& B:Old->Bindings)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();RemoteEquipment.Remove(Pair.Key);}continue;}
+        auto Gear=GearObj(*Row,TEXT("equipment"));
+        // Match local player-form presentation using the original catalogue's
+        // known race/body distinction. NPCs keep their own authored weapons;
+        // unknown catalogue entries must not silently hide race equipment.
+        auto* Model=ModelCatalog.Find(FString::FromInt(int32(GearNum(*Row,TEXT("model_id")))));
+        auto Body=Model?GearObj(*Model,TEXT("ghost_render")):nullptr;
+        bool RaceFigure=false;
+        const bool PlayerForm=GearStr(*Row,TEXT("kind"))==TEXT("player")&&GearFlag(Body,TEXT("known"))&&Body.IsValid()&&Body->TryGetBoolField(TEXT("race_figure"),RaceFigure)&&!RaceFigure;
+        if(!Gear.IsValid()||PlayerForm){if(auto* Old=RemoteEquipment.Find(Pair.Key)){for(auto& B:Old->Bindings)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();RemoteEquipment.Remove(Pair.Key);}continue;}
         const bool Combat=GearFlag(*Row,TEXT("combat_active"));const int32 Ws=int32(GearNum(Gear,TEXT("weapon_slots"),255))&15;
         const FString Fingerprint=FString::Printf(TEXT("%lld:%d:%d"),int64(GearNum(Gear,TEXT("revision"))),int32(Combat),int32(GearNum(*Row,TEXT("model_id"))));auto& State=RemoteEquipment.FindOrAdd(Pair.Key);
         if(State.Actor.Get()==Actor&&State.Fingerprint==Fingerprint)continue;

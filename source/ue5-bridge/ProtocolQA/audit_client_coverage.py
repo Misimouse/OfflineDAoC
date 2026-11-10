@@ -191,6 +191,13 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path)
         row('Ordinary remote Bainshee model roundtrip',[],['ProtocolQA/verify_remote_player_real.py','ProtocolQA/verify_remote_model_native.py'],'server_roundtrip_and_native_actor_replay_verified','25 ordinary two-player checks;34 installed UE actor replay checks. Packet equipment retention is verified; per-frame native weapon/armour attachments and rendered quality remain separate.')
         result['next_package']='CLIENT-REMOTE-EQUIPMENT-MORPH-ACCEPTANCE: reproduce native per-frame attachment behavior through transformation and return before changing its policy'
+    from remote_model_equipment_receipts import verify as verify_remote_equipment
+    equipment,_=verify_remote_equipment(workspace)
+    if equipment:
+        path=workspace/'RemoteModelEquipmentLab/installed.json';inputs[str(path)]=digest(path)
+        for evidence,sha in equipment['evidence'].items():inputs[evidence]=sha
+        row('Native remote form weapon attachments',[],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeEquipment.cpp'],'installed_owner_review_pending','Known non-race player forms hide weapons and restore race attachments; NPC weapons remain. Three Bainshee native controls, ordinary Celt trace,95 equipment regressions. Rendered visual quality and every class form remain separate.')
+        result['next_package']='CLIENT-PLAYER-TRADE-CONTRACT-AUDIT: compare original client assets and missing transport with DOL player-trade permissions, update/accept/cancel and inventory ownership before implementation'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

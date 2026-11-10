@@ -12,7 +12,13 @@ def validate(workspace,data,check_target=True):
     predecessor=workspace/'CharacterInventorySwitchLab/installed.json'
     assert digest(predecessor)==data['predecessor_sha256'] and read(predecessor)['installed']
     assert read(predecessor)['native_sha256']==data['native_sha256']
-    assert digest(workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll')==data['native_sha256']
+    native=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
+    from remote_model_equipment_receipts import verify as verify_equipment
+    successor,replacements=verify_equipment(workspace)
+    replacement=replacements.get(str(native))
+    if replacement:
+        assert digest(native)==replacement['after_sha256'] and replacement['before_sha256']==data['native_sha256']
+    else:assert digest(native)==data['native_sha256']
     assert len(data['files'])==1
     row=data['files'][0];source=Path(__file__).resolve().parents[1]/'Godot/decoded_world_adapter.gd'
     assert row['source']==str(source) and row['target']==str(workspace/'Godot/decoded_world_adapter.gd')

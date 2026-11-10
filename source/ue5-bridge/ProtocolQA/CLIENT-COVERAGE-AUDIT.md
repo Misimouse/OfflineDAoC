@@ -80,3 +80,5 @@ Owner gameplay review is pending.
 `REMOTE-MODEL-SIZE-AUDIT.md` closes original zero-size ModelChange interpretation with a guarded one-file installation and 105 state/regression checks repeated against installed files. Real two-player transformation, supported model coverage and native equipment restoration remain separate acceptance gates.
 
 `REMOTE-MODEL-ROUNDTRIP-AUDIT.md` adds an ordinary two-player Bainshee cast/timer roundtrip (25 checks) and installed UE actor replay (34). It proves packet retention and actor replacement separately; native per-frame weapon/armour attachment acceptance remains open.
+
+`REMOTE-MODEL-EQUIPMENT-AUDIT.md` closes the subsequent native weapon attachment defect: three forms hide weapons, return restores them, NPC weapons are preserved, and95 equipment regressions pass. The guarded three-file native successor is installed and its per-frame probes pass against that installation. Rendered materials and all possible class/equipment combinations remain outside this bounded acceptance.
