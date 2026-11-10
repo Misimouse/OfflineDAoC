@@ -34,7 +34,7 @@ def audit(workspace,install):
     for path in assets:inputs[str(path)]=digest(path)
     result=dict(passed=True,scope='Contract audit only; no player trading implementation or acceptance',source_inputs=inputs,
         server_window_implementation=window,server_window_inheritance=window_chain,item_encoding_implementation=item,item_encoding_inheritance=item_chain,
-        incoming_code='0xEA',outgoing_code='0xEB',outgoing_wire_header='0x43 (0xEB xor 168)',offer_slots=10,money_denominations=5,close_payload_zero_bytes=40,
+        incoming_code='0xEA',outgoing_code='0xEB',outgoing_wire_header='0xEB in existing Send low-byte header; no additional xor',offer_slots=10,money_denominations=5,close_payload_zero_bytes=40,
         decoder_present=bool(re.search(r'case\s+0xEA\s*:',network)),original_trade_ui_asset_available=True,
         existing_exchange_is_player_trade=False,normal_runtime_modified=False,server_started=False,database_modified=False,
         requirements=['Use 1.127 dynamic WriteItemData, not the 1.68 partner item layout.',

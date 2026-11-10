@@ -4,15 +4,21 @@ from pathlib import Path
 from datetime import datetime
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine):
+def verify(workspace,install,engine,wire=False):
     qa=Path(__file__).resolve().parent;repo=qa.parents[2];normal=install/'new-client/godot'
-    root=workspace/'PlayerTradeLab/Codec'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');source=root/'BackendSource';source.mkdir(parents=True)
+    root=workspace/'PlayerTradeLab'/('WireCodec' if wire else 'Codec')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');source=root/'BackendSource';source.mkdir(parents=True)
     inputs={};normal_files=[normal/'game/net/DaocClient.cs',normal/'.godot/mono/temp/bin/Debug/MMOEngine.dll',normal/'.godot/mono/temp/bin/Debug/MMOEngine.pdb']
     normal_hashes={str(p):digest(p) for p in normal_files}
     for p in normal.rglob('*.cs'):
         if '.godot' in p.parts:continue
         target=source/p.relative_to(normal);target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target);inputs[str(p)]=digest(p)
     codec=repo/'source/new-client/godot/game/net/DaocTradeCodec.cs';shutil.copy2(codec,source/'game/net/DaocTradeCodec.cs');inputs[str(codec)]=digest(codec)
+    dispatch=source/'game/net/DaocClient.cs'
+    if wire:
+        original=dispatch.read_text(encoding='utf-8-sig');needle='\t\t\tcase 0x21:';assert original.count(needle)==1 and 'case 0xEA:' not in original
+        dispatch.write_text(original.replace(needle,'\t\t\tcase 0xEA: return ReadTradeWindow1127(r);\n'+needle,1),encoding='utf-8')
+        staged=dispatch.read_text();needle='\t\tbyte[] body = data.ToArray();';assert staged.count(needle)==1
+        dispatch.write_text(staged.replace(needle,needle+'\n\t\tif (code == 0xDD || code == 0xEB) GD.Print("QA_TRADE_SEND " + code.ToString("X2") + " " + Convert.ToHexString(body));',1),encoding='utf-8')
     shutil.copy2(normal/'MMOEngine.csproj',source/'MMOEngine.csproj');inputs[str(normal/'MMOEngine.csproj')]=digest(normal/'MMOEngine.csproj')
     feed=install/'new-client/tools/godot_net/GodotSharp/Tools/nupkgs';assert feed.is_dir()
     (source/'nuget.config').write_text('<configuration><packageSources><clear/><add key="local" value="'+str(feed)+'"/></packageSources></configuration>')
@@ -27,9 +33,10 @@ def verify(workspace,install,engine):
     output=run(['run','--project',str(project),'--no-launch-profile'],'packet_probe');result=json.loads(next(line for line in output.splitlines() if line.startswith('{')))
     assert result['passed'] and result['checks']>=100 and not result['failures']
     assert all(digest(Path(p))==h for p,h in inputs.items()) and all(digest(Path(p))==h for p,h in normal_hashes.items())
-    result.update(source_inputs=inputs,normal_runtime_unchanged=True,server_started=False,decoder_dispatch_installed=False,ui_installed=False,candidate_backend=str(candidate/'MMOEngine.dll'))
+    result.update(source_inputs=inputs,normal_runtime_unchanged=True,server_started=False,decoder_dispatch_installed=False,ui_installed=False,candidate_dispatch_enabled=wire,candidate_dispatch_sha256=digest(dispatch),candidate_backend=str(candidate/'MMOEngine.dll'),candidate_backend_sha256=digest(candidate/'MMOEngine.dll'))
     path=root/'verified.json';path.write_text(json.dumps(result,indent=2));return dict(passed=True,checks=result['checks'],proof=str(path),installed=False)
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for key in ['workspace','install','engine']:p.add_argument('--'+key,type=Path,required=True)
-    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve())))
+    p.add_argument('--wire-candidate',action='store_true')
+    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.wire_candidate)))

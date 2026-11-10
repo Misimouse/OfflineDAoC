@@ -100,4 +100,25 @@ public partial class DaocClient
         writer.Short(0); foreach (int denomination in money) writer.Short((ushort)denomination);
         payload = writer.ToArray(); return true;
     }
+
+    public bool PlayerTrade(int action, int[] slots, int[] money)
+    {
+        if (!TryBuildPlayerTradeRequest(action, slots, money, out var payload)) return false;
+        var writer = new Writer(); foreach (byte value in payload) writer.Byte(value);
+        Send(0xEB, writer); return true; // encoded request, never a completed trade
+    }
+
+    static Godot.Collections.Dictionary ReadTradeWindow1127(Reader reader)
+    {
+        if (!TryReadTradeWindow1127(reader, out var window)) return null;
+        var result = new Godot.Collections.Dictionary { ["kind"] = "player_trade", ["open"] = !window.Closed };
+        if (window.Closed) return result;
+        var slots = new Godot.Collections.Array(); foreach (byte slot in window.OwnSlots) slots.Add((int)slot);
+        var ownMoney = new Godot.Collections.Array(); foreach (int amount in window.OwnMoney) ownMoney.Add(amount);
+        var partnerMoney = new Godot.Collections.Array(); foreach (int amount in window.PartnerMoney) partnerMoney.Add(amount);
+        var items = new Godot.Collections.Array(); foreach (byte[] record in window.PartnerItemRecords) items.Add(ReadItem(new Reader(record)));
+        result["own_slots"] = slots; result["own_money"] = ownMoney; result["partner_money"] = partnerMoney;
+        result["partner_present"] = window.PartnerPresent; result["repairing"] = window.Repairing; result["combining"] = window.Combining;
+        result["partner_items"] = items; result["title"] = window.Title; return result;
+    }
 }

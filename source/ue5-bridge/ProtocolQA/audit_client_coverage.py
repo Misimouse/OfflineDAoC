@@ -207,6 +207,16 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
         row('Original player-trade protocol candidate',[],['ProtocolQA/audit_player_trade.py','ProtocolQA/verify_player_trade_codec.py'],'inactive_codec_candidate_not_a_gameplay_delivery','Original trade assets exist;modern1.127 window/item contracts resolved against DOL.146 compiled parser/request checks. Incoming dispatch,ordinary two-player outcomes and native original UI are not installed.')
         result['next_package']='CLIENT-PLAYER-TRADE-REAL-PROTOCOL-CANDIDATE: verify original two-player offer/update/accept/cancel and authoritative inventory/money outcomes privately before UI activation'
+    path=workspace/'PlayerTradeLab/wire_verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and summary['checks']==15 and not summary['installed']
+        proof=Path(summary['proof']).resolve();assert proof.is_relative_to((workspace/'PlayerTradeLab/RealProtocol').resolve())
+        evidence=json.loads(proof.read_text());assert evidence['passed'] and len(evidence['checks'])==15 and all(evidence['checks'].values())
+        assert all(evidence[k] for k in ['database_restored','private_server_restored','private_navigation_restored','normal_shutdown','normal_runtime_unchanged'])
+        assert evidence['direct_transport_probe'] and not evidence['production_gateway_guards_tested'] and not evidence['ui_installed']
+        inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+        row('Ordinary two-player trade transport',[],['ProtocolQA/player_trade_wire_case.py','ProtocolQA/verify_remote_player_real.py'],'private_transport_verified_not_installed','15 ordinary two-player protocol checks: item/money exchange,cancel,changed offer resets acceptance,stale acceptance,funds and tradability refusals,saved ownership. Direct transport only; production gateway guards and native UI remain open.')
+        result['next_package']='CLIENT-PLAYER-TRADE-STATE-CANDIDATE: bind authoritative offer state to session/identity and stale-action guards before original UI integration'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
