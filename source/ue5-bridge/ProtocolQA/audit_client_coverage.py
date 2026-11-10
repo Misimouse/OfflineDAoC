@@ -229,6 +229,14 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path)
         row('Authoritative player-trade state',[],['Godot/player_trade_state.gd'],'private_state_candidate_not_installed','43 stale-action/identity/inventory guards and15 ordinary exchange checks using the same adapter. Original native UI and production opening/gateway/deployment remain open.')
         result['next_package']='CLIENT-PLAYER-TRADE-ORIGINAL-UI-CANDIDATE: original trade art,item icons,production player handover and native controls before activation'
+    path=workspace/'PlayerTradeUILab/verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and summary['checks']>=27 and not summary['installed']
+        proof=Path(summary['proof']).resolve();assert proof.is_relative_to((workspace/'PlayerTradeUILab/NativeAcceptance').resolve())
+        evidence=json.loads(proof.read_text());assert evidence['passed'] and evidence['checks']>=27 and evidence['exchange_regression_checks']>=25 and not evidence['installed'] and evidence['normal_installation_modified'] is False
+        inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+        row('Original native player-trade window',[],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerTrade.inl'],'private_native_candidate_not_installed','27 native UI controls/pointer/identity checks and existing market regression. Original trade atlas/icons/configured scale. Production opening,gateway,backend receipt chain and two-player native operation precede installation.')
+        result['next_package']='CLIENT-PLAYER-TRADE-GATEWAY-CANDIDATE: complete actual inventory-to-player opening and original native-to-server exchange before deployment'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

@@ -444,6 +444,17 @@ private:
     void ExchangeListItem(int32 Slot,const FString& ItemToken,int32 ToSlot=-1);
     bool ExchangeDropToBackpack(const FString& Id,const FString& ItemToken,const FString& WindowToken,int64 Catalog);
     bool TickExchangeAcceptance();
+    TSharedPtr<FJsonObject> PlayerTradeState;
+    TSharedPtr<SWidget> PlayerTradeOverlay,PlayerTradePanel;
+    FString PlayerTradeSignature,PlayerTradeWindowToken;
+    TArray<FString> PlayerTradeMoney;
+    void ApplyPlayerTrade(TSharedPtr<FJsonObject> State);
+    void RefreshPlayerTrade();
+    bool ClosePlayerTrade(bool Notify=true);
+    bool PlayerTradeTyping() const;
+    void PlayerTradeRequest(const FString& Action,const FString& Token,int64 InventoryRevision,TSharedPtr<FJsonObject> Extra=nullptr);
+    bool TickPlayerTradeAcceptance();
+
     FVector2D ClassicVaultPosition=FVector2D(200,60);
     void RefreshClassicVault();
     bool CloseClassicVault(bool Notify=true);

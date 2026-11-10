@@ -5,7 +5,7 @@ FString ExchangeMoney(int64 Copper){if(Copper<0)return TEXT("UNKNOWN");return FS
 TSharedPtr<FJsonObject> ExchangeRow(TSharedPtr<FJsonObject> State,int32 Index){for(auto V:CA(State,CS(State,TEXT("tab"))==TEXT("browse")?TEXT("market_rows"):TEXT("listing_rows")))if(V->Type==EJson::Object&&CN(V->AsObject(),TEXT("index"),-1)==Index)return V->AsObject();return nullptr;}
 }
 
-bool UDAoCBridgeSubsystem::ExchangeTyping()const{return ExchangePanel.IsValid()&&(ExchangePanel->HasAnyUserFocusOrFocusedDescendants()||FSlateApplication::Get().AnyMenusVisible());}
+bool UDAoCBridgeSubsystem::ExchangeTyping()const{return PlayerTradeTyping()||(ExchangePanel.IsValid()&&(ExchangePanel->HasAnyUserFocusOrFocusedDescendants()||FSlateApplication::Get().AnyMenusVisible()));}
 bool UDAoCBridgeSubsystem::ExchangeDropToBackpack(const FString& Id,const FString& ItemToken,const FString& WindowToken,int64 Catalog){
  if(WindowToken.IsEmpty()||WindowToken!=CS(ExchangeState,TEXT("token"))||Catalog!=int64(CN(ExchangeState,TEXT("catalog_revision"))))return false;
  for(auto Value:CA(ExchangeState,CS(ExchangeState,TEXT("tab"))==TEXT("browse")?TEXT("market_rows"):TEXT("listing_rows"))){auto Row=Value->AsObject();if(CS(Row,TEXT("id"))!=Id||CS(Row,TEXT("token"))!=ItemToken)continue;const int32 Index=int32(CN(Row,TEXT("index")));if(CS(ExchangeState,TEXT("tab"))==TEXT("browse"))ExchangeSelect(Index,true);else{auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("index"),Index);V->SetStringField(TEXT("exchange_item_token"),ItemToken);ExchangeRequest(TEXT("exchange_take"),V);}return true;}
