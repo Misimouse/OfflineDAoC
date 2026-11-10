@@ -305,6 +305,7 @@ void UDAoCBridgeSubsystem::UpdateClassicInput(){
  if(KeyConfiguration->Pressed(PC,TEXT("show_combat")))SetClassicTab(TEXT("combat"));
  if(KeyConfiguration->Pressed(PC,TEXT("show_group")))SetClassicTab(TEXT("group"));
  if(KeyConfiguration->Pressed(PC,TEXT("show_guild")))ToggleGuild();
+ if(!Session.IsEmpty()&&bLocalAvailable&&!CharacterLobbyOverlay.IsValid()&&KeyConfiguration->Pressed(PC,TEXT("show_war_map")))ToggleRealmWar();
  if(KeyConfiguration->Pressed(PC,TEXT("show_map")))ToggleZoneMap();
  if(KeyConfiguration->Pressed(PC,TEXT("show_compass")))ToggleCompass();
  if(KeyConfiguration->Pressed(PC,TEXT("show_journal")))ToggleClassicJournal();

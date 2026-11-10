@@ -136,6 +136,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-REMAINING-ORIGINAL-CONTROLS-AUDIT'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_88_supported_controls',notes='88 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'RealmWarKeysLab/installed.json').exists() and json.loads((workspace/'RealmWarKeysLab/installed.json').read_text()).get('installed',False):
+        row('Original realm war shortcut',['ui/game_ui.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp'],'installed_owner_review_pending','Editable Shift+M toggles existing original realm war window and original page/close requests; ordinary M remains zone map.530controls plus22window checks pass against installed client;28 simulations protect six files. No RvR-world/encounter optimization claim.')
+        result['next_package']='CLIENT-CONTROLS-DISPATCH-CLOSURE'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_89_supported_controls',notes='89 supported actions, fixed original equivalents and catalogue-only entries audited separately; full presets and remaining actions are not complete.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
