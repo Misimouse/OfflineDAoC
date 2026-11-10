@@ -20,7 +20,18 @@ def run(a,b,wait,settle,result,checked,output):
     def inventory(peer):return peer.snapshot.get('inventory',{})
     def rows(peer,name):return [i for i in inventory(peer).get('items',[]) if i.get('name')==name]
     def money(peer):return sum(inventory(peer).get('money',{}).get(k,0)*v for k,v in [('copper',1),('silver',100),('gold',10000),('platinum',10000000),('mithril',10000000000)])
-    def send(peer,**request):peer.send('chat',text='/qa-player-trade '+json.dumps(request,separators=(',',':')))
+    def send(peer,**request):
+        if not result.get('candidate_gateway_actions_used'):
+            peer.send('chat',text='/qa-player-trade '+json.dumps(request,separators=(',',':')));return
+        state=peer.snapshot.get('player_trade',{})
+        if request.get('op')=='open':
+            target=next(r for r in peer.snapshot['entities'] if r['id']=='player:'+str(request['oid']))
+            item=next(r for r in inventory(peer)['items'] if r['slot']==request['slot'])
+            peer.send('player_trade_begin',slot=item['slot'],item_token=item['token'],inventory_revision=inventory(peer)['state_revision'],entity_id=target['id'],target_name=target['name'],target_model=target['model_id'],target_session=target['session_id'])
+        elif request['action']==1:
+            slots=request.get('slots',[]);items={str(r['slot']):r['token'] for r in inventory(peer)['items'] if r['slot'] in slots}
+            peer.send('player_trade_update',trade_token=state.get('token',''),inventory_revision=inventory(peer)['state_revision'],slots=slots,item_tokens=items,money=request['money'])
+        else:peer.send('player_trade_cancel' if request['action']==0 else 'player_trade_accept',trade_token=state.get('token',''))
     def revision(peer):return trade(peer).get('qa_revision',0)
     def update(peer,slots,coins):
         before=revision(peer);send(peer,action=1,slots=slots,money=coins)
@@ -50,6 +61,12 @@ def run(a,b,wait,settle,result,checked,output):
     open_with(a,b,'Codex Trade A')
     assert 40 in trade(a)['own_slots'] and any(i['name']=='Codex Trade A' for i in trade(b)['partner_items'])
     result['checks']['modern_window_and_existing_item_decoder']=all(k in trade(b)['partner_items'][0] for k in ['model','name','condition','quality','object_type'])
+    if result.get('candidate_controller_guards_used'):
+        wait(lambda:trade(b).get('qa_state',{}).get('visible') and bool(trade(b).get('qa_state',{}).get('offer',{}).get('partner_items',[])),'Visible partner offer for original icon lookup',15)
+        actual=trade(b)['partner_items'];presented=trade(b)['qa_state']['offer']['partner_items']
+        result['checks']['existing_partner_item_icon_resolution']=bool(presented) and len(presented)==len(actual) and all(i.get('icon',-1)>=0 and i['model']==actual[n]['model'] and i['name']==actual[n]['name'] for n,i in enumerate(presented))
+        (output/'opened_trade_presentations.json').write_text(json.dumps(dict(actual=actual,presented=presented),indent=2))
+
     cancel(b)
     result['checks']['cancel_preserves_ownership_and_money']=bool(rows(a,'Codex Trade A') and rows(b,'Codex Trade B') and money(a)==money(b)==10000)
     open_with(a,b,'Codex Trade A');update(a,[40],[0,0,0,1,0]);update(b,[40],[0,0,0,0,25])
@@ -73,7 +90,10 @@ def run(a,b,wait,settle,result,checked,output):
     send(b,op='open',slot=41,oid=int(target_row['id'].split(':')[1]))
     wait(lambda:any("You can't trade this item!" in e.get('text','') for e in b.snapshot.get('chat',{}).get('entries',[])),'Original untradable-item refusal',15)
     result['checks']['ordinary_untradable_item_not_offered']=bool(closed() and rows(b,'Codex Bound Trade')[0]['slot']==41 and money(a)==9950 and money(b)==10050)
-    cancel(b)
+    if result.get('candidate_controller_guards_used'):
+        settle(.5)
+        result['checks']['bound_refusal_clears_controller_opening']=not trade(b).get('qa_state',{}).get('opening',False) and closed()
+    else:cancel(b)
     (output/'active_trade_snapshots.json').write_text(json.dumps(dict(a=a.snapshot,b=b.snapshot),indent=2))
     for peer in [a,b]:
         peer.send('chat',text='/quit');wait(lambda:not peer.snapshot.get('in_game',True) and peer.snapshot.get('character_lobby',{}).get('ready'),'Original saved return from trade session',90)

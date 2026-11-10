@@ -10,6 +10,7 @@ var local_model_id:=0
 var player_models:RefCounted
 var vault:RefCounted
 var exchange:RefCounted
+var player_trade:RefCounted
 var player_state:RefCounted
 var combat_visual:RefCounted
 var combat_audio:RefCounted
@@ -101,6 +102,7 @@ func _ready()->void:
     inventory=load(folder.path_join("inventory_state.gd")).new()
     vault=load(folder.path_join("vault_state.gd")).new()
     exchange=load(folder.path_join("exchange_state.gd")).new()
+    player_trade=load(folder.path_join("player_trade_controller.gd")).new()
     player_state=load(folder.path_join("player_combat_state.gd")).new()
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
     combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
@@ -267,6 +269,11 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
         combat_visual.remove(id)
 
 func world_event(kind:String,data:Dictionary)->void:
+    player_trade.observe(kind,data,adapter.entities,position,player_state.alive())
+    if kind=="player_trade" and player_trade.state.visible:
+        if vault.valid:vault.reset()
+        if not exchange.inventory_locked():exchange.reset()
+
     if ground_objects!=null:ground_objects.observe(kind,data)
     realm_war.consume(kind,data)
     siege.consume(kind,data,Time.get_ticks_msec())
@@ -393,7 +400,13 @@ func command(value:Dictionary)->void:
         emblem_picker.sync(server,character_name);emblem_picker.request(value,server);return
     if guild_state!=null and action in guild_state.ACTIONS:
         guild_state.sync(server,character_name,Time.get_ticks_msec());guild_state.request(value,server,Time.get_ticks_msec());return
+    if action in ["player_trade_begin","player_trade_update","player_trade_accept","player_trade_cancel"]:
+        sync_inventory(Time.get_ticks_msec())
+        if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
+        if not player_trade.request(value,server.client,inventory,adapter.entities,position,player_state.alive(),Time.get_ticks_msec()):inventory.fail(player_trade.feedback if not player_trade.feedback.is_empty() else "The trade offer has changed. Try again.")
+        return
     if action in exchange.ACTIONS:
+        if player_trade.blocks_inventory():inventory.fail("Finish the player trade first.");return
         var now:=Time.get_ticks_msec()
         sync_inventory(now);exchange.sync(server,inventory,now)
         exchange.execute(value,server,inventory,interaction,adapter.entities,position,player_state.alive(),now)
@@ -449,6 +462,7 @@ func command(value:Dictionary)->void:
         interaction.execute(value,server.client,adapter.entities,position)
     elif action in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:
         if action=="inventory_give" and (not player_state.alive()):inventory.fail("You cannot hand over items right now.");return
+        if player_trade.blocks_inventory():inventory.fail("Finish the player trade first.");return
         if exchange.inventory_locked():inventory.fail("Wait for the Realm Exchange transaction to finish.");return
         sync_inventory(Time.get_ticks_msec())
         inventory.execute(value,server.client,interaction,adapter.entities,position,Time.get_ticks_msec())
@@ -578,6 +592,10 @@ func _process(_delta:float)->void:
         var clock:Dictionary=world_clock_snapshot()
         var storm:float=float(server.call("storm_at",position.x*40.0+35*8192)) if server!=null and server.has_method("storm_at") and server.playing else 0.0
         personal_torch.advance(float(clock.get("hour",-1.0)),storm,_delta)
+    if server.playing:
+        player_trade.maintain(adapter.entities,position,player_state.alive(),now)
+        player_trade.flush_cancel(server.client)
+    elif player_trade.blocks_inventory():player_trade.observe("disconnect",{},adapter.entities,position,false)
     recover_test_region(now)
     player_state.advance(now)
     var gm_revision:int=gm_mode.revision
@@ -654,6 +672,7 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["los_queries"]=line_of_sight.snapshot()
         transport.snapshot_metadata["character_lobby"]=character_lobby.snapshot()
         transport.snapshot_metadata["exchange"]=exchange.snapshot()
+        transport.snapshot_metadata["player_trade"]=player_trade.snapshot(Callable(server,"item_icon"))
         guild_state.sync(server,character_name,now)
         transport.snapshot_metadata["guild"]=guild_state.snapshot()
         emblem_picker.sync(server,character_name)

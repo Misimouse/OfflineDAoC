@@ -237,6 +237,15 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
         row('Original native player-trade window',[],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerTrade.inl'],'private_native_candidate_not_installed','27 native UI controls/pointer/identity checks and existing market regression. Original trade atlas/icons/configured scale. Production opening,gateway,backend receipt chain and two-player native operation precede installation.')
         result['next_package']='CLIENT-PLAYER-TRADE-GATEWAY-CANDIDATE: complete actual inventory-to-player opening and original native-to-server exchange before deployment'
+    path=workspace/'PlayerTradeGatewayLab/verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and not summary['installed']
+        inputs[str(path)]=digest(path)
+        for key,name in summary['proofs'].items():
+            proof=Path(name).resolve();assert proof.is_relative_to(workspace.resolve());evidence=json.loads(proof.read_text());assert evidence['passed'];inputs[str(proof)]=digest(proof)
+        assert summary['real_checks']>=17 and summary['controller_checks']>=35 and summary['native_ui_checks']>=28 and summary['native_handover_checks']>=27
+        row('Player-trade production gateway candidate',[],['Godot/player_trade_controller.gd','Godot/live_gateway.gd'],'private_gateway_candidate_not_installed','17 ordinary two-player production-action checks,35 controller guards,28 UI and27 viewport handover checks. Exact22-file plan verified; connected native-to-server acceptance and historical deployment receipts precede installation.')
+        result['next_package']='CLIENT-PLAYER-TRADE-NATIVE-LIVE: connect real native UI controls to ordinary server exchange before guarded deployment'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

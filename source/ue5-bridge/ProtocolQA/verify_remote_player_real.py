@@ -8,13 +8,17 @@ from prepare_combined_expansion_data import digest
 model_roundtrip=os.environ.get('DAOC_REMOTE_MODEL_ROUNDTRIP','0')=='1'
 trade_probe=os.environ.get('DAOC_PLAYER_TRADE_PROBE','0')=='1'
 trade_state_probe=os.environ.get('DAOC_PLAYER_TRADE_STATE_PROBE','0')=='1'
+trade_controller_probe=os.environ.get('DAOC_PLAYER_TRADE_CONTROLLER_PROBE','0')=='1'
+trade_gateway_probe=os.environ.get('DAOC_PLAYER_TRADE_GATEWAY_PROBE','0')=='1'
+assert not trade_gateway_probe or trade_controller_probe
+assert not trade_controller_probe or trade_state_probe
 assert not trade_state_probe or trade_probe
 assert not (model_roundtrip and trade_probe)
-SOURCE=ROOT/'Godot' if model_roundtrip or trade_probe else source_qa.parent/'Godot'
+SOURCE=source_qa.parent/'Godot' if trade_gateway_probe else ROOT/'Godot' if model_roundtrip or trade_probe else source_qa.parent/'Godot'
 dotnet=ENGINE/'Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe'
 assert dotnet.is_file()
 env.update(DOTNET_ROOT=str(dotnet.parent),DOTNET_ROOT_X64=str(dotnet.parent),PATH=str(dotnet.parent)+os.pathsep+env['PATH'])
-D=ROOT/('PlayerTradeLab/StateProtocol' if trade_state_probe else 'PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+D=ROOT/('PlayerTradeLab/GatewayProtocol' if trade_gateway_probe else 'PlayerTradeLab/ControllerProtocol' if trade_controller_probe else 'PlayerTradeLab/StateProtocol' if trade_state_probe else 'PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('RemotePlayer_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;nav_added=False
 normal=verify_files(ROOT)
@@ -68,6 +72,7 @@ def settle(seconds):
 try:
  backend_path=ROOT/'RemotePlayerLab/backend_verified.json';backend=json.loads(backend_path.read_text());assert backend['passed'] and backend['checks']>=8
  if trade_probe:
+  if trade_controller_probe:result['source_inputs'][str(source_qa.parent/'Godot/player_trade_controller.gd')]=digest(source_qa.parent/'Godot/player_trade_controller.gd')
   if trade_state_probe:result['source_inputs'][str(source_qa.parent/'Godot/player_trade_state.gd')]=digest(source_qa.parent/'Godot/player_trade_state.gd')
   result['source_inputs'][str(source_qa/'player_trade_wire_case.py')]=digest(source_qa/'player_trade_wire_case.py')
   result['source_inputs'][str(Path(__file__).resolve())]=digest(Path(__file__).resolve())
@@ -76,7 +81,7 @@ try:
   assert digest(Path(backend['candidate_backend']))==backend['candidate_backend_sha256']
   assert all(digest(Path(p))==sha for p,sha in backend['source_inputs'].items())
   result['source_inputs'][str(backend_path)]=digest(backend_path)
-  result.update(direct_transport_probe=True,production_gateway_guards_tested=False,ui_installed=False)
+  result.update(direct_transport_probe=not trade_gateway_probe,production_gateway_guards_tested=trade_gateway_probe,ui_installed=False)
  if not model_roundtrip:result['source_inputs'][str(backend_path)]=digest(backend_path)
  for name in ['MMOEngine.dll','MMOEngine.pdb']:
   target=RUN/'LobbyProject/.godot/mono/temp/bin/Debug'/name;origin=INSTALL/'new-client/godot/.godot/mono/temp/bin/Debug'/name if model_roundtrip else ROOT/'RemotePlayerLab/BackendCandidate'/name
@@ -132,8 +137,8 @@ try:
         else:server.client.PlayerTrade(int(request.action),PackedInt32Array(request.get("slots",[])),PackedInt32Array(request.get("money",[])))
         return
 '''
-   text=text.replace('func command(value:Dictionary)->void:', 'func command(value:Dictionary)->void:\n'+hook)
-  if trade_state_probe:
+   if not trade_gateway_probe:text=text.replace('func command(value:Dictionary)->void:', 'func command(value:Dictionary)->void:\n'+hook)
+  if trade_state_probe and not trade_gateway_probe:
    shutil.copy2(source_qa.parent/'Godot/player_trade_state.gd',root/'Godot/player_trade_state.gd')
    text=text.replace('var qa_player_trade:Dictionary={}', 'var qa_player_trade:Dictionary={}\nvar qa_trade_state=load(get_script().resource_path.get_base_dir().path_join("player_trade_state.gd")).new()')
    text=text.replace('func world_event(kind:String,data:Dictionary)->void:', 'func world_event(kind:String,data:Dictionary)->void:\n    qa_trade_state.observe(kind,data,adapter.entities,position,player_state.alive())',1)
@@ -152,6 +157,26 @@ try:
             else:print("QA_TRADE_STATE_RESULT "+str(qa_trade_state.request(qa_offer,server.client,adapter.entities,position,player_state.alive())))'''
    assert raw in text;text=text.replace(raw,guarded,1)
    result['candidate_state_guards_used']=True
+  if trade_controller_probe and not trade_gateway_probe:
+   shutil.copy2(source_qa.parent/'Godot/player_trade_controller.gd',root/'Godot/player_trade_controller.gd')
+   text=text.replace('var qa_trade_state=load(get_script().resource_path.get_base_dir().path_join("player_trade_state.gd")).new()', 'var qa_trade_controller=load(get_script().resource_path.get_base_dir().path_join("player_trade_controller.gd")).new()\nvar qa_trade_state=qa_trade_controller.state',1)
+   text=text.replace('qa_trade_state.observe(kind,data,adapter.entities,position,player_state.alive())','qa_trade_controller.observe(kind,data,adapter.entities,position,player_state.alive())',1)
+   text=text.replace('qa_trade_state.maintain(adapter.entities,position,player_state.alive())','qa_trade_controller.maintain(adapter.entities,position,player_state.alive(),Time.get_ticks_msec())\n        qa_trade_controller.flush_cancel(server.client)',1)
+   text=text.replace('qa_player_trade["qa_state"]=qa_trade_state.snapshot()','qa_player_trade["qa_state"]=qa_trade_controller.snapshot(Callable(server,"item_icon"))',1)
+   old_open='        if request.get("op","")=="open":server.client.MoveItem(int(request.slot),1000+int(request.oid),1)'
+   new_open='''        if request.get("op","")=="open":
+            var qa_target:Dictionary=adapter.entities.get("player:"+str(int(request.oid)),{})
+            var qa_start:Dictionary={"action":"player_trade_begin","slot":request.slot,"item_token":inventory.items.get(int(request.slot),{}).get("token",""),"inventory_revision":inventory.state_revision,"entity_id":"player:"+str(int(request.oid)),"target_name":qa_target.get("name",""),"target_model":qa_target.get("model_id",-1),"target_session":qa_target.get("session_id",0)}
+            print("QA_TRADE_CONTROLLER_BEGIN "+str(qa_trade_controller.request(qa_start,server.client,inventory,adapter.entities,position,player_state.alive(),Time.get_ticks_msec())))'''
+   assert old_open in text;text=text.replace(old_open,new_open,1)
+   text=text.replace('                qa_offer.slots=', '                qa_offer.action="player_trade_update"\n                qa_offer.slots=',1)
+   text=text.replace('qa_trade_state.update_offer(qa_offer,server.client,inventory,adapter.entities,position,player_state.alive())','qa_trade_controller.request(qa_offer,server.client,inventory,adapter.entities,position,player_state.alive(),Time.get_ticks_msec())',1)
+   text=text.replace('qa_trade_state.request(qa_offer,server.client,adapter.entities,position,player_state.alive())','qa_trade_controller.request(qa_offer,server.client,inventory,adapter.entities,position,player_state.alive(),Time.get_ticks_msec())',1)
+   result['candidate_controller_guards_used']=True
+  if trade_gateway_probe:
+   text=text.replace('        transport.snapshot_metadata["qa_player_trade"]=qa_player_trade.duplicate(true)', '        qa_player_trade["qa_state"]=player_trade.snapshot(Callable(server,"item_icon"))\n        transport.snapshot_metadata["qa_player_trade"]=qa_player_trade.duplicate(true)',1)
+   result['candidate_controller_guards_used']=True
+   result['candidate_gateway_actions_used']=True
   q.write_text(text,encoding='utf-8')
   debug_adapter=root/'Godot/decoded_world_adapter.gd';ds=debug_adapter.read_text(encoding='utf-8-sig');ds=ds.replace('    if not oid_to_id.has(oid):_request_missing(oid);return','    if not oid_to_id.has(oid):\n        print("REMOTE_UNKNOWN "+JSON.stringify({"oid":oid,"local":local_oid,"non_living":non_living.has(oid),"requested":requested.has(oid)}))\n        _request_missing(oid);return');debug_adapter.write_text(ds,encoding='utf-8')
   q=root/'Godot/visual_bridge.gd';vt=q.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = '+str(19737+n))
@@ -249,7 +274,9 @@ try:
   result['checks']['remote_logout_removes_identity']=all(r['id']!=id_a for r in b.snapshot.get('entities',[]))
   result['checks']['local_menu_clears_world']=not any(r.get('kind')=='player' for r in a.snapshot.get('entities',[]))
  result['passed']=all(result['checks'].values())
-except Exception:result['errors'].append(traceback.format_exc())
+except Exception:
+ result['errors'].append(traceback.format_exc())
+ if trade_probe:(D/'failure_snapshots.json').write_text(json.dumps([p.snapshot for p in peers],indent=2))
 finally:
  for peer in peers:
   if peer.snapshot.get('in_game'):
