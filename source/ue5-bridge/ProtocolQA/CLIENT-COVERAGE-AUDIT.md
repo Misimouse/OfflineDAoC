@@ -75,3 +75,6 @@ stationary healing/repeat/buff use and normal saved shutdown. This verifies
 existing installed behavior, preserving original instant/instrument/MoveCast
 exceptions. No runtime deployment is needed. See SPELL-MOVEMENT-ROUNDTRIP-AUDIT.md.
 Owner gameplay review is pending.
+# Remote model size follow-up
+
+`REMOTE-MODEL-SIZE-AUDIT.md` closes original zero-size ModelChange interpretation with a guarded one-file installation and 105 state/regression checks repeated against installed files. Real two-player transformation, supported model coverage and native equipment restoration remain separate acceptance gates.

@@ -147,6 +147,7 @@ def audit(workspace,install):
         ('trainer_affordability_receipts','TrainerAffordabilityLab','Original trainer affordability',['Godot/trainer_state.gd'],'Original level and specialization-point cost gates; no local grants or changed server rules.'),
         ('shortcut_pages_receipts','CrossClassSwitchLab','Per-character quickbar pages',['Godot/classic_ui_state.gd'],'Fresh characters reset all three pages; existing characters restore their own saved pages and shortcuts.'),
         ('empty_inventory_receipts','CharacterInventorySwitchLab','Empty inventory initialization',['Godot/inventory_state.gd'],'Original initial MoneyUpdate establishes readiness when no item packet exists; money remains account/realm scoped. Money updates do not acknowledge item transactions.'),
+        ('remote_model_size_receipts','RemoteModelRoundtripLab','Remote model-change size semantics',['Godot/decoded_world_adapter.gd'],'Original zero size retains existing size; explicit NPC sizing and equipment retention pass.105 state/regression checks repeated against installed source. Real two-player/native transformation acceptance remains separate.'),
     ]:
         import importlib
         verified=importlib.import_module(module).verify(workspace)

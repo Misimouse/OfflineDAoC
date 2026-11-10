@@ -14,6 +14,8 @@ def install(workspace,state,real,apply=False,rollback=False):
     source=Path(__file__).resolve().parents[1]/'Godot/inventory_state.gd';target=workspace/'Godot/inventory_state.gd'
     native=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     if rollback:
+        successor=workspace/'RemoteModelRoundtripLab/installed.json'
+        assert not (successor.exists() and read(successor).get('installed')), 'Remote model delivery depends on this receipt; roll back its successor first.'
         data=validate(workspace,read(path));row=data['files'][0];saved=Path(row['backup'])
         assert digest(native)==data['native_sha256']
         assert saved.resolve().is_relative_to((workspace/'Backups').resolve()) and digest(saved)==row['before_sha256']

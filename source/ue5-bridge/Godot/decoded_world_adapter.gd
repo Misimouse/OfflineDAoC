@@ -212,7 +212,12 @@ func consume_world(kind: String, data: Dictionary) -> void:
             row.position_m=[p.x,p.y,p.z]
             _update(row,data)
             _motion_sample(row,data,kind)
-        elif kind == "model_change":_update(row,data)
+        elif kind == "model_change":
+            # Original SendModelChange sends size 0 for players: retain the
+            # current size. NPC model-and-size packets may explicitly resize.
+            var change:Dictionary=data.duplicate()
+            if int(change.get("size",0))==0:change.erase("size")
+            _update(row,change)
         elif kind == "death":
             row.health=0.0;row.state="dead";row.speed_mps=0.0
             _motion_sample(row,{},kind)
