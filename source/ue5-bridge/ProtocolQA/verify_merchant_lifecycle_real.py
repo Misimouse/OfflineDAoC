@@ -6,7 +6,8 @@ source_qa=Path(os.environ.get("DAOC_BRIDGE_SOURCE_QA",str(ROOT.parent/"DAoC-Enha
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 SOURCE=ROOT/'Godot'
-qa_lab=os.environ.get('DAOC_MERCHANT_QA_LAB','MerchantLifecycleLab');assert qa_lab in ['MerchantLifecycleLab','ItemShortcutsLab']
+qa_lab=os.environ.get('DAOC_MERCHANT_QA_LAB','MerchantLifecycleLab');assert qa_lab in ['MerchantLifecycleLab','ItemShortcutsLab','EmptyInventoryTradeLab']
+empty_probe=qa_lab=='EmptyInventoryTradeLab'
 D=ROOT/qa_lab/('RealMerchantProtocol' if qa_lab=='ItemShortcutsLab' else 'RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('MerchantLifecycle_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False
@@ -67,6 +68,10 @@ try:
    db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(c['AccountName'],))
    db.execute('UPDATE DOLCharacters SET Region=?,Xpos=?,Ypos=?,Zpos=?,HCFlag=0 WHERE DOLCharacters_ID=?',(leader['Region'],leader['Xpos']+(10 if c['Name']=='Codexfriend' else 0),leader['Ypos'],leader['Zpos'],c['DOLCharacters_ID']))
   funded=db.execute("UPDATE AccountXMoney SET Gold=1,Silver=0,Copper=0,Platinum=0,Mithril=0 WHERE Realm=3 AND AccountId=?",(leader['AccountName'],));assert funded.rowcount==1
+  if empty_probe:
+   # Only this marked QA database: a fully empty ordinary Magician's inventory.
+   db.execute('DELETE FROM Inventory WHERE OwnerID=?',(leader['DOLCharacters_ID'],))
+   db.execute("UPDATE DOLCharacters SET Class=51,Level=1,Experience=0,SerializedSpecs='' WHERE DOLCharacters_ID=?",(leader['DOLCharacters_ID'],))
   result['checks']['ordinary_accounts_only']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
  for n,root in enumerate([RUN,RUN/'friend-session']):
   assert root.resolve().is_relative_to(RUN)
@@ -103,6 +108,9 @@ try:
  def money(peer=a):
   coins=inventory(peer)['money'];return sum(coins.get(k,0)*n for k,n in [('copper',1),('silver',100),('gold',10000),('platinum',10000000),('mithril',10000000000)])
  def carried(name,peer=a):return [it for it in inventory(peer)['items'] if 40<=it['slot']<=79 and it['name']==name]
+ if empty_probe:
+  wait(lambda:inventory().get('ready') and money()==10000,'Empty inventory initialized with its actual server balance')
+  result['checks']['empty_magician_inventory_is_ready']=not inventory()['items'] and a.snapshot['classic_ui']['info']['class_name']=='Magician' and not inventory()['pending']
  wait(lambda:any(e.get('name')==world['npc']['Name'] for e in a.snapshot.get('entities',[])),'Original merchant appears')
  npc=next(e for e in a.snapshot['entities'] if e.get('name')==world['npc']['Name'])
  def open_shop(peer):
@@ -122,6 +130,11 @@ try:
  item=dict(carried(offer['name'])[0]);after_buy=money()
  result['checks']['server_purchase_delivers_one_original_item']=item['count']==1
  result['checks']['server_purchase_deducts_exact_catalogue_price']=after_buy==before-offer['price']
+ if empty_probe:
+  assert item['object_type']==37 and item['equip_slots']==[25]
+  a.send('inventory_equip',slot=item['slot'],item_token=item['token'],inventory_revision=inventory()['state_revision'])
+  wait(lambda:not inventory()['pending'] and inventory().get('feedback')=='You have no skill in wearing this armor type!','Original server refuses reinforced armor for Magician')
+  result['checks']['server_enforces_magician_armor_restriction']=len(carried(offer['name']))==1 and not any(it['slot']==25 for it in inventory()['items']) and money()==after_buy
  invalid=dict(slot=item['slot'],item_token='stale',inventory_revision=inventory()['state_revision'],merchant_id=npc['id'],merchant_revision=merchant()['catalog_revision']);a.send('merchant_sell',**invalid);settle(.3)
  result['checks']['stale_item_cannot_be_sold']=len(carried(offer['name']))==1 and money()==after_buy
  (D/'active_snapshot.json').write_text(json.dumps(a.snapshot),encoding='utf-8')

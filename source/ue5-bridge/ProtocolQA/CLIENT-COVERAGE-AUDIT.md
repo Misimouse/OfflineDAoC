@@ -53,3 +53,10 @@ switching clears dialogs and preserves equipment operations after return; money
 follows the original AccountXMoney account/realm rule. Rollback preview passes
 and dependent predecessor rollback is refused before writing. Owner review is
 pending. See EMPTY-INVENTORY-AUDIT.md.
+
+The installed empty-inventory follow-up passes15 ordinary merchant checks:
+original catalogue purchase/sale and exact money accounting from a fully empty
+Magician, original reinforced-armor refusal with the item retained in backpack,
+stale/duplicate/closed requests and saved logout balance. Private data/libraries
+are restored. No additional runtime change is needed. See
+EMPTY-INVENTORY-TRADE-AUDIT.md. Owner gameplay review remains pending.
