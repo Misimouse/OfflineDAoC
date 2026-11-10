@@ -10,6 +10,8 @@ SOURCE=source_qa.parent/'Godot' if source_mode=='candidate' else ROOT/'Godot'
 training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast','return','switch']
 inventory_probe=os.environ.get('DAOC_CROSS_CHARACTER_INVENTORY','0')=='1'
 assert not inventory_probe or training_case=='switch'
+sight_harness_probe=os.environ.get('DAOC_NATIVE_SIGHT_HARNESS','0')=='1'
+assert not sight_harness_probe or (training_case=='cast' and source_mode=='installed')
 assert source_mode!='candidate' or training_case in ['on','switch']
 budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
 case_lab={'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab','switch':'CrossClassSwitchLab'}[training_case]
@@ -20,6 +22,7 @@ elif training_case=='switch':
  page_receipt=ROOT/'CrossClassSwitchLab/installed.json'
  output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if page_receipt.exists() and json.loads(page_receipt.read_text()).get('installed',False) else 'RealProtocol'
 if inventory_probe:case_lab='CharacterInventorySwitchLab';output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if (ROOT/'CharacterInventorySwitchLab/installed.json').exists() else 'RealProtocol'
+if sight_harness_probe:case_lab='NativeSightHarnessLab';output_stage='RealProtocol'
 D=ROOT/case_lab/output_stage/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
@@ -69,6 +72,16 @@ try:
   dest=sqlite3.connect(BACKUP/'before.sqlite3.db');db.backup(dest);dest.close();backed=True
   rows=db.execute("SELECT * FROM DOLCharacters WHERE Name IN ('Codexdruid','Codexfriend')").fetchall();assert len(rows)==2
   leader=dict(next(c for c in rows if c['Name']=='Codexdruid'))
+  if sight_harness_probe:
+   import struct,math
+   spawn_config=ROOT/'bridge_config.json';result['source_inputs'][str(spawn_config)]=digest(spawn_config)
+   spawn=json.loads(spawn_config.read_text())['initial_spawn_m'];leader['Xpos']=round(float(spawn[0])*40)+35*8192;leader['Ypos']=round(float(spawn[2])*40)+51*8192
+   heights=INSTALL/'new-client/godot/content/zones/zone207/heights.f32';result['source_inputs'][str(heights)]=digest(heights)
+   grid=struct.unpack('<'+str(257*257)+'f',heights.read_bytes());gx=(leader['Xpos']-35*8192)/256.;gz=(leader['Ypos']-51*8192)/256.;i=math.floor(gx);j=math.floor(gz);assert 0<=i<256 and 0<=j<256
+   u=gx-i;w=gz-j;h0,h1,h2,h3=[grid[k] for k in [j*257+i,j*257+i+1,(j+1)*257+i,(j+1)*257+i+1]]
+   height=h0+u*(h1-h0)+w*(h2-h0) if u+w<=1 else h3+(1-u)*(h2-h3)+(1-w)*(h1-h3)
+   result['private_spawn_ground_m']=height;result['private_spawn_previous_m']=leader['Zpos']*.025;leader['Zpos']=round((height+.10)*40)
+   for c in rows:db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=? WHERE DOLCharacters_ID=?',(leader['Xpos'],leader['Ypos'],leader['Zpos'],c['DOLCharacters_ID']))
   witness=dict(db.execute("SELECT * FROM Mob WHERE Name='Codex Pet Training Dummy'").fetchone())
   witness.update(Mob_ID='codex-private-progression-witness',Name='Codex Progression Witness',ClassType='DOL.GS.GameNPC',Brain='DOL.AI.Brain.BlankBrain',Guild='',Level=1,Realm=0,Model=123,Flags=0,AggroLevel=0,AggroRange=0,Strength=1,Constitution=1,Dexterity=1,Quickness=1,Speed=0,RoamingRange=0,NPCTemplateID=0,RespawnInterval=3600,X=leader['Xpos']+80,Y=leader['Ypos'],Z=leader['Zpos'])
   keys=list(witness)
@@ -197,8 +210,8 @@ try:
    spec=importlib.util.spec_from_file_location('progression_native_sight',helper);native_sight=importlib.util.module_from_spec(spec);spec.loader.exec_module(native_sight)
    target_config=ROOT/'playable_project.json';target_cfg=json.loads(target_config.read_text());result['source_inputs'][str(target_config)]=digest(target_config)
    project=(ROOT/target_cfg['project']).resolve();assert project.is_file()
-   result['native_world']=dict(project=str(project),map=target_cfg['map'],read_only=True,offscreen=True)
-   relay=native_sight.NativeSightRelay(a.sock,ROOT,a.session,a.snapshot,project=project,world=target_cfg['map'],report_dir=D/'NativeSight',offscreen=True,enabled_plugins=target_cfg.get('enable_plugins',[]));a.sock=relay
+   result['native_world']=dict(project=str(project),map=target_cfg['map'],read_only=True,offscreen=True,headless_geometry=sight_harness_probe)
+   relay=native_sight.NativeSightRelay(a.sock,ROOT,a.session,a.snapshot,project=project,world=target_cfg['map'],report_dir=D/'NativeSight',offscreen=True,enabled_plugins=target_cfg.get('enable_plugins',[]),navigation_probe=sight_harness_probe,headless_geometry=sight_harness_probe);a.sock=relay
    wait(lambda:relay.read_report().get('local_animation'),'Current native map read-only sight client ready',80)
    def cast():return ui().get('casting',{})
    def avitals():return state().get('vitals',{})
@@ -242,6 +255,9 @@ try:
    result['checks']['new_level_buff_confirmed_in_server_effects']=True
    result['buff_effects']=ui()['effects']
    result['native_sight_answers']=relay.answers;result['checks']['actual_native_geometry_answered_server_sight']=bool(relay.answers) and all(e.get('question') for e in relay.answers)
+   if sight_harness_probe:
+    settle(2);native=relay.read_report();result['native_active_scene']={k:native.get(k) for k in ['map','navigation_ready','navigation_probe','character_grounded','position_m','pawn_position_m','camera_position_m','terrain_colliders','structure_colliders','tree_collider_instances']}
+    result['checks']['native_character_stays_on_terrain']=bool(native.get('character_grounded')) and abs(native['position_m'][1]-result['private_spawn_ground_m'])<.5
   result['trained_specialization']='Regrowth';result['trained_rank']=2;result['final_spec_points']=0
  if training_case in ['return','switch']:
   a.send('ui_bank',bar=2,bank=0);wait(lambda:ui()['banks'][2]==0,'Select saved quickbar page before exit')
@@ -339,6 +355,8 @@ finally:
   try:server.wait(timeout=45)
   except subprocess.TimeoutExpired:server.kill();server.wait();result['errors'].append('Private server forced stop')
  if relay is not None:
+  result['native_sight_answers']=relay.answers
+  native=relay.read_report();result['native_scene_at_cleanup']={k:native.get(k) for k in ['map','navigation_ready','navigation_probe','character_grounded','position_m','terrain_colliders']}
   try:result['native_normal_exit']=relay.finish()==0
   except Exception:result['errors'].append('Native cleanup: '+traceback.format_exc())
  for handle in handles:handle.close()

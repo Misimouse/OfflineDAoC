@@ -41,3 +41,7 @@ The scenario also exposed that a specialization below the character's level is
 still marked trainable when its next cost exceeds remaining points. Original
 Godot/DOL and the bridge request/colour paths are being checked in the next
 bounded trainer-affordability package, rather than changing spell rules here.
+
+The grounded harness follow-up is now separately verified with real UE physics
+and headless geometry,28 ordinary-server checks and18 startup-failure checks.
+See NATIVE-SIGHT-HARNESS-AUDIT.md. The old rendered captures remain unaccepted.

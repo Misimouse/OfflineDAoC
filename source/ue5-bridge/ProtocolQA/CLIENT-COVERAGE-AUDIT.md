@@ -60,3 +60,11 @@ Magician, original reinforced-armor refusal with the item retained in backpack,
 stale/duplicate/closed requests and saved logout balance. Private data/libraries
 are restored. No additional runtime change is needed. See
 EMPTY-INVENTORY-TRADE-AUDIT.md. Owner gameplay review remains pending.
+
+The native sight harness follow-up now passes28 ordinary-server/UE checks and18
+startup-failure checks. Only private characters are placed above sampled terrain
+at the configured launch spawn. Real UE NullRHI physics answers10 sight queries;
+healing/power/buff, floor support and sampled structure/trunk/capsule/camera
+queries pass without changing the original1500ms deadline. Rendered loading
+stalls and earlier under-terrain captures are not accepted art/performance proof.
+No normal runtime or WORK assets are changed. See NATIVE-SIGHT-HARNESS-AUDIT.md.
