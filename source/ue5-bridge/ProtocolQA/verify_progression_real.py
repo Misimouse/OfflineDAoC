@@ -7,10 +7,17 @@ from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 source_mode=os.environ.get('DAOC_PROGRESSION_GODOT','installed');assert source_mode in ['installed','candidate']
 SOURCE=source_qa.parent/'Godot' if source_mode=='candidate' else ROOT/'Godot'
-training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast','return']
-assert source_mode!='candidate' or training_case=='on'
+training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast','return','switch']
+assert source_mode!='candidate' or training_case in ['on','switch']
 budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
-D=ROOT/(('TrainerAffordabilityLab' if source_mode=='candidate' or (budget_probe and training_case=='on') else {'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab'}[training_case])+('/InstalledRealProtocol' if source_mode=='installed' and budget_probe and training_case=='on' else '/RealProtocol'))/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+case_lab={'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab','switch':'CrossClassSwitchLab'}[training_case]
+output_stage='RealProtocol'
+if training_case=='on' and budget_probe:
+ case_lab='TrainerAffordabilityLab';output_stage='InstalledRealProtocol' if source_mode=='installed' else 'RealProtocol'
+elif training_case=='switch':
+ page_receipt=ROOT/'CrossClassSwitchLab/installed.json'
+ output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if page_receipt.exists() and json.loads(page_receipt.read_text()).get('installed',False) else 'RealProtocol'
+D=ROOT/case_lab/output_stage/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
 normal=verify_files(ROOT)
@@ -72,6 +79,13 @@ try:
   if training_case=='cast':
    # Injured ordinary healing witness only; never change health while logged in.
    db.execute("UPDATE DOLCharacters SET Class=47,Level=20,Experience=25899950,Health=1,Xpos=?,Ypos=?,Zpos=?,Region=200 WHERE Name='Codexfriend'",(leader['Xpos']+20,leader['Ypos']+20,leader['Zpos']))
+  if training_case=='switch':
+   import uuid
+   uid=uuid.uuid4().hex;swap_name='Codexswap'+''.join(chr(97+int(ch,16)) for ch in uid[:6])
+   slots={r[0] for r in db.execute('SELECT AccountSlot FROM DOLCharacters WHERE AccountName=?',(leader['AccountName'],))}
+   swap=dict(leader);swap.update(DOLCharacters_ID=uid,Name=swap_name,AccountSlot=next(slot for slot in range(300,310) if slot not in slots),Class=51,Level=1,Experience=0,SerializedSpecs='',SerializedAbilities='',SerializedRealmAbilities='',DisabledSpells='',DisabledAbilities='',Health=100,Mana=100,DeathTime=0,HasGravestone=0,HCFlag=0)
+   keys=list(swap);db.execute('INSERT INTO DOLCharacters ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[swap[k] for k in keys])
+   result['swap_character']=swap_name
   result['checks']['ordinary_accounts_only']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
  for n,root in enumerate([RUN,RUN/'friend-session']):
   assert root.resolve().is_relative_to(RUN)
@@ -167,7 +181,7 @@ try:
   slot=ui()['bars'][2][0][9]
   current=next((e for e in ui()['entries'] if e['id']==slot.get('id') and e['token']==slot.get('token')),None)
   result['checks']['saved_heal_still_matches_current_spell']=bool(current and current['name']==original_heal['name'] and current['kind']=='spell')
-  if training_case in ['on','return']:
+  if training_case in ['on','return','switch']:
    a.send('target_self');settle(.3)
    a.send('ui_use',entry_id=current['id'],entry_token=current['token'])
    wait(lambda:ui().get('feedback')=='Request sent to server.','Retained heal can request original spell after training')
@@ -224,7 +238,7 @@ try:
    result['buff_effects']=ui()['effects']
    result['native_sight_answers']=relay.answers;result['checks']['actual_native_geometry_answered_server_sight']=bool(relay.answers) and all(e.get('question') for e in relay.answers)
   result['trained_specialization']='Regrowth';result['trained_rank']=2;result['final_spec_points']=0
- if training_case=='return':
+ if training_case in ['return','switch']:
   a.send('ui_bank',bar=2,bank=0);wait(lambda:ui()['banks'][2]==0,'Select saved quickbar page before exit')
   old_session=a.session;old_generation=state()['generation']
   a.send('chat',text='/quit')
@@ -243,6 +257,29 @@ try:
   a.send('target_self');settle(.3);a.send('ui_use_slot',bar=2,slot=9)
   wait(lambda:ui().get('feedback')=='Request sent to server.','Saved shortcut resolves after reentry')
   result['checks']['saved_shortcut_request_accepted_after_reentry']=True
+ if training_case=='switch':
+  # Use a non-default old-character page to expose accidental page inheritance.
+  a.send('ui_assign',bar=2,bank=4,slot=9,entry_id=fresh['id'],entry_token=fresh['token']);a.send('ui_bank',bar=2,bank=4)
+  wait(lambda:ui()['banks'][2]==4 and ui()['bars'][2][4][9].get('token')==fresh['token'],'Save distinct original-character quickbar page')
+  a.send('chat',text='/quit');wait(lambda:not a.snapshot.get('in_game') and a.snapshot.get('character_lobby',{}).get('ready'),'Return before class switch',100)
+  lobby=a.snapshot['character_lobby'];assert any(e['name']==swap_name for e in lobby['characters'])
+  generation=state()['generation'];a.send('character_enter',name=swap_name,lobby_revision=lobby['revision'])
+  wait(lambda:a.snapshot.get('in_game') and state().get('ready') and state()['generation']>generation and ui().get('skills_ready') and ui().get('character')==swap_name,'Fresh Magician entered in same account',40)
+  result['checks']['same_account_new_class_receives_own_skills']=ui()['info']['class_name']=='Magician' and any(e.get('kind')=='spell' for e in ui()['entries']) and not any(e.get('kind')=='spell' and e.get('line') in ['Regrowth','Nurture'] for e in ui()['entries'])
+  result['checks']['new_character_has_fresh_shortcut_pages']=ui()['banks']==[0,0,0]
+  result['checks']['new_character_does_not_inherit_heal_bar']=all(not slot for bar in ui()['bars'] for bank in bar for slot in bank)
+  a.send('ui_use',entry_id=fresh['id'],entry_token=fresh['token']);settle(.3)
+  result['checks']['previous_class_skill_token_refused']='changed' in ui().get('feedback','').lower()
+  mage_spell=next(e for e in ui()['entries'] if e.get('kind')=='spell')
+  a.send('ui_assign',bar=2,bank=0,slot=9,entry_id=mage_spell['id'],entry_token=mage_spell['token'])
+  wait(lambda:ui()['bars'][2][0][9].get('token')==mage_spell['token'],'New class stores its own shortcut')
+  a.send('chat',text='/quit');wait(lambda:not a.snapshot.get('in_game') and a.snapshot.get('character_lobby',{}).get('ready'),'Return after separate class shortcut save',100)
+  lobby=a.snapshot['character_lobby'];generation=state()['generation'];a.send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
+  wait(lambda:a.snapshot.get('in_game') and state().get('ready') and state()['generation']>generation and ui().get('skills_ready') and ui().get('character')=='Codexdruid','Original trained character returns after class switch',40)
+  result['checks']['original_character_progression_survives_class_switch']=ui()['info']['level']==2 and ui()['points']['xp']==64 and any(e['name']=='Regrowth' and e['level']==2 for e in ui()['specs'])
+  slot=ui()['bars'][2][4][9]
+  result['checks']['original_character_restores_distinct_saved_page']=ui()['banks'][2]==4 and slot.get('name')==original_heal['name'] and any(e['id']==slot.get('id') and e['token']==slot.get('token') for e in ui()['entries'])
+  result['checks']['new_class_shortcut_does_not_replace_original_heal']=ui()['bars'][2][0][9].get('name')==original_heal['name'] and mage_spell['name'] not in [e['name'] for e in ui()['entries'] if e.get('kind')=='spell']
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
 finally:

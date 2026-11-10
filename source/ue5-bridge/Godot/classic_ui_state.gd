@@ -52,6 +52,7 @@ func open_character(name:String,folder:String,legacy_path:String="")->void:
     if character==name:return
     hover.clear();item_detail_refresh.clear()
     macros.clear();entries.clear()
+    banks=[0,0,0]
     for b in 3:
         for k in 10:
             for i in 10:bars[b][k][i]={}
