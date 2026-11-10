@@ -7,12 +7,14 @@ from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 model_roundtrip=os.environ.get('DAOC_REMOTE_MODEL_ROUNDTRIP','0')=='1'
 trade_probe=os.environ.get('DAOC_PLAYER_TRADE_PROBE','0')=='1'
+trade_state_probe=os.environ.get('DAOC_PLAYER_TRADE_STATE_PROBE','0')=='1'
+assert not trade_state_probe or trade_probe
 assert not (model_roundtrip and trade_probe)
 SOURCE=ROOT/'Godot' if model_roundtrip or trade_probe else source_qa.parent/'Godot'
 dotnet=ENGINE/'Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe'
 assert dotnet.is_file()
 env.update(DOTNET_ROOT=str(dotnet.parent),DOTNET_ROOT_X64=str(dotnet.parent),PATH=str(dotnet.parent)+os.pathsep+env['PATH'])
-D=ROOT/('PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+D=ROOT/('PlayerTradeLab/StateProtocol' if trade_state_probe else 'PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('RemotePlayer_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;nav_added=False
 normal=verify_files(ROOT)
@@ -66,6 +68,7 @@ def settle(seconds):
 try:
  backend_path=ROOT/'RemotePlayerLab/backend_verified.json';backend=json.loads(backend_path.read_text());assert backend['passed'] and backend['checks']>=8
  if trade_probe:
+  if trade_state_probe:result['source_inputs'][str(source_qa.parent/'Godot/player_trade_state.gd')]=digest(source_qa.parent/'Godot/player_trade_state.gd')
   result['source_inputs'][str(source_qa/'player_trade_wire_case.py')]=digest(source_qa/'player_trade_wire_case.py')
   result['source_inputs'][str(Path(__file__).resolve())]=digest(Path(__file__).resolve())
   backend_path=Path(os.environ['DAOC_PLAYER_TRADE_BACKEND_PROOF']).resolve();assert backend_path.is_relative_to(ROOT/'PlayerTradeLab/WireCodec')
@@ -130,6 +133,25 @@ try:
         return
 '''
    text=text.replace('func command(value:Dictionary)->void:', 'func command(value:Dictionary)->void:\n'+hook)
+  if trade_state_probe:
+   shutil.copy2(source_qa.parent/'Godot/player_trade_state.gd',root/'Godot/player_trade_state.gd')
+   text=text.replace('var qa_player_trade:Dictionary={}', 'var qa_player_trade:Dictionary={}\nvar qa_trade_state=load(get_script().resource_path.get_base_dir().path_join("player_trade_state.gd")).new()')
+   text=text.replace('func world_event(kind:String,data:Dictionary)->void:', 'func world_event(kind:String,data:Dictionary)->void:\n    qa_trade_state.observe(kind,data,adapter.entities,position,player_state.alive())',1)
+   text=text.replace('        transport.snapshot_metadata["qa_player_trade"]=qa_player_trade.duplicate(true)', '        qa_trade_state.maintain(adapter.entities,position,player_state.alive())\n        qa_player_trade["qa_state"]=qa_trade_state.snapshot()\n        transport.snapshot_metadata["qa_player_trade"]=qa_player_trade.duplicate(true)',1)
+   raw='        else:server.client.PlayerTrade(int(request.action),PackedInt32Array(request.get("slots",[])),PackedInt32Array(request.get("money",[])))'
+   guarded='''        elif int(request.action)==0 and not qa_trade_state.visible:
+            # QA cleanup for a server-side bound-item refusal before a window exists.
+            server.client.PlayerTrade(0,PackedInt32Array(),PackedInt32Array())
+        else:
+            var qa_offer:Dictionary={"trade_token":qa_trade_state.token,"action":"player_trade_cancel" if int(request.action)==0 else "player_trade_accept"}
+            if int(request.action)==1:
+                qa_offer.slots=request.get("slots",[]);qa_offer.money=request.get("money",[]);qa_offer.inventory_revision=inventory.state_revision;qa_offer.item_tokens={}
+                for slot in qa_offer.slots:
+                    if inventory.items.has(int(slot)):qa_offer.item_tokens[str(int(slot))]=inventory.items[int(slot)].get("token","")
+                print("QA_TRADE_STATE_RESULT "+str(qa_trade_state.update_offer(qa_offer,server.client,inventory,adapter.entities,position,player_state.alive())))
+            else:print("QA_TRADE_STATE_RESULT "+str(qa_trade_state.request(qa_offer,server.client,adapter.entities,position,player_state.alive())))'''
+   assert raw in text;text=text.replace(raw,guarded,1)
+   result['candidate_state_guards_used']=True
   q.write_text(text,encoding='utf-8')
   debug_adapter=root/'Godot/decoded_world_adapter.gd';ds=debug_adapter.read_text(encoding='utf-8-sig');ds=ds.replace('    if not oid_to_id.has(oid):_request_missing(oid);return','    if not oid_to_id.has(oid):\n        print("REMOTE_UNKNOWN "+JSON.stringify({"oid":oid,"local":local_oid,"non_living":non_living.has(oid),"requested":requested.has(oid)}))\n        _request_missing(oid);return');debug_adapter.write_text(ds,encoding='utf-8')
   q=root/'Godot/visual_bridge.gd';vt=q.read_text(encoding='utf-8-sig').replace('port: int = 19727','port: int = '+str(19737+n))

@@ -1,0 +1,9 @@
+# Inactive authoritative player-trade state
+
+The adapter opens only from a decoded original server window. The title is resolved to exactly one nearby remote player and its current session, using the bridge position_m coordinates. Ambiguous names, missing positions, invalid sessions, death, partner replacement, range loss and lifecycle changes invalidate access. Every authoritative update rotates the offer token, even if its content looks unchanged. An old local acceptance never applies to a newer offer.
+
+Outgoing offer edits require the current inventory revision, carried backpack slots, exact item tokens, no competing inventory move, integral five-denomination money and no duplicate item slots. The original codec and server retain the final rules. No inventory, ownership, coins or acceptance flags are predicted locally. Cancel remains available while an accept/update awaits a refusal or confirmation. A forty-zero close clears the window without claiming trade completion.
+
+43 isolated Godot checks pass. The same state adapter also passes the15 ordinary two-player exchange/cancel/update/refusal/save checks through a private QA gateway connection. Opening still uses the original direct MoveItem test hook; the invisible bound-item refusal uses explicit QA-only cancel cleanup. Production inventory-to-player picking, production gateway wiring, original native trade window, icon resolution, layout and final deployment are not yet accepted or installed. Do not treat this as a completed gameplay feature.
+
+Private evidence: PlayerTradeLab/State/20261110-192714-524529/verified.json and the passing PlayerTradeLab/StateProtocol run. The played database, normal backend, normal Godot gateway, native DLL and WORK are unchanged. Both clients/server exit normally and isolated database/libraries/navigation are restored. Public source includes no private accounts, logs or databases.

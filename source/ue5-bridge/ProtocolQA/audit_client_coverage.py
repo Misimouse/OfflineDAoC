@@ -217,6 +217,18 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
         row('Ordinary two-player trade transport',[],['ProtocolQA/player_trade_wire_case.py','ProtocolQA/verify_remote_player_real.py'],'private_transport_verified_not_installed','15 ordinary two-player protocol checks: item/money exchange,cancel,changed offer resets acceptance,stale acceptance,funds and tradability refusals,saved ownership. Direct transport only; production gateway guards and native UI remain open.')
         result['next_package']='CLIENT-PLAYER-TRADE-STATE-CANDIDATE: bind authoritative offer state to session/identity and stale-action guards before original UI integration'
+    path=workspace/'PlayerTradeLab/state_verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and summary['checks']>=43 and not summary['installed']
+        for key,folder in [('proof','State'),('real_protocol_proof','StateProtocol')]:
+            proof=Path(summary[key]).resolve();assert proof.is_relative_to((workspace/'PlayerTradeLab'/folder).resolve())
+            evidence=json.loads(proof.read_text());assert evidence['passed']
+            if folder=='StateProtocol':assert evidence['candidate_state_guards_used'] and evidence['normal_shutdown'] and evidence['database_restored'] and evidence['normal_runtime_unchanged']
+            else:assert evidence['checks']>=43 and evidence['exit_code']==0
+            inputs[str(proof)]=digest(proof)
+        inputs[str(path)]=digest(path)
+        row('Authoritative player-trade state',[],['Godot/player_trade_state.gd'],'private_state_candidate_not_installed','43 stale-action/identity/inventory guards and15 ordinary exchange checks using the same adapter. Original native UI and production opening/gateway/deployment remain open.')
+        result['next_package']='CLIENT-PLAYER-TRADE-ORIGINAL-UI-CANDIDATE: original trade art,item icons,production player handover and native controls before activation'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
