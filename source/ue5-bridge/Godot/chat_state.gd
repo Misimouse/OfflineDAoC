@@ -7,6 +7,7 @@ var entries:Array=[]
 var serial:=0
 var revision:=0
 var skipped_social:=0
+var last_private_sender:=""
 var cached:Dictionary={"revision":0,"entries":[]}
 var bubbles:Array=[]
 var notices:Array=[]
@@ -44,7 +45,7 @@ func world_message(data:Dictionary,entities:Dictionary,selected:String,pos:Vecto
     if bubbles.size()>8:bubbles.pop_front()
     return true
 func reset()->void:
-    entries.clear();bubbles.clear();notices.clear();serial=0;revision+=1;skipped_social=0;cached={"revision":revision,"entries":[]}
+    entries.clear();bubbles.clear();notices.clear();serial=0;revision+=1;skipped_social=0;last_private_sender="";cached={"revision":revision,"entries":[]}
 func append(text:String,kind:String,raw_type:int=-1,source:String="client")->void:
     if text.is_empty():return
     serial+=1;revision+=1;entries.append({"id":serial,"text":text.left(TEXT_LIMIT),"kind":kind,"type":raw_type,"source":source})
@@ -55,6 +56,11 @@ func observe(kind:String,data:Dictionary,entities:Dictionary={},selected:String=
     if kind=="quit":reset();return true
     if kind in ["you","region_changed"]:bubbles.clear();notices.clear();return false
     if kind!="message":return false
+    # DOL's CT_Send incoming English template is distinct from outgoing echoes.
+    # Never infer a reply recipient from player speech or client-local feedback.
+    if data.get("type")==2 and not bool(data.get("popup",false)) and data.get("text") is String:
+        var sender:=RegEx.create_from_string("^([A-Za-z][A-Za-z'-]{1,47})(?: \\[AFK\\])? sends, \"").search(String(data.text))
+        if sender!=null:last_private_sender=sender.get_string(1)
     if now<0:now=Time.get_ticks_msec()
     if world_message(data,entities,selected,pos,now):return true
     var raw:=int(data.get("type",0))
@@ -66,7 +72,7 @@ func snapshot(now:int=-1)->Dictionary:
     if now<0:now=Time.get_ticks_msec()
     bubbles=bubbles.filter(func(b):return now-int(b.at_ms)<int(b.duration_ms))
     notices=notices.filter(func(n):return now-int(n.at_ms)<int(n.duration_ms))
-    var view:Dictionary=cached.duplicate();view["bubbles"]=[];view["notices"]=[]
+    var view:Dictionary=cached.duplicate();view["bubbles"]=[];view["notices"]=[];view["reply_to"]=last_private_sender
     for key in ["bubbles","notices"]:
         for row in bubbles if key=="bubbles" else notices:
             var value:Dictionary=row.duplicate();value["age_ms"]=maxi(0,now-int(row.at_ms));view[key].append(value)

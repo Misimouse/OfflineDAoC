@@ -121,6 +121,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-REMAINING-ORIGINAL-SELECTION-CONTROLS'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_84_supported_controls',notes='84 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'ChatReplyLab/installed.json').exists() and json.loads((workspace/'ChatReplyLab/installed.json').read_text()).get('installed',False):
+        row('Original private chat reply',['ui/game_ui.gd','net/server.gd'],['Godot/chat_state.gd','Godot/live_gateway.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeChat.cpp'],'installed_ordinary_english_owner_review_pending','Editable Ctrl+R pins explicit /send; /r and /reply use original incoming private sender.49state,434native,11ordinary-server checks; logout clears state. Existing chat UI and transport, no new server/database rules. GM/localized templates remain separate.')
+        result['next_package']='CLIENT-REMAINING-ORIGINAL-INTERFACE-CONTROLS'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_85_supported_controls',notes='85 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

@@ -497,6 +497,13 @@ func dispatch_chat(text:String)->bool:
     if classic_ui.create_macro(text):
         classic_ui.sync(server,inventory.snapshot(),Time.get_ticks_msec());local_chat(classic_ui.feedback);return true
     var parts:=text.split(" ",false);var word:=String(parts[0]).to_lower()
+    if word in ["/r","/reply"]:
+        if chat_state==null or chat_state.last_private_sender.is_empty():local_chat("No private message to reply to.");return false
+        var body:=text.substr(word.length()).strip_edges()
+        if body.is_empty():local_chat("Usage: /r message");return false
+        var expanded:String="/send "+chat_state.last_private_sender+" "+body
+        if expanded.length()>240:local_chat("The reply is too long.");return false
+        server.command(expanded);return true
     if word=="/dismount":
         live_riding.request_dismount(server.client,Time.get_ticks_msec());return true
     if word in ["/face","/follow","/stick"]:return request_tracking(word.trim_prefix("/"))

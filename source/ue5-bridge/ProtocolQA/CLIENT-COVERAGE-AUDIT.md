@@ -17,3 +17,5 @@ Original server-created ground objects now use the measured original world frame
 Remaining separate work includes full original controls presets/unsupported actions, appearance review, cross-zone transport/world coverage, remaining unexported effect-only creatures, complete spell/equipment variants and battle-scale RvR performance. Diving/climbing audits preserve original Connacht permissions. Quest/crafting/poison UX modernization, Housing/decorations and expansion world population remain explicit later requirements.
 
 Use source and DOL evidence before changing runtime. Close each bounded delivery with isolated/live/native proof and recovery before moving on. Record discovered unrelated issues without interrupting the current block.
+
+Private reply now reuses the original English chat widget and DOL /send. Ctrl+R pins the last private sender while manual /r and /reply are resolved on submission; logout clears the state.49 state,434 native and11 ordinary-server checks pass; the eight-file guarded delivery has34 simulated checks.85 editable controls are an inventory, not a completion percentage. See CHAT-REPLY-AUDIT.md. Owner review is pending.
