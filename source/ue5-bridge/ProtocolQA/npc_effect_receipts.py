@@ -61,7 +61,14 @@ def expected_files(workspace, proofs, verify_sources=True):
     return rows
 
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+    successor_rows = successor_rows or {}
+    def current_hash(path):
+        replacement = successor_rows.get(str(path))
+        if replacement:
+            assert digest(path) == replacement['after_sha256']
+            return replacement['before_sha256']
+        return digest(path)
     lab = workspace/'NpcEffectsLab'
     path = lab/'installed.json'
     data = read(path) if path.exists() else None
@@ -77,7 +84,7 @@ def verify(workspace):
     assert len(rows) == len(data['files']) == len(expected) and rows.keys() == expected.keys()
     for target,row in rows.items():
         assert all(row[k] == expected[target][k] for k in ['source','before_sha256','after_sha256'])
-        assert digest(Path(target)) == row['after_sha256']
+        assert current_hash(Path(target)) == row['after_sha256']
     build = read(lab/'native_build.json')
     assert data['native_after_sha256'] == build['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     return data,rows

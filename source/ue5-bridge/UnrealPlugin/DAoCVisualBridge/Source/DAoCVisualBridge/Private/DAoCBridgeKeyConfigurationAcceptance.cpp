@@ -26,7 +26,7 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
             Check(KeyConfiguration->Text(TEXT("show_inventory"),0)==TEXT("I")&&KeyConfiguration->Text(TEXT("qb3_10"),0)==TEXT("Ctrl+Zero"),TEXT("new actions receive defaults without discarding saved movement"));
             KeyConfiguration->Reset();
         }
-        Check(K.Actions.Num()==69,TEXT("69 supported actions include original ground target guild compass and personal torch shortcuts"));
+        Check(K.Actions.Num()==73,TEXT("73 supported actions include server-authorized sprint and weapon selection"));
         for(const auto& A:K.Actions)Check(A.Bindings==A.Defaults&&(A.Bindings[0].IsEmpty()||FBridgeKeyConfiguration::Parse(A.Bindings[0],Chord)),*FString::Printf(TEXT("valid unchanged default %s"),*A.Id));
         for(const FKey Key:{EKeys::Escape,EKeys::Enter,EKeys::F11,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::LeftMouseButton})Check(!K.Bind(TEXT("jump"),0,Key.GetFName().ToString(),Message),TEXT("fixed action cannot be shadowed"));
         Check(!K.Bind(TEXT("unknown"),0,TEXT("Q"),Message)&&!K.Bind(TEXT("jump"),2,TEXT("Q"),Message),TEXT("invalid action and slot rejected"));
@@ -66,6 +66,20 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
                 Check(KeyConfiguration->Bind(TEXT("qb2_4"),0,TEXT("Ctrl+Q"),Message),TEXT("quickbar action accepts changed chord"));Press(TEXT("Ctrl+Q"));UpdateClassicInput();auto Changed=Capture(TEXT("ui_use_slot"));if(Changed)Check(Changed->GetIntegerField(TEXT("bar"))==1&&Changed->GetIntegerField(TEXT("slot"))==3,TEXT("remapped chord keeps authoritative quickbar indices"));
                 Press(TEXT("Alt+Four"));UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("former quickbar chord no longer activates"));
                 for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("P"),TEXT("character")},{TEXT("H"),TEXT("skills")},{TEXT("J"),TEXT("combat")},{TEXT("G"),TEXT("group")}}){Press(Pair.Key);UpdateClassicInput();Check(ClassicTab==Pair.Value&&bClassicOpen,TEXT("actual existing window action retains original sheet"));}
+                if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeWeaponSprintTest"))){
+                    auto PreviousInventory=InventoryState;InventoryState=MakeShared<FJsonObject>();InventoryState->SetBoolField(TEXT("ready"),true);InventoryState->SetNumberField(TEXT("state_revision"),5);
+                    TArray<TSharedPtr<FJsonValue>> WeaponItems;for(int32 Slot:{10,12,13}){auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("slot"),Slot);Item->SetStringField(TEXT("token"),FString::Printf(TEXT("item-%d"),Slot));WeaponItems.Add(MakeShared<FJsonValueObject>(Item));}InventoryState->SetArrayField(TEXT("items"),WeaponItems);
+                    auto Vitals=PlayerState->GetObjectField(TEXT("vitals"));Vitals->SetBoolField(TEXT("alive"),true);PlayerState->SetBoolField(TEXT("ready"),true);PlayerState->SetNumberField(TEXT("generation"),7);
+                    for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("B"),TEXT("standard")},{TEXT("Shift+B"),TEXT("twohand")},{TEXT("Comma"),TEXT("ranged")}}){Press(Pair.Key);UpdatePlayerStatusInput();auto V=Capture(TEXT("weapon_select"));if(V){Check(V->GetStringField(TEXT("mode"))==Pair.Value&&V->GetIntegerField(TEXT("inventory_revision"))==5&&V->GetIntegerField(TEXT("player_generation"))==7,TEXT("weapon shortcut carries current server state identity"));Check(!V->GetStringField(TEXT("item_token")).IsEmpty(),TEXT("weapon shortcut pins current item token"));}}
+                    Press(TEXT("V"));UpdatePlayerStatusInput();auto Sprint=Capture(TEXT("player_sprint"));if(Sprint)Check(Sprint->GetIntegerField(TEXT("player_generation"))==7,TEXT("sprint shortcut uses current character"));
+                    Check(KeyConfiguration->Bind(TEXT("weapon_right"),0,TEXT("Ctrl+B"),Message),TEXT("weapon shortcut is editable"));Press(TEXT("Ctrl+B"));UpdatePlayerStatusInput();Capture(TEXT("weapon_select"));
+                    Press(TEXT("B"));UpdatePlayerStatusInput();Check(Outgoing.IsEmpty(),TEXT("old weapon binding is inactive"));
+                    Press(TEXT("V"));bChatOpen=true;UpdatePlayerStatusInput();Check(Outgoing.IsEmpty(),TEXT("typing suppresses sprint"));bChatOpen=false;
+                    Press(TEXT("V"));bOptionsOpen=true;UpdatePlayerStatusInput();Check(Outgoing.IsEmpty(),TEXT("menu suppresses sprint"));bOptionsOpen=false;
+                    Vitals->SetBoolField(TEXT("alive"),false);Press(TEXT("V"));UpdatePlayerStatusInput();Check(Outgoing.IsEmpty(),TEXT("dead character cannot sprint"));Vitals->SetBoolField(TEXT("alive"),true);
+                    InventoryState->SetArrayField(TEXT("items"),{});Press(TEXT("Ctrl+B"));UpdatePlayerStatusInput();Check(Outgoing.IsEmpty(),TEXT("empty weapon slot cannot fabricate an item"));
+                    InventoryState=PreviousInventory;KeyConfiguration->Reset();Vitals->RemoveField(TEXT("alive"));
+                }
                 Check(KeyConfiguration->Bind(TEXT("show_spells"),0,TEXT("B"),Message),TEXT("unassigned magic window accepts optional shortcut"));Press(TEXT("B"));UpdateClassicInput();Check(ClassicTab==TEXT("magic"),TEXT("magic shortcut opens original magic sheet"));
                 Press(TEXT("F7"));UpdateClassicInput();Capture(TEXT("target_self"));
                 Press(TEXT("One"));bChatOpen=true;UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("typing suppresses actual quickbar dispatch"));bChatOpen=false;

@@ -34,6 +34,7 @@ def rollback(workspace, apply=False):
             if kind == socket.SOCK_STREAM:
                 guard.listen(1)
         path = workspace/'NpcEffectsLab/installed.json'
+        preserved = {row['target']:Path(row['target']).read_bytes() for row in rows.values()}
         changed = []
         try:
             for row in reversed(list(rows.values())):
@@ -54,8 +55,8 @@ def rollback(workspace, apply=False):
             for row in reversed(changed):
                 target = Path(row['target'])
                 assert target.resolve().is_relative_to(workspace.resolve())
-                assert digest(Path(row['source'])) == row['after_sha256']
-                shutil.copy2(row['source'],target)
+                target.write_bytes(preserved[row['target']])
+                assert digest(target) == row['after_sha256']
             path.write_text(json.dumps(receipt,indent=2))
             raise
     return dict(passed=True,restored_predecessor=True,files=len(rows))

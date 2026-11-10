@@ -68,6 +68,23 @@ void UDAoCBridgeSubsystem::UpdatePlayerStatusInput(){
     if(PC->WasInputKeyJustPressed(EKeys::F6)){const TSharedPtr<FJsonObject>* GM=nullptr;const bool Combat=PlayerState.IsValid()&&PlayerState->TryGetObjectField(TEXT("gm_mode"),GM)&&PlayerFlag(*GM,TEXT("combat_test"));RequestGMMode(!Combat);}
     if(KeyConfiguration->Pressed(PC,TEXT("attack_mode")))RequestAttack(!(PlayerFlag(PlayerState,TEXT("attack_on"))||PlayerFlag(PlayerState,TEXT("attack_pending"))||PlayerFlag(PlayerState,TEXT("attack_uncertain"))));
     if(KeyConfiguration->Pressed(PC,TEXT("sit")))RequestSit(!(PlayerFlag(PlayerVitals(PlayerState),TEXT("sitting"))||PlayerFlag(PlayerState,TEXT("posture_pending"))||PlayerFlag(PlayerState,TEXT("posture_uncertain"))));
+    if(!bLocalAvailable||Session.IsEmpty()||!PlayerFlag(PlayerState,TEXT("ready"))||PlayerIsDead())return;
+    auto Request=[&](const TCHAR* Action,const TCHAR* Mode,int32 Slot){
+        auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("player_generation"),PlayerNum(PlayerState,TEXT("generation"),-1));
+        if(Slot>=0){
+            if(!PlayerFlag(InventoryState,TEXT("ready")))return;
+            const TArray<TSharedPtr<FJsonValue>>* Items=nullptr;if(!InventoryState->TryGetArrayField(TEXT("items"),Items))return;
+            TSharedPtr<FJsonObject> Item;for(auto Entry:*Items)if(Entry->Type==EJson::Object&&PlayerNum(Entry->AsObject(),TEXT("slot"),-1)==Slot){Item=Entry->AsObject();break;}
+            FString Token;if(!Item.IsValid()||!Item->TryGetStringField(TEXT("token"),Token)||Token.IsEmpty())return;
+            V->SetStringField(TEXT("mode"),Mode);V->SetStringField(TEXT("item_token"),Token);V->SetNumberField(TEXT("inventory_revision"),PlayerNum(InventoryState,TEXT("state_revision"),-1));
+        }
+        Send(Action,V);
+    };
+    if(KeyConfiguration->Pressed(PC,TEXT("sprint")))Request(TEXT("player_sprint"),TEXT(""),-1);
+    if(KeyConfiguration->Pressed(PC,TEXT("weapon_right")))Request(TEXT("weapon_select"),TEXT("standard"),10);
+    if(KeyConfiguration->Pressed(PC,TEXT("weapon_two_hand")))Request(TEXT("weapon_select"),TEXT("twohand"),12);
+    if(KeyConfiguration->Pressed(PC,TEXT("weapon_ranged")))Request(TEXT("weapon_select"),TEXT("ranged"),13);
+
 }
 bool UDAoCBridgeSubsystem::PlayerSeesTarget() const{
     const FString Id=CurrentTarget();const auto* Target=Entities.Find(Id);if(Id.IsEmpty()||Id==TEXT("player:local")||!Target||!IsValid(*Target))return false;

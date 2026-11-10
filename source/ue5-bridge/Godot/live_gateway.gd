@@ -18,6 +18,7 @@ var door_audio:RefCounted
 var server_sound:RefCounted
 var movement_flags:RefCounted
 var personal_torch:RefCounted
+var weapon_sprint:RefCounted
 var target_tracking:RefCounted
 var live_riding:RefCounted
 var travel_routes:RefCounted
@@ -105,6 +106,7 @@ func _ready()->void:
     server_sound=load(folder.path_join("server_sound_state.gd")).new()
     movement_flags=load(folder.path_join("movement_flags_state.gd")).new()
     personal_torch=load(folder.path_join("personal_torch_state.gd")).new()
+    weapon_sprint=load(folder.path_join("weapon_sprint_state.gd")).new()
     target_tracking=load(folder.path_join("target_tracking_state.gd")).new()
     live_riding=load(folder.path_join("live_riding_state.gd")).new()
     travel_routes=load(folder.path_join("live_travel_routes.gd")).new()
@@ -331,7 +333,9 @@ func world_event(kind:String,data:Dictionary)->void:
         message_count+=1;var text:=String(data.get("text",""))
         if not routed:
             chat_lines.append(text.left(240));if chat_lines.size()>8:chat_lines.pop_front()
-    if kind in ["you","region_changed","quit"]:interaction.reset();inventory.reset()
+    if kind in ["you","region_changed","quit"]:
+        interaction.reset();inventory.reset()
+        if weapon_sprint!=null:weapon_sprint.reset()
     vault.observe(kind,data,interaction,adapter.entities,position)
     inventory.observe(kind,data)
     player_state.consume(kind,data,int(server.me_oid),Time.get_ticks_msec())
@@ -356,6 +360,12 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action in ["weapon_select","player_sprint"]:
+        if weapon_sprint==null:return
+        sync_inventory(Time.get_ticks_msec())
+        ui_pose.global_position=position;ui_pose.heading=heading
+        weapon_sprint.request(value,server,inventory,player_state,ui_pose,int(server.entry.get("zone",-1)),Time.get_ticks_msec())
+        return
     if action=="personal_torch":
         if personal_torch.apply_request(value,player_state.generation,player_state.ready):
             send_position(last_move_speed if Time.get_ticks_msec()-last_position_send<300 else 0.0)

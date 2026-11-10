@@ -5,12 +5,24 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
-def verify(workspace,engine):
-    root=workspace/'InterfaceKeysLab';bp=root/'native_build.json';build=read(bp);assert build['passed']
+def verify(workspace,engine,lab_name="InterfaceKeysLab"):
+    assert lab_name in ["InterfaceKeysLab","OriginalControlsLab"]
+    root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll';before=digest(normal);assert before==build['normal_binary_sha256']
     output=root/'UIRegression'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True);reports={};inputs={str(bp):digest(bp)}
     for name,flag,origin in [('classic','DaocBridgeClassicTest',workspace/'Reports/ui_integration/fixture.json'),('player','DaocBridgePlayerStateTest',workspace/'Reports/player_release/native_fixture.json')]:
         target=output/(name+'.json');shutil.copy2(origin,target);inputs[str(origin)]=digest(origin)
+        if name=='player':
+            # This older native fixture simulates death by editing health_pct.
+            # Its captured positive absolute HP must not contradict that simulation.
+            # Test the legacy percentage-only path here; the separate vitals
+            # acceptance retains the real positive-HP/rounded-zero-percent case.
+            fixture=read(target)
+            for step in fixture.get('steps',[]):
+                vitals=step.get('state',{}).get('vitals',{})
+                vitals.pop('absolute_health_known',None);vitals.pop('alive',None)
+            target.write_text(json.dumps(fixture))
+
         args=[str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'),build['project'],'/Engine/Maps/Entry','-game','-DaocBridge','-DaocBridgeReadOnly',
               '-'+flag+'='+str(target),'-DaocBridgeCatalog='+str(workspace/'models.json'),'-DaocBridgeEquipmentCatalog='+str(workspace/'equipment_catalog_v01.json'),
               '-DaocBridgeKeyConfiguration='+str(output/'keys.ini'),'-DaocBridgeControlsSettings='+str(output/'camera.json'),'-nullrhi','-nosound','-unattended','-nosplash','-abslog='+str(output/(name+'_engine.log'))]
