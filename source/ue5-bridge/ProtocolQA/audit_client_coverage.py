@@ -141,6 +141,39 @@ def audit(workspace,install):
         result['next_package']='CLIENT-CONTROLS-DISPATCH-CLOSURE'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_89_supported_controls',notes='89 supported actions, fixed original equivalents and catalogue-only entries audited separately; full presets and remaining actions are not complete.')
+    # Recent deliveries have independent, exact receipt validators. Do not infer
+    # installation from a lab directory or an unchecked summary flag.
+    for module,lab,feature,bridge,notes in [
+        ('trainer_affordability_receipts','TrainerAffordabilityLab','Original trainer affordability',['Godot/trainer_state.gd'],'Original level and specialization-point cost gates; no local grants or changed server rules.'),
+        ('shortcut_pages_receipts','CrossClassSwitchLab','Per-character quickbar pages',['Godot/classic_ui_state.gd'],'Fresh characters reset all three pages; existing characters restore their own saved pages and shortcuts.'),
+        ('empty_inventory_receipts','CharacterInventorySwitchLab','Empty inventory initialization',['Godot/inventory_state.gd'],'Original initial MoneyUpdate establishes readiness when no item packet exists; money remains account/realm scoped. Money updates do not acknowledge item transactions.'),
+    ]:
+        import importlib
+        verified=importlib.import_module(module).verify(workspace)
+        receipt=verified[0] if isinstance(verified,tuple) else verified
+        if receipt:
+            path=workspace/lab/'installed.json';inputs[str(path)]=digest(path)
+            for evidence,sha in receipt['evidence'].items():inputs[evidence]=sha
+            row(feature,[],bridge,'installed_owner_review_pending',notes)
+    # Server/native follow-ups add bounded evidence, not another installation or
+    # a blanket claim that all classes, geometry or rendering are accepted.
+    for lab,minimum,feature,bridge,notes in [
+        ('EmptyInventoryTradeLab',15,'Empty inventory merchant roundtrip',['Godot/inventory_state.gd'],'Ordinary Magician buy/sell, exact saved money and original reinforced-armor refusal; no owner inventory needs to be emptied.'),
+        ('NativeSightHarnessLab',28,'Grounded native sight harness',['magic_sight_relay.py'],'Real UE collision and ten correlated sight replies with original deadline. NullRHI geometry only; rendered performance and visual acceptance remain open.'),
+        ('SpellMovementRoundtripLab',30,'Ordinary spell movement roundtrip',['Godot/live_gateway.gd'],'Original moving/interrupted heal costs no power; stationary recovery, healing, buff and saved progress pass. Instant/instrument/MoveCast exceptions are not generalized away.'),
+    ]:
+        path=workspace/lab/'verified.json'
+        if not path.exists():continue
+        summary=json.loads(path.read_text(encoding='utf-8-sig'))
+        assert summary['passed'] and summary['checks']>=minimum,lab
+        proof=Path(summary['proof']).resolve()
+        assert proof.is_relative_to((workspace/lab).resolve()),lab
+        evidence=json.loads(proof.read_text(encoding='utf-8-sig'))
+        assert evidence['passed'] and len(evidence['checks'])>=minimum and all(evidence['checks'].values()),lab
+        assert evidence['database_restored'] and evidence['normal_shutdown'] and evidence['normal_runtime_unchanged'],lab
+        inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+        row(feature,[],bridge,'bounded_automated_evidence_owner_review_pending' if lab!='NativeSightHarnessLab' else 'geometry_harness_verified_not_render_acceptance',notes)
+        result['next_package']='CLIENT-REMOTE-MODEL-ROUNDTRIP-AUDIT: inspect original model-change, equipment retention and native restoration before expanding multiplayer transformation claims'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
