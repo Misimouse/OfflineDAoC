@@ -14,6 +14,8 @@ def install(workspace,state,real,apply=False,rollback=False):
     source=Path(__file__).resolve().parents[1]/'Godot/classic_ui_state.gd';target=workspace/'Godot/classic_ui_state.gd'
     native=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     if rollback:
+        successor=workspace/'CharacterInventorySwitchLab/installed.json'
+        assert not successor.exists() or not read(successor).get('installed'), 'Roll back the dependent empty-inventory delivery first.'
         data=validate(workspace,read(path));row=data['files'][0];saved=Path(row['backup'])
         assert digest(native)==data['native_sha256']
         assert saved.resolve().is_relative_to((workspace/'Backups').resolve()) and digest(saved)==row['before_sha256']
@@ -40,7 +42,11 @@ def install(workspace,state,real,apply=False,rollback=False):
             guard=stack.enter_context(socket.socket(socket.AF_INET,kind));guard.setsockopt(socket.SOL_SOCKET,socket.SO_EXCLUSIVEADDRUSE,1);guard.bind(('127.0.0.1',port))
             if kind==socket.SOCK_STREAM:guard.listen(1)
         if rollback:
-            shutil.copy2(saved,target);assert digest(target)==row['before_sha256'];data.update(installed=False,phase='rolled_back');path.write_text(json.dumps(data,indent=2));verify_files(workspace)
+            current=target.read_bytes();receipt=path.read_bytes()
+            try:
+                shutil.copy2(saved,target);assert digest(target)==row['before_sha256'];data.update(installed=False,phase='rolled_back');path.write_text(json.dumps(data,indent=2));verify_files(workspace)
+            except BaseException:
+                target.write_bytes(current);path.write_bytes(receipt);raise
             return dict(passed=True,rolled_back=True)
         assert target.resolve().is_relative_to(workspace.resolve()) and digest(target)==row['before_sha256'] and digest(source)==row['after_sha256']
         backup=workspace/'Backups'/('CrossClassSwitch_'+datetime.now().strftime('%Y%m%d-%H%M%S-%f'));backup.mkdir();saved=backup/'classic_ui_state.gd';shutil.copy2(target,saved);assert digest(saved)==row['before_sha256'];row['backup']=str(saved)

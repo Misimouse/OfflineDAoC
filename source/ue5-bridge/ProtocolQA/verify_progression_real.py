@@ -8,6 +8,8 @@ from prepare_combined_expansion_data import digest
 source_mode=os.environ.get('DAOC_PROGRESSION_GODOT','installed');assert source_mode in ['installed','candidate']
 SOURCE=source_qa.parent/'Godot' if source_mode=='candidate' else ROOT/'Godot'
 training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast','return','switch']
+inventory_probe=os.environ.get('DAOC_CROSS_CHARACTER_INVENTORY','0')=='1'
+assert not inventory_probe or training_case=='switch'
 assert source_mode!='candidate' or training_case in ['on','switch']
 budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
 case_lab={'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab','switch':'CrossClassSwitchLab'}[training_case]
@@ -17,6 +19,7 @@ if training_case=='on' and budget_probe:
 elif training_case=='switch':
  page_receipt=ROOT/'CrossClassSwitchLab/installed.json'
  output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if page_receipt.exists() and json.loads(page_receipt.read_text()).get('installed',False) else 'RealProtocol'
+if inventory_probe:case_lab='CharacterInventorySwitchLab';output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if (ROOT/'CharacterInventorySwitchLab/installed.json').exists() else 'RealProtocol'
 D=ROOT/case_lab/output_stage/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
@@ -84,6 +87,8 @@ try:
    uid=uuid.uuid4().hex;swap_name='Codexswap'+''.join(chr(97+int(ch,16)) for ch in uid[:6])
    slots={r[0] for r in db.execute('SELECT AccountSlot FROM DOLCharacters WHERE AccountName=?',(leader['AccountName'],))}
    swap=dict(leader);swap.update(DOLCharacters_ID=uid,Name=swap_name,AccountSlot=next(slot for slot in range(300,310) if slot not in slots),Class=51,Level=1,Experience=0,SerializedSpecs='',SerializedAbilities='',SerializedRealmAbilities='',DisabledSpells='',DisabledAbilities='',Health=100,Mana=100,DeathTime=0,HasGravestone=0,HCFlag=0)
+   if inventory_probe:
+    for denomination in ['Copper','Silver','Gold','Platinum','Mithril']:swap[denomination]=0
    keys=list(swap);db.execute('INSERT INTO DOLCharacters ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[swap[k] for k in keys])
    result['swap_character']=swap_name
   result['checks']['ordinary_accounts_only']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
@@ -258,16 +263,36 @@ try:
   wait(lambda:ui().get('feedback')=='Request sent to server.','Saved shortcut resolves after reentry')
   result['checks']['saved_shortcut_request_accepted_after_reentry']=True
  if training_case=='switch':
+  if inventory_probe:
+   wait(lambda:a.snapshot.get('inventory',{}).get('ready'),'Original inventory ready')
+   old_inventory=json.loads(json.dumps(a.snapshot['inventory']))
+   old_shield=next(e for e in old_inventory['items'] if e['slot']==11)
+   assert any(old_inventory['money'].values()) and old_inventory['items']
   # Use a non-default old-character page to expose accidental page inheritance.
   a.send('ui_assign',bar=2,bank=4,slot=9,entry_id=fresh['id'],entry_token=fresh['token']);a.send('ui_bank',bar=2,bank=4)
   wait(lambda:ui()['banks'][2]==4 and ui()['bars'][2][4][9].get('token')==fresh['token'],'Save distinct original-character quickbar page')
   a.send('chat',text='/quit');wait(lambda:not a.snapshot.get('in_game') and a.snapshot.get('character_lobby',{}).get('ready'),'Return before class switch',100)
   lobby=a.snapshot['character_lobby'];assert any(e['name']==swap_name for e in lobby['characters'])
+  if inventory_probe:
+   closed=a.snapshot
+   result['checks']['selection_clears_inventory_and_operations']=not closed['inventory']['items'] and not closed['inventory']['pending']
+   result['checks']['selection_clears_trainer_and_dialogs']=not closed['classic_ui']['trainer']['ready'] and not closed['interaction']['dialogs'] and not closed['interaction']['talk'] and not closed['interaction']['merchant']
   generation=state()['generation'];a.send('character_enter',name=swap_name,lobby_revision=lobby['revision'])
   wait(lambda:a.snapshot.get('in_game') and state().get('ready') and state()['generation']>generation and ui().get('skills_ready') and ui().get('character')==swap_name,'Fresh Magician entered in same account',40)
   result['checks']['same_account_new_class_receives_own_skills']=ui()['info']['class_name']=='Magician' and any(e.get('kind')=='spell' for e in ui()['entries']) and not any(e.get('kind')=='spell' and e.get('line') in ['Regrowth','Nurture'] for e in ui()['entries'])
   result['checks']['new_character_has_fresh_shortcut_pages']=ui()['banks']==[0,0,0]
   result['checks']['new_character_does_not_inherit_heal_bar']=all(not slot for bar in ui()['bars'] for bank in bar for slot in bank)
+  if inventory_probe:
+   wait(lambda:a.snapshot['inventory']['ready'],'Fresh empty inventory received')
+   inv=a.snapshot['inventory']
+   result['new_character_inventory']={k:inv[k] for k in ['ready','items','money','pending']}
+   with checked() as db:
+    balance=db.execute('SELECT * FROM AccountXMoney WHERE AccountId=? AND Realm=3',(leader['AccountName'],)).fetchone();assert balance
+    expected_money={key.lower():int(balance[key]) for key in ['Copper','Silver','Gold','Platinum','Mithril']}
+   result['checks']['new_character_has_own_empty_inventory']=not inv['items'] and inv['money']==expected_money and not inv['pending']
+   result['checks']['new_character_has_no_previous_target_or_trainer']=not a.snapshot['interaction']['target'] and not ui()['trainer']['ready'] and not ui()['trainer']['specs']
+   a.send('inventory_unequip',slot=11,item_token=old_shield['token'],inventory_revision=old_inventory['state_revision']);settle(.4)
+   result['checks']['previous_character_item_request_refused']=bool(a.snapshot['inventory']['feedback']) and not a.snapshot['inventory']['pending'] and not a.snapshot['inventory']['items']
   a.send('ui_use',entry_id=fresh['id'],entry_token=fresh['token']);settle(.3)
   result['checks']['previous_class_skill_token_refused']='changed' in ui().get('feedback','').lower()
   mage_spell=next(e for e in ui()['entries'] if e.get('kind')=='spell')
@@ -280,6 +305,17 @@ try:
   slot=ui()['bars'][2][4][9]
   result['checks']['original_character_restores_distinct_saved_page']=ui()['banks'][2]==4 and slot.get('name')==original_heal['name'] and any(e['id']==slot.get('id') and e['token']==slot.get('token') for e in ui()['entries'])
   result['checks']['new_class_shortcut_does_not_replace_original_heal']=ui()['bars'][2][0][9].get('name')==original_heal['name'] and mage_spell['name'] not in [e['name'] for e in ui()['entries'] if e.get('kind')=='spell']
+  if inventory_probe:
+   wait(lambda:a.snapshot['inventory']['ready'] and any(e['slot']==11 for e in a.snapshot['inventory']['items']),'Original equipment restored')
+   inv=a.snapshot['inventory'];identity=lambda rows:sorted((e['slot'],e['name'],e['model'],e['count']) for e in rows)
+   result['checks']['original_equipment_and_coins_restored']=identity(inv['items'])==identity(old_inventory['items']) and inv['money']==old_inventory['money']
+   shield=next(e for e in inv['items'] if e['slot']==11)
+   a.send('inventory_unequip',slot=11,item_token=shield['token'],inventory_revision=inv['state_revision'])
+   wait(lambda:not a.snapshot['inventory']['pending'] and not any(e['slot']==11 for e in a.snapshot['inventory']['items']) and any(e['slot']>=40 and e['name']==shield['name'] for e in a.snapshot['inventory']['items']),'Server confirms unequip after character return')
+   inv=a.snapshot['inventory'];backpack=next(e for e in inv['items'] if e['slot']>=40 and e['name']==shield['name'])
+   a.send('inventory_equip',slot=backpack['slot'],item_token=backpack['token'],inventory_revision=inv['state_revision'])
+   wait(lambda:not a.snapshot['inventory']['pending'] and any(e['slot']==11 and e['name']==shield['name'] for e in a.snapshot['inventory']['items']),'Server confirms reequipment after character return')
+   result['checks']['equipment_operations_work_after_return']=identity(a.snapshot['inventory']['items'])==identity(old_inventory['items'])
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
 finally:

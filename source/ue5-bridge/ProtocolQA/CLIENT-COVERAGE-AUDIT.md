@@ -35,3 +35,21 @@ The casting follow-up passes25 overlapping ordinary-server checks: the retained 
 Trainer affordability is corrected and installed as one guarded Godot file.89 state checks,19 ordinary-server checks against both candidate and installed code, and18 altered-plan simulations pass. A lower-rank specialization requiring2 points is unavailable with0 points; a fresh request cannot send training, while affordable training still succeeds and saves normally. Native UI already consumes this eligibility flag. Owner colour/button review remains pending. See TRAINER-AFFORDABILITY-AUDIT.md.
 
 Saved progression reentry passes27 overlapping ordinary-server checks: normal /quit clears old world/target/cast state, the roster shows the earned level, and same-connection reentry restores current level/XP/training and valid saved quickbar/page with a fresh player generation. No deployment was needed. Cross-class switching remains a separate scenario. See PROGRESSION-REENTRY-AUDIT.md.
+
+Per-character shortcut pages now have a guarded one-file installed fix: a fresh
+character starts on page zero instead of inheriting the preceding character's
+page. Existing saved pages remain intact.56 UI checks,34 ordinary-server checks
+against candidate and installed code,18 delivery simulations and rollback preview
+pass. Skills and old command identities stay separate across a same-account
+Naturalist/Magician switch and return. Owner review remains pending. See
+CROSS-CLASS-SWITCH-AUDIT.md. This is not all-class gameplay completion.
+
+Empty inventory initialization is now installed as one guarded Godot file.123
+inventory/quantity/denial/poison checks,41 candidate and installed ordinary-server
+checks and18 delivery simulations pass. An empty character waits for the ordered
+server money message and consistent rows/coins sync rather than an item packet
+DOL never sends. Item transaction acknowledgements remain separate. Character
+switching clears dialogs and preserves equipment operations after return; money
+follows the original AccountXMoney account/realm rule. Rollback preview passes
+and dependent predecessor rollback is refused before writing. Owner review is
+pending. See EMPTY-INVENTORY-AUDIT.md.

@@ -17,14 +17,24 @@ var pending:Dictionary={}
 var requests:=0
 var rejected:=0
 var inventory_events:=0
+var initial_money_received:=false
 
 func reset()->void:
-    items.clear();vault.clear();money.clear();gear.clear();pending.clear();fingerprint="";feedback="";weapon_set="standard";weight_now=-1;weight_max=-1;state_revision+=1;revision+=1;inventory_events=0
+    items.clear();vault.clear();money.clear();gear.clear();pending.clear();fingerprint="";feedback="";weapon_set="standard";weight_now=-1;weight_max=-1;state_revision+=1;revision+=1;inventory_events=0;initial_money_received=false
 
 func observe(kind:String,data:Dictionary={})->void:
     if kind=="inventory":
         if inventory_events==0:revision+=1
         inventory_events+=1
+    elif kind=="money" and not initial_money_received:
+        # DOL WorldInit sends equipment/backpack before this ordered TCP message.
+        # Empty item collections send no packet. Money confirms initialization,
+        # but must never count as an item transaction acknowledgement.
+        var valid:=true
+        for key in ["copper","silver","gold","platinum","mithril"]:
+            if not data.get(key) is int or int(data[key])<0 or int(data[key])>65535:valid=false
+        # Require the next authoritative sync to publish rows and coins together.
+        if valid:initial_money_received=true;fingerprint="";revision+=1
     elif kind=="message" and bool(pending.get("equipment_request",false)):
         var text:=String(data.get("text",""))
         # These exact original server replies reject the outstanding equipment move.
@@ -99,7 +109,7 @@ func input_integer(value:Dictionary,key:String,fallback:int=-1)->int:
 func execute(value:Dictionary,client:Node,interaction:RefCounted,entities:Dictionary,pos:Vector3,now:int)->bool:
     var action:=String(value.get("action",""))
     if action not in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:return false
-    if inventory_events==0 or fingerprint.is_empty():return fail("The server is still sending inventory.")
+    if (inventory_events==0 and not initial_money_received) or fingerprint.is_empty():return fail("The server is still sending inventory.")
     if not pending.is_empty():return fail("Wait for the server's response to the previous operation.")
     if input_integer(value,"inventory_revision")!=state_revision:return fail("The inventory has changed. Select the item again.")
     if not interaction.dialogs.is_empty():return fail("Answer the pending confirmation first.")
@@ -184,4 +194,4 @@ func snapshot()->Dictionary:
     var rows:Array=[]
     for slot in allowed_slots():
         if items.has(slot):rows.append(items[slot])
-    return {"revision":revision,"state_revision":state_revision,"ready":inventory_events>0 and not fingerprint.is_empty(),"items":rows,"vault":vault.duplicate(true),"money":money,"gear":gear,"weapon_set":weapon_set,"weight_now":weight_now,"weight_max":weight_max,"pending":not pending.is_empty(),"feedback":feedback}
+    return {"revision":revision,"state_revision":state_revision,"ready":(inventory_events>0 or initial_money_received) and not fingerprint.is_empty(),"items":rows,"vault":vault.duplicate(true),"money":money,"gear":gear,"weapon_set":weapon_set,"weight_now":weight_now,"weight_max":weight_max,"pending":not pending.is_empty(),"feedback":feedback}
