@@ -68,3 +68,10 @@ healing/power/buff, floor support and sampled structure/trunk/capsule/camera
 queries pass without changing the original1500ms deadline. Rendered loading
 stalls and earlier under-terrain captures are not accepted art/performance proof.
 No normal runtime or WORK assets are changed. See NATIVE-SIGHT-HARNESS-AUDIT.md.
+
+The ordinary cast movement follow-up passes30 overlapping server/UE checks:
+moving-start interruption, interrupted preparation without power cost, then
+stationary healing/repeat/buff use and normal saved shutdown. This verifies
+existing installed behavior, preserving original instant/instrument/MoveCast
+exceptions. No runtime deployment is needed. See SPELL-MOVEMENT-ROUNDTRIP-AUDIT.md.
+Owner gameplay review is pending.

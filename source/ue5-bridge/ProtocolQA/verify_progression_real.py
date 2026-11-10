@@ -12,6 +12,8 @@ inventory_probe=os.environ.get('DAOC_CROSS_CHARACTER_INVENTORY','0')=='1'
 assert not inventory_probe or training_case=='switch'
 sight_harness_probe=os.environ.get('DAOC_NATIVE_SIGHT_HARNESS','0')=='1'
 assert not sight_harness_probe or (training_case=='cast' and source_mode=='installed')
+cast_movement_probe=os.environ.get('DAOC_CAST_MOVEMENT_PROBE','0')=='1'
+assert not cast_movement_probe or sight_harness_probe
 assert source_mode!='candidate' or training_case in ['on','switch']
 budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
 case_lab={'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab','switch':'CrossClassSwitchLab'}[training_case]
@@ -23,6 +25,7 @@ elif training_case=='switch':
  output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if page_receipt.exists() and json.loads(page_receipt.read_text()).get('installed',False) else 'RealProtocol'
 if inventory_probe:case_lab='CharacterInventorySwitchLab';output_stage='CandidateRealProtocol' if source_mode=='candidate' else 'InstalledRealProtocol' if (ROOT/'CharacterInventorySwitchLab/installed.json').exists() else 'RealProtocol'
 if sight_harness_probe:case_lab='NativeSightHarnessLab';output_stage='RealProtocol'
+if cast_movement_probe:case_lab='SpellMovementRoundtripLab'
 D=ROOT/case_lab/output_stage/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
@@ -227,6 +230,24 @@ try:
    import math
    delta=[friend['position_m'][0]-me['position_m'][0],friend['position_m'][2]-me['position_m'][2]];length=math.hypot(*delta)
    a.send('move',position_m=me['position_m'],forward_xz=[v/length for v in delta],speed_mps=0,target_entity_id=friend['id'],target_in_view=True);settle(.3)
+   if cast_movement_probe:
+    facing=[v/length for v in delta]
+    def point():return list(next(e['position_m'] for e in a.snapshot['entities'] if e['id']=='player:local'))
+    def moving():
+     p=point();p[0]+=.02;a.send('move',position_m=p,forward_xz=facing,speed_mps=1,target_entity_id=friend['id'],target_in_view=True)
+    before_mana=avitals()['mana'];before_seq=cast().get('seq',0);moving();a.send('ui_use_slot',bar=2,slot=9);last_move=[time.monotonic()]
+    def refused_while_moving():
+     if time.monotonic()-last_move[0]>.10:moving();last_move[0]=time.monotonic()
+     return any(('move' in m.lower() or 'moving' in m.lower() or 'stand still' in m.lower()) and ('cast' in m.lower() or 'spell' in m.lower()) for m in a.snapshot.get('messages',[]))
+    wait(refused_while_moving,'Original server refuses an ordinary heal started while moving',6)
+    a.send('move',position_m=point(),forward_xz=facing,speed_mps=0,target_entity_id=friend['id'],target_in_view=True);settle(.4)
+    result['checks']['moving_heal_refused_or_interrupted_without_power_cost']=cast().get('phase','') in ['', 'interrupted'] and avitals()['mana']==before_mana
+    settle(1);seq=cast().get('seq',0);a.send('ui_use_slot',bar=2,slot=9)
+    wait(lambda:cast().get('seq',0)>seq and cast().get('phase')=='casting','Stationary heal starts before movement interruption')
+    before_mana=avitals()['mana'];moving()
+    wait(lambda:cast().get('phase')=='interrupted','Original movement interrupts pending heal')
+    result['checks']['moving_interrupts_prepared_heal_without_power_cost']=avitals()['mana']==before_mana
+    a.send('move',position_m=point(),forward_xz=facing,speed_mps=0,target_entity_id=friend['id'],target_in_view=True);settle(1)
    seq=cast().get('seq',0);before_hp=bvitals()['health'];before_mana=avitals()['mana']
    a.send('ui_use_slot',bar=2,slot=9)
    wait(lambda:cast().get('seq',0)>seq and cast().get('phase')=='casting','Actual server confirms retained quickbar heal preparation')
@@ -335,6 +356,15 @@ try:
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
 finally:
+ for peer in peers:
+  if peer.session and peer.snapshot.get('in_game'):
+   try:
+    me=next(e for e in peer.snapshot.get('entities',[]) if e['id']=='player:local')
+    peer.send('move',position_m=me['position_m'],forward_xz=me.get('forward_xz',[0,1]),speed_mps=0,target_entity_id='',target_in_view=False)
+   except (OSError,StopIteration):pass
+ if peers:
+  try:settle(.4)
+  except OSError:pass
  if peers and not peers[0].snapshot.get('player_status',{}).get('vitals',{}).get('alive',True):
   try:
    peers[0].send('chat',text='/release');wait(lambda:peers[0].snapshot.get('player_status',{}).get('vitals',{}).get('alive',False),'Release disposable player before logout',15)
