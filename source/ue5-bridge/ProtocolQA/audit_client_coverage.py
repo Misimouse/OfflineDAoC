@@ -252,6 +252,21 @@ def audit(workspace,install):
         path=workspace/'PlayerTradeGatewayLab/installed.json';inputs[str(path)]=digest(path)
         row('Original player-trade installed',[],['Godot/player_trade_controller.gd','Godot/live_gateway.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerTrade.inl'],'installed_owner_review_pending','Exact22-file delivery. Original native body-drop/cancel/update/accept reaches ordinary server; items and money remain server-owned and persist after logout. Source/candidate/native evidence and historical successor chain verified. Owner two-player review remains separate.')
         result['next_package']='CLIENT-VAULT-TRADE-LIFECYCLE: verify original personal/account bank operations and incompatible transaction state after player-trade integration; preserve server permissions and stored ownership'
+    for label,relative,files,notes in [
+        ('Installed trade cancellation','PlayerTradeLifecycleLab/verified.json',['ProtocolQA/verify_player_trade_lifecycle.py'],'14 ordinary checks: distance/logout cancellation, stale offers, incompatible inventory requests and saved ownership. No runtime fix required.'),
+        ('Original delivery quest completion','QuestDeliveryLab/verified.json',['ProtocolQA/verify_quest_delivery_real.py'],'10 ordinary checks: original letter grant/consume/steps/reward/save. NPCs staged nearby only; world travel not certified.')]:
+        path=workspace/relative
+        if path.exists():
+            summary=json.loads(path.read_text());assert summary['passed'] and summary['installed_files']
+            proof=Path(summary['proof']);assert json.loads(proof.read_text())['passed']
+            inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+            row(label,[],files,'installed_behavior_verified_owner_review_pending',notes)
+    path=workspace/'QuestRewardsLab/contract_verified.json'
+    if path.exists():
+        evidence=json.loads(path.read_text());assert evidence['passed'] and evidence['modernization_deferred']
+        inputs[str(path)]=digest(path)
+        row('Original reward quest gap',[],['ProtocolQA/audit_quest_rewards.py'],'source_gap_confirmed_not_installed','Original goals/reward choices and distinct QuestRewardChosen response need migration. Existing basic dialog response is insufficient. Quest UI modernization stays deferred.')
+        result['next_package']='CLIENT-QUEST-REWARDS-WIRE: verify strict inactive codec against original ordinary-server offer/choice/save before token-bound state and original UI'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
