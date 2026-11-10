@@ -6,7 +6,8 @@ source_qa=Path(os.environ.get("DAOC_BRIDGE_SOURCE_QA",str(ROOT.parent/"DAoC-Enha
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 SOURCE=ROOT/'Godot'
-D=ROOT/'ProgressionLab/RealProtocol'/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on']
+D=ROOT/('ProgressionTrainingLab/RealProtocol' if training_case=='on' else 'ProgressionLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False
 normal=verify_files(ROOT)
@@ -59,9 +60,12 @@ try:
   witness.update(Mob_ID='codex-private-progression-witness',Name='Codex Progression Witness',ClassType='DOL.GS.GameNPC',Brain='DOL.AI.Brain.BlankBrain',Guild='',Level=1,Realm=0,Model=123,Flags=0,AggroLevel=0,AggroRange=0,Strength=1,Constitution=1,Dexterity=1,Quickness=1,Speed=0,RoamingRange=0,NPCTemplateID=0,RespawnInterval=3600,X=leader['Xpos']+80,Y=leader['Ypos'],Z=leader['Zpos'])
   keys=list(witness)
   db.execute('INSERT INTO Mob ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[witness[k] for k in keys])
+  if training_case=='on':
+   tutor=dict(witness);tutor.update(Mob_ID='codex-private-earned-points-trainer',Name='Codex Naturalist Trainer',ClassType='DOL.GS.Trainer.NaturalistTrainer',Brain='',Guild='Naturalist Trainer',Level=50,Realm=3,Model=342,X=leader['Xpos']-80)
+   keys=list(tutor);db.execute('INSERT INTO Mob ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[tutor[k] for k in keys])
   for c in rows:
    db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(c['AccountName'],))
-   db.execute("UPDATE DOLCharacters SET Class=53,Level=1,Experience=49,SerializedSpecs='',Health=200,Mana=100,Endurance=100,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='',HCFlag=0 WHERE DOLCharacters_ID=?",(c['DOLCharacters_ID'],))
+   db.execute("UPDATE DOLCharacters SET Class=53,Level=1,Experience=49,LastFreeLeveled=CURRENT_TIMESTAMP,LastFreeLevel=1,SerializedSpecs='',Health=200,Mana=100,Endurance=100,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='',HCFlag=0 WHERE DOLCharacters_ID=?",(c['DOLCharacters_ID'],))
   result['checks']['ordinary_accounts_only']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
  for n,root in enumerate([RUN,RUN/'friend-session']):
   assert root.resolve().is_relative_to(RUN)
@@ -100,6 +104,10 @@ try:
  initial_entries={e['id']:dict(e) for e in ui().get('entries',[]) if e.get('kind')!='item'}
  result['initial_points']=dict(ui()['points'])
  result['initial_level']=ui()['info']['level']
+ if training_case=='on':
+  original_heal=next(e for e in ui()['entries'] if e.get('kind')=='spell' and e.get('line')=='Regrowth')
+  a.send('ui_assign',bar=2,bank=0,slot=9,entry_id=original_heal['id'],entry_token=original_heal['token'])
+  wait(lambda:ui()['bars'][2][0][9].get('token')==original_heal['token'],'Original heal assigned before gaining level')
  wait(lambda:any(e.get('name')==witness['Name'] for e in a.snapshot.get('entities',[])),'Disposable ordinary NPC arrives')
  target=next(e for e in a.snapshot['entities'] if e.get('name')==witness['Name'])
  a.send('target',entity_id=target['id'])
@@ -129,6 +137,30 @@ try:
  result['checks']['no_level_change_for_idle_peer']=b.snapshot['classic_ui']['info']['level']==1 and b.snapshot['classic_ui']['points']['xp']==49
  result['catalogue_before']=initial_entries;result['catalogue_after']=final_entries
  result['checks']['defeated_npc_no_longer_alive']=not any(e['id']==target['id'] and e.get('health',1)>0 and e.get('state')!='dead' for e in a.snapshot.get('entities',[]))
+ if training_case=='on':
+  wait(lambda:any(e.get('name')==tutor['Name'] for e in a.snapshot['entities']),'Original Naturalist trainer visible')
+  npc=next(e for e in a.snapshot['entities'] if e.get('name')==tutor['Name'])
+  a.send('interact',entity_id=npc['id']);a.send('trainer_refresh')
+  def trainer():return ui().get('trainer',{})
+  wait(lambda:trainer().get('ready') and not trainer().get('pending'),'Original training list ready')
+  row=dict(next(e for e in trainer()['specs'] if e['name']=='Regrowth'))
+  assert row['level']==1 and row['cost']==2 and row['can_train'] and trainer()['spec_points']==2
+  result['checks']['earned_points_available_at_original_trainer']=True
+  a.send('trainer_train',training_kind='spec',training_index=row['index'],training_token=row['token'])
+  wait(lambda:any(e['name']=='Regrowth' and e['level']==2 for e in trainer().get('specs',[])) and not trainer().get('pending') and trainer()['spec_points']==0,'Server confirms original training cost and rank')
+  wait(lambda:any(e['name']=='Regrowth' and e['level']==2 for e in ui().get('specs',[])) and ui()['points']['spec_points']==0,'Character sheet receives trained rank and points')
+  result['checks']['earned_points_spent_exactly_once']=True
+  result['checks']['trained_rank_reaches_character_sheet']=True
+  a.send('trainer_train',training_kind='spec',training_index=row['index'],training_token=row['token']);settle(.5)
+  result['checks']['old_training_token_cannot_spend_again']=trainer()['spec_points']==0 and any(e['name']=='Regrowth' and e['level']==2 for e in trainer()['specs']) and 'changed' in trainer().get('feedback','').lower()
+  slot=ui()['bars'][2][0][9]
+  current=next((e for e in ui()['entries'] if e['id']==slot.get('id') and e['token']==slot.get('token')),None)
+  result['checks']['saved_heal_still_matches_current_spell']=bool(current and current['name']==original_heal['name'] and current['kind']=='spell')
+  a.send('target_self');settle(.3)
+  a.send('ui_use',entry_id=current['id'],entry_token=current['token'])
+  wait(lambda:ui().get('feedback')=='Request sent to server.','Retained heal can request original spell after training')
+  result['checks']['retained_spell_request_accepted_after_training']=True
+  result['trained_specialization']='Regrowth';result['trained_rank']=2;result['final_spec_points']=0
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
 finally:
@@ -159,6 +191,11 @@ finally:
    saved=db.execute("SELECT Level,Experience FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()
    result['checks']['normal_logout_saves_level_and_experience']=saved['Level']==result['final_level'] and saved['Experience']==result['final_points']['xp']
    result['passed']=result['passed'] and result['checks']['normal_logout_saves_level_and_experience']
+   if training_case=='on':
+    saved_specs=db.execute("SELECT SerializedSpecs FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]
+    result['saved_specializations']=saved_specs
+    result['checks']['trained_specialization_saved_on_logout']='Regrowth|2' in saved_specs
+    result['passed']=result['passed'] and result['checks']['trained_specialization_saved_on_logout']
  if backed:
   with checked() as db:
    src=sqlite3.connect(BACKUP/'before.sqlite3.db');src.backup(db);src.close()

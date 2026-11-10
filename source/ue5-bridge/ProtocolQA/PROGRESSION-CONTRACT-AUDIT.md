@@ -63,5 +63,6 @@ reconnecting; the idle peer remains level 1 with 49 XP. Logout saves level 2 and
 64 XP before restoration. No runtime change or deployment was needed.
 
 This closes this bounded contract/roundtrip audit, not all class progression.
-The next package is earned-point training and refreshed skill/quickbar behavior
-through an actual trainer; simulated shortcut refresh is already covered here.
+The earned-point training follow-up now passes 17 extended ordinary-server
+checks; see PROGRESSION-TRAINING-AUDIT.md. Simulated shortcut refresh is covered
+here; actual spell result/resources/reuse after training remain separate.
