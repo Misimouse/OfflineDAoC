@@ -1,9 +1,9 @@
 #include "DAoCBridgeGroupTargeting.h"
 #include "DAoCBridgeKeyConfiguration.h"
+#include "DAoCBridgeItemShortcuts.h"
 #include "DAoCBridgeCharacter.h"
 #include "HAL/FileManager.h"
 #include "DAoCBridgeSubsystem.h"
-#include "DAoCBridgeInterfaceSettings.h"
 #include "DAoCBridgeInterfaceSettings.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -271,6 +271,27 @@ void UDAoCBridgeSubsystem::UpdateClassicInput(){
  }
  for(int32 Bank=0;Bank<10;++Bank)if(KeyConfiguration->Pressed(PC,FString::Printf(TEXT("qbank_%d"),Bank+1))){auto V=MakeShared<FJsonObject>();V->SetNumberField(TEXT("bar"),0);V->SetNumberField(TEXT("bank"),Bank);Send(TEXT("ui_bank"),V);}
  if(KeyConfiguration->Pressed(PC,TEXT("inspect_item"))){auto E=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));if(E.IsValid())ClassicInspect(CS(E,TEXT("id")),CS(E,TEXT("token")));}
+ if(!PlayerIsDead()&&bLocalAvailable&&!Session.IsEmpty()){
+  bool Pending=false;if(InventoryState.IsValid())InventoryState->TryGetBoolField(TEXT("pending"),Pending);
+  if(!Pending&&KeyConfiguration->Pressed(PC,TEXT("use_item"))){
+   const auto Item=InventoryItem(SelectedItemSlot),Entry=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));
+   const auto Intent=FBridgeItemShortcuts::Use(SelectedItemSlot,Item,Entry);
+   if(Intent==FBridgeItemShortcuts::EUse::Equip)SendItemAction(TEXT("inventory_equip"),SelectedItemSlot);
+   else if(Intent==FBridgeItemShortcuts::EUse::Use)ClassicUse(CS(Entry,TEXT("id")),CS(Entry,TEXT("token")));
+  }
+  if(!Pending&&ClassicMerchantOverlay.IsValid()&&KeyConfiguration->Pressed(PC,TEXT("sell"))){
+   int32 Slot=SelectedItemSlot;FString Token=CS(InventoryItem(Slot),TEXT("token"));bool ValidDrag=true;
+   const auto Operation=FSlateApplication::Get().GetDragDroppingContent();
+   if(Operation.IsValid()){
+    if(Operation->IsOfType<FClassicDrag>()){auto Drag=StaticCastSharedPtr<FClassicDrag>(Operation);Slot=Drag->InventorySlot;Token=Drag->ItemToken;}
+    else ValidDrag=false;
+   }
+   if(ValidDrag&&FBridgeItemShortcuts::Sale(Slot,InventoryItem(Slot),Token)){
+    if(Operation.IsValid()){StaticCastSharedPtr<FClassicDrag>(Operation)->Dropped=true;FSlateApplication::Get().CancelDragDrop();}
+    bInventoryMoving=false;SendItemAction(TEXT("merchant_sell"),Slot);
+   }
+  }
+ }
  if(KeyConfiguration->Pressed(PC,TEXT("ground_target")))RequestGroundTarget();
  if(KeyConfiguration->Pressed(PC,TEXT("target_self")))SelectEntity(TEXT("player:local"));
  if(KeyConfiguration->Pressed(PC,TEXT("target_loot")))SendGroundObjectAction(TEXT("target_loot"));

@@ -3,7 +3,8 @@ from qa_runtime import *
 import sqlite3,subprocess,socket,time,hashlib,shutil,traceback
 
 case=os.environ.get('DAOC_CONSUMABLE_CASE','charges');assert case in ['charges','last_charge']
-D=ROOT/'ConsumableUseLab/RealProtocol'/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+qa_lab=os.environ.get('DAOC_CONSUMABLE_QA_LAB','ConsumableUseLab');assert qa_lab in ['ConsumableUseLab','ItemShortcutsLab']
+D=ROOT/qa_lab/('RealConsumableProtocol' if qa_lab=='ItemShortcutsLab' else 'RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 SOURCE=Path(os.environ.get('DAOC_BRIDGE_QA_SOURCE',str(ROOT/'Godot')))
 assert (SOURCE/'inventory_state.gd').exists()
 result={'passed':False,'real_protocol':True,'disposable_only':True,'checks':{},'errors':[],'case':case,'source_inputs':{str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in SOURCE.glob('*.gd')}}

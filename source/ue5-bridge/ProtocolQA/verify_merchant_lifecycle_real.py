@@ -6,7 +6,8 @@ source_qa=Path(os.environ.get("DAOC_BRIDGE_SOURCE_QA",str(ROOT.parent/"DAoC-Enha
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 SOURCE=ROOT/'Godot'
-D=ROOT/'MerchantLifecycleLab/RealProtocol'/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+qa_lab=os.environ.get('DAOC_MERCHANT_QA_LAB','MerchantLifecycleLab');assert qa_lab in ['MerchantLifecycleLab','ItemShortcutsLab']
+D=ROOT/qa_lab/('RealMerchantProtocol' if qa_lab=='ItemShortcutsLab' else 'RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('MerchantLifecycle_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False
 normal=verify_files(ROOT)

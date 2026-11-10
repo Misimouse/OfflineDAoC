@@ -131,6 +131,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-REMAINING-ORIGINAL-CONTROLS-AUDIT'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_86_supported_controls',notes='86 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'ItemShortcutsLab/installed.json').exists() and json.loads((workspace/'ItemShortcutsLab/installed.json').read_text()).get('installed',False):
+        row('Original item use and sale shortcuts',['ui/game_ui.gd','ui/player_data.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeItemShortcuts.h','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeClassicUI.cpp'],'installed_owner_review_pending','U equips carried equipment or uses canonical item charges; editable Sell uses original merchant_sell with item/catalogue tokens. Sell starts unbound to preserve backward movement.507native,113state,24ordinary-server checks. Seven guarded files and31 delivery simulations; original server decides permissions and outcomes.')
+        result['next_package']='CLIENT-REMAINING-ORIGINAL-CONTROLS-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_88_supported_controls',notes='88 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
