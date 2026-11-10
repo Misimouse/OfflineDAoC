@@ -9,21 +9,24 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 
 
-def verify(workspace, engine, materials=None):
+def verify(workspace, engine, materials=None, installed=False):
     lab = workspace/'NpcVisualFlagsLab'
-    materials = materials or lab/'MaterialsCandidate/prepared.json'
+    materials = materials or (workspace/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/npc_ghost_materials.json' if installed else lab/'MaterialsCandidate/prepared.json')
     material_sha = digest(materials)
     build_path = lab/'native_build.json'
     build = json.loads(build_path.read_text())
     assert build['passed']
     normal = workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
-    assert digest(normal) == build['normal_binary_sha256']
+    expected_normal = build['binaries_sha256'][normal.name] if installed else build['normal_binary_sha256']
+    assert digest(normal) == expected_normal
+    if installed:
+        assert json.loads((lab/'installed.json').read_text())['installed']
     source = Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/path) == sha for path, sha in build['source_sha256'].items())
-    project = Path(build['project'])
+    project = workspace/'Client/DAoCBridgeClient.uproject' if installed else Path(build['project'])
     binary = project.parent/'Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     assert digest(binary) == build['binaries_sha256'][binary.name]
-    out = lab/'NativeAcceptance'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    out = lab/('InstalledNativeAcceptance' if installed else 'NativeAcceptance')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
     reports = []
     cases = [('ghost', None, 'DaocBridgeNpcGhostMaterialsTest', '', 48),
@@ -56,8 +59,8 @@ def verify(workspace, engine, materials=None):
         data = json.loads(report.read_text(encoding='utf-8-sig'))
         assert data['passed'] and data['checks'] >= minimum, data
         reports.append(dict(name=name, report=str(report), sha256=digest(report), checks=data['checks']))
-    assert digest(normal) == build['normal_binary_sha256'] and digest(materials) == material_sha
-    result = dict(passed=True, installed=False, real_server=False, reports=reports,
+    assert digest(normal) == expected_normal and digest(materials) == material_sha
+    result = dict(passed=True, installed=installed, real_server=False, reports=reports,
                   material_manifest=str(materials), material_sha256=material_sha,
                   build_sha256=digest(build_path), normal_binary_unchanged=True,
                   owner_gameplay_accepted=False)
@@ -70,5 +73,6 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--materials', type=Path)
+    parser.add_argument('--installed', action='store_true')
     options = parser.parse_args()
-    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials)))
+    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials, options.installed)))

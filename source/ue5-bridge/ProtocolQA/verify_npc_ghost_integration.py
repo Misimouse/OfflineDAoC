@@ -7,9 +7,9 @@ from pathlib import Path
 from prepare_combined_expansion_data import digest
 
 
-def verify(workspace, engine, materials=None):
+def verify(workspace, engine, materials=None, installed=False):
     lab = workspace/'NpcVisualFlagsLab'
-    materials = materials or lab/'MaterialsCandidate/prepared.json'
+    materials = materials or (workspace/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/npc_ghost_materials.json' if installed else lab/'MaterialsCandidate/prepared.json')
     build_path = lab/'native_build.json'
     build = json.loads(build_path.read_text())
     assert build['passed']
@@ -22,16 +22,20 @@ def verify(workspace, engine, materials=None):
     snapshot = proof.parent/'npc_snapshot.json'
     catalog_proof = lab/'catalog_verified.json'
     catalog_data = json.loads(catalog_proof.read_text())
-    catalog = Path(catalog_data['catalog'])
+    catalog = workspace/'models.json' if installed else Path(catalog_data['catalog'])
     assert catalog_data['passed'] and digest(catalog) == catalog_data['sha256']
     normal = workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
-    assert digest(normal) == build['normal_binary_sha256']
+    expected_normal = build['binaries_sha256'][normal.name] if installed else build['normal_binary_sha256']
+    assert digest(normal) == expected_normal
+    if installed:
+        assert json.loads((lab/'installed.json').read_text())['installed']
     inputs = {str(p): digest(p) for p in [build_path, proof, snapshot, catalog_proof, catalog,
                                          materials, normal]}
-    out = lab/'NativeIntegration'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    out = lab/('InstalledNativeIntegration' if installed else 'NativeIntegration')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
     report = out/'native.json'
-    args = [str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'), build['project'],
+    project = str(workspace/'Client/DAoCBridgeClient.uproject') if installed else build['project']
+    args = [str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'), project,
             '/Engine/Maps/Entry', '-game', '-DaocBridge', '-DaocBridgeReadOnly',
             '-DaocBridgeCatalog='+str(catalog), '-DaocBridgeNpcGhostIntegrationTest='+str(report),
             '-DaocBridgeNpcGhostMaterials='+str(materials),
@@ -49,9 +53,9 @@ def verify(workspace, engine, materials=None):
     assert data['passed'] and data['checks'] >= 21 and not data['failures'], data
     assert all(digest(Path(p)) == sha for p, sha in inputs.items())
     data.update(source_inputs=inputs, replayed_real_server_rows=True,
-                live_native_connection=False, installed=False, normal_runtime_unchanged=True)
+                live_native_connection=False, installed=installed, normal_runtime_unchanged=True)
     (out/'verified.json').write_text(json.dumps(data, indent=2))
-    return dict(passed=True, checks=data['checks'], output=str(out), installed=False)
+    return dict(passed=True, checks=data['checks'], output=str(out), installed=installed)
 
 
 if __name__ == '__main__':
@@ -59,5 +63,6 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--materials', type=Path)
+    parser.add_argument('--installed', action='store_true')
     options = parser.parse_args()
-    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials)))
+    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials, options.installed)))

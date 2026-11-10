@@ -9,24 +9,27 @@ from prepare_combined_expansion_data import digest
 from verify_stealth_render_native import png_rgb
 
 
-def verify(workspace, engine, materials=None):
+def verify(workspace, engine, materials=None, installed=False):
     lab = workspace/'NpcVisualFlagsLab'
     build_path = lab/'native_build.json'
     build = json.loads(build_path.read_text())
     assert build['passed']
-    project = Path(build['project'])
+    project = workspace/'Client/DAoCBridgeClient.uproject' if installed else Path(build['project'])
     binary = project.parent/'Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     normal = workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll'
     assert digest(binary) == build['binaries_sha256'][binary.name]
-    assert digest(normal) == build['normal_binary_sha256']
+    expected_normal = build['binaries_sha256'][normal.name] if installed else build['normal_binary_sha256']
+    assert digest(normal) == expected_normal
+    if installed:
+        assert json.loads((lab/'installed.json').read_text())['installed']
     source = Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge/Source'
     assert all(digest(source/path) == sha for path, sha in build['source_sha256'].items())
-    materials = materials or lab/'MaterialsCandidate/prepared.json'
+    materials = materials or (workspace/'Client/Plugins/DAoCVisualBridge/Content/ClassicUI/npc_ghost_materials.json' if installed else lab/'MaterialsCandidate/prepared.json')
     samples = lab/'samples_imported.json'
     inputs = {str(p): digest(p) for p in [build_path, binary, normal, materials, samples]}
-    private = lab/'RenderHost/Plugins/DAoCVisualBridge/Content/GhostAppearance_v01'
+    private = (project.parent/'Plugins/DAoCVisualBridge/Content/GhostAppearance_v01') if installed else lab/'RenderHost/Plugins/DAoCVisualBridge/Content/GhostAppearance_v01'
     protected = {str(p): digest(p) for p in private.rglob('*.uasset')}
-    out = lab/'NativeRenderedAcceptance'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    out = lab/('InstalledRenderedAcceptance' if installed else 'NativeRenderedAcceptance')/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     out.mkdir(parents=True)
     args = [str(engine/'Binaries/Win64/UnrealEditor-Cmd.exe'), str(project),
             '/Engine/Maps/Entry', '-game', '-DaocBridge', '-DaocBridgeReadOnly',
@@ -71,7 +74,7 @@ def verify(workspace, engine, materials=None):
     passed = unchanged and all(row['background_mean'] > 10 and row['ordinary_signal'] > 1
                                and row['ghost_signal'] > .2 and row['ghost_difference'] > .3
                                and row['restoration_error'] < 1 for row in values.values())
-    data.update(passed=passed, measurements=values, pose_differences=pose_differences,
+    data.update(passed=passed, installed=installed, measurements=values, pose_differences=pose_differences,
                 source_inputs=inputs, protected_assets=protected, protected_files_unchanged=unchanged,
                 owner_gameplay_accepted=False, images={str(p): digest(p) for p in out.glob('*.png')})
     (out/'verified.json').write_text(json.dumps(data, indent=2))
@@ -84,5 +87,6 @@ if __name__ == '__main__':
     parser.add_argument('--workspace', type=Path, required=True)
     parser.add_argument('--engine', type=Path, required=True)
     parser.add_argument('--materials', type=Path)
+    parser.add_argument('--installed', action='store_true')
     options = parser.parse_args()
-    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials)))
+    print(json.dumps(verify(options.workspace.resolve(), options.engine.resolve(), options.materials, options.installed)))
