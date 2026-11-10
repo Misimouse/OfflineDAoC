@@ -198,6 +198,15 @@ def audit(workspace,install):
         for evidence,sha in equipment['evidence'].items():inputs[evidence]=sha
         row('Native remote form weapon attachments',[],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeEquipment.cpp'],'installed_owner_review_pending','Known non-race player forms hide weapons and restore race attachments; NPC weapons remain. Three Bainshee native controls, ordinary Celt trace,95 equipment regressions. Rendered visual quality and every class form remain separate.')
         result['next_package']='CLIENT-PLAYER-TRADE-CONTRACT-AUDIT: compare original client assets and missing transport with DOL player-trade permissions, update/accept/cancel and inventory ownership before implementation'
+    path=workspace/'PlayerTradeLab/verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and summary['checks']>=146
+        proof=Path(summary['proof']).resolve();assert proof.is_relative_to((workspace/'PlayerTradeLab/Codec').resolve())
+        evidence=json.loads(proof.read_text());assert evidence['passed'] and evidence['checks']>=146
+        assert evidence['normal_runtime_unchanged'] and not evidence['decoder_dispatch_installed'] and not evidence['ui_installed']
+        inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+        row('Original player-trade protocol candidate',[],['ProtocolQA/audit_player_trade.py','ProtocolQA/verify_player_trade_codec.py'],'inactive_codec_candidate_not_a_gameplay_delivery','Original trade assets exist;modern1.127 window/item contracts resolved against DOL.146 compiled parser/request checks. Incoming dispatch,ordinary two-player outcomes and native original UI are not installed.')
+        result['next_package']='CLIENT-PLAYER-TRADE-REAL-PROTOCOL-CANDIDATE: verify original two-player offer/update/accept/cancel and authoritative inventory/money outcomes privately before UI activation'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
