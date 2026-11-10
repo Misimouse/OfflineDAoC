@@ -25,6 +25,29 @@ public partial class DaocClient
         value = reader.Pascal(); return true;
     }
 
+    static bool TryReadQuestRewardItem1124(Reader reader, out byte[] record)
+    {
+        record=Array.Empty<byte>();
+        // Quest windows call WriteItemData directly. Inventory and trade add a
+        // slot byte before that body; these reward records have no slot on wire.
+        if (reader.Left<24) return false;
+        int flags=reader.At(20),cursor=21;
+        foreach (int mask in new[]{0x08,0x10})
+        {
+            if ((flags&mask)==0) continue;
+            if (reader.Left<cursor+3) return false;
+            cursor+=3+reader.At(cursor+2);
+            if (reader.Left<cursor) return false;
+        }
+        cursor+=2;
+        if (reader.Left<=cursor) return false;
+        cursor+=1+reader.At(cursor);
+        if (reader.Left<cursor) return false;
+        record=new byte[cursor+1]; // Neutral slot for the shared ReadItem presentation decoder only.
+        for (int i=0;i<cursor;i++) record[i+1]=(byte)reader.At(i);
+        reader.Skip(cursor);return true;
+    }
+
     public static bool TryReadQuestRewardDialog1127(Reader reader, out QuestRewardDialog1127 value)
     {
         value = null;
@@ -49,14 +72,14 @@ public partial class DaocClient
         result.Money = reader.Int(); result.ExperiencePercent = reader.Byte();
         int fixedCount = reader.Byte(); result.FixedItemRecords = new byte[fixedCount][];
         for (int i = 0; i < fixedCount; i++)
-            if (!TryReadTradeItemRecord1124(reader, out result.FixedItemRecords[i])) return false;
+            if (!TryReadQuestRewardItem1124(reader, out result.FixedItemRecords[i])) return false;
         if (reader.Left < 2) return false;
         result.RequiredChoices = reader.Byte();
         int optionCount = reader.Byte();
         if (result.RequiredChoices > 8 || result.RequiredChoices > optionCount) return false;
         result.OptionalItemRecords = new byte[optionCount][];
         for (int i = 0; i < optionCount; i++)
-            if (!TryReadTradeItemRecord1124(reader, out result.OptionalItemRecords[i])) return false;
+            if (!TryReadQuestRewardItem1124(reader, out result.OptionalItemRecords[i])) return false;
         if (reader.Left != 0) return false;
         value = result; return true;
     }
@@ -75,7 +98,9 @@ public partial class DaocClient
         payload = writer.ToArray(); return true;
     }
 
-    // Original QuestRewardChosen (wire0xE8). This only encodes a request;
+    public const byte QuestRewardWireCode=0x40;
+
+    // Original QuestRewardChosen (wire0x40). This only encodes a request;
     // quest eligibility, reward ownership and completion belong to DOL.
     public static bool TryBuildQuestRewardChoice(QuestRewardDialog1127 dialog, int[] choices, out byte[] payload)
     {
@@ -94,5 +119,34 @@ public partial class DaocClient
         writer.Short(0); writer.Short(0); writer.Short(0);
         writer.Short((ushort)dialog.QuestId); writer.Short((ushort)dialog.GiverId);
         payload = writer.ToArray(); return true;
+    }
+
+    public bool QuestOffer(int questId, int giverId, bool accept)
+    {
+        var dialog = new QuestRewardDialog1127 { Code=0x22, DialogType=2, QuestId=questId, GiverId=giverId };
+        if (!TryBuildQuestOfferResponse(dialog, accept, out var payload)) return false;
+        var writer=new Writer(); writer.Bytes(payload); Send(0x82,writer); return true;
+    }
+
+    public bool QuestReward(int questId, int giverId, int requiredChoices, int optionCount, int[] choices)
+    {
+        if (optionCount<0 || optionCount>255) return false;
+        var dialog=new QuestRewardDialog1127 { Code=0x21, DialogType=1, QuestId=questId, GiverId=giverId,
+            RequiredChoices=requiredChoices, OptionalItemRecords=new byte[optionCount][] };
+        if (!TryBuildQuestRewardChoice(dialog,choices,out var payload)) return false;
+        var writer=new Writer(); writer.Bytes(payload); Send(QuestRewardWireCode,writer); return true;
+    }
+
+    static Godot.Collections.Dictionary ReadQuestRewardDialog1127(Reader reader)
+    {
+        if (!TryReadQuestRewardDialog1127(reader,out var dialog)) return null;
+        var goals=new Godot.Collections.Array(); foreach (string goal in dialog.Goals) goals.Add(goal);
+        var fixedItems=new Godot.Collections.Array(); foreach (byte[] item in dialog.FixedItemRecords) fixedItems.Add(ReadItem(new Reader(item)));
+        var optionalItems=new Godot.Collections.Array(); foreach (byte[] item in dialog.OptionalItemRecords) optionalItems.Add(ReadItem(new Reader(item)));
+        return new Godot.Collections.Dictionary { ["kind"]="quest_dialog",["code"]=dialog.Code,["quest_id"]=dialog.QuestId,
+            ["giver_id"]=dialog.GiverId,["data3"]=dialog.Data3,["data4"]=dialog.Data4,["type"]=dialog.DialogType,["wrap"]=dialog.Wrap,
+            ["title"]=dialog.Name,["summary"]=dialog.Summary,["story"]=dialog.Story,["goals"]=goals,["money"]=(long)dialog.Money,
+            ["experience_percent"]=dialog.ExperiencePercent,["required_choices"]=dialog.RequiredChoices,
+            ["fixed_items"]=fixedItems,["optional_items"]=optionalItems };
     }
 }

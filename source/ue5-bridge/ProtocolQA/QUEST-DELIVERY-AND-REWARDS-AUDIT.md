@@ -19,7 +19,7 @@ Reward quests are a separate remaining gap. The1.127 server inherits the
 PacketLib194 quest dialog and modern PacketLib1124 item records. The current
 client reads only the title/summary/story, discarding goals, money, experience
 percentage, fixed items, choice count and optional items. Its ordinary dialog
-response cannot replace QuestRewardChosen0xE8, whose original body has20 bytes
+response cannot replace QuestRewardChosen0x40, whose original body has20 bytes
 including eight choice-index bytes and quest/giver identities.
 
 Next bounded implementation: strict inactive packet codec/request builder;

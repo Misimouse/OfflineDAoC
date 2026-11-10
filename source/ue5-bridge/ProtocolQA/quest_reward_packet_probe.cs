@@ -3,7 +3,7 @@ using System.Text.Json;
 int checks=0;var failures=new List<string>();
 void Check(bool ok,string label){checks++;if(!ok)failures.Add(label);}
 byte[] Item(byte flags=0,string name="Oak staff") {
- var w=new DaocClient.Writer();w.Byte(0);w.Short(0);w.Byte(5);w.Byte(12);w.Byte(30);w.Byte(64);w.Byte(8);w.Byte(0);w.Short(25);w.Byte(100);w.Byte(99);w.Byte(98);w.Byte(3);w.Byte(1);w.Short(19);w.Byte(2);w.Short(31);w.Byte(flags);
+ var w=new DaocClient.Writer();w.Short(0);w.Byte(5);w.Byte(12);w.Byte(30);w.Byte(64);w.Byte(8);w.Byte(0);w.Short(25);w.Byte(100);w.Byte(99);w.Byte(98);w.Byte(3);w.Byte(1);w.Short(19);w.Byte(2);w.Short(31);w.Byte(flags);
  if((flags&8)!=0){w.Short(123);w.Pascal("First spell");}if((flags&16)!=0){w.Short(456);w.Pascal("Second spell");}w.Short(777);w.Pascal(name);return w.ToArray();
 }
 byte[] Window(bool offer=false,int required=1,byte[][]? fixedItems=null,byte[][]? options=null,string story="Original story",string title="Quest of Éire"){
@@ -16,7 +16,10 @@ Check(d.Code==0x21&&d.QuestId==1234&&d.GiverId==4321&&d.Data3==7&&d.Data4==8,"or
 Check(d.Name=="Quest of Éire"&&d.Summary=="Original summary"&&d.Story=="Original story","original Windows1252 text");
 Check(d.Goals.SequenceEqual(new[]{"First goal\r","Second goal\r"}),"goals retain original text and order");
 Check(d.Money==4000000000&&d.ExperiencePercent==250,"unsigned money and original XP byte not clamped");
-Check(d.FixedItemRecords.Single().SequenceEqual(Item())&&d.OptionalItemRecords.Length==2&&d.RequiredChoices==1,"modern reward item boundaries");
+Check(d.FixedItemRecords.Single().AsSpan(1).SequenceEqual(Item())&&d.OptionalItemRecords.Length==2&&d.RequiredChoices==1,"slotless modern reward item boundaries");
+Check(d.FixedItemRecords.All(i=>i[0]==0)&&d.OptionalItemRecords.All(i=>i[0]==0),"neutral presentation slot added only after decoding");
+Check(d.OptionalItemRecords[0].AsSpan(1).SequenceEqual(Item(8,"Choice A")),"slotless first spell record boundary");
+Check(d.OptionalItemRecords[1].AsSpan(1).SequenceEqual(Item(16,"Choice B")),"slotless second spell record boundary");
 for(int n=0;n<raw.Length;n++)Check(!Decode(raw[..n],out _),"truncated packet:"+n);
 Check(!Decode(raw.Concat(new byte[]{0}).ToArray(),out _),"trailing bytes refused");
 foreach(int at in new[]{0,1,10,11}){var bad=(byte[])raw.Clone();bad[at]=at==10?(byte)2:at==11?(byte)2:(byte)255;Check(!Decode(bad,out _),"invalid header:"+at);}
@@ -34,6 +37,7 @@ Check(Decode(Window(required:0,fixedItems:Array.Empty<byte[]>(),options:Array.Em
 Check(DaocClient.TryBuildQuestRewardChoice(empty,null!,out var noChoice)&&noChoice.Length==20&&noChoice[1]==0,"zero-choice original finish request");
 Check(DaocClient.TryBuildQuestRewardChoice(d,new[]{1},out var request)&&request.Length==20,"original request length");
 Check(request.SequenceEqual(new byte[]{1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,4,210,16,225}),"original request field order and big endian identities");
+Check(DaocClient.QuestRewardWireCode==0x40,"literal original handler code; no second XOR or world initialization");
 foreach(var choice in new[]{Array.Empty<int>(),new[]{0,1},new[]{-1},new[]{2},new[]{256}})Check(!DaocClient.TryBuildQuestRewardChoice(d,choice,out _),"invalid selection:"+string.Join(',',choice));
 Check(Decode(Window(required:2),out var two)&&!DaocClient.TryBuildQuestRewardChoice(two,new[]{0,0},out _),"duplicate reward index refused");
 foreach(byte flags in new byte[]{0,8,16,24,25})Check(Decode(Window(fixedItems:new[]{Item(flags)},options:new[]{Item(flags)}),out _),"modern optional item fields:"+flags);
