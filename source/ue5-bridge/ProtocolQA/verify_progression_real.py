@@ -6,10 +6,10 @@ source_qa=Path(os.environ.get("DAOC_BRIDGE_SOURCE_QA",str(ROOT.parent/"DAoC-Enha
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 SOURCE=ROOT/'Godot'
-training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on']
-D=ROOT/('ProgressionTrainingLab/RealProtocol' if training_case=='on' else 'ProgressionLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast']
+D=ROOT/({'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab'}[training_case]+'/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
-config_backups=[];candidate_files=[];backed=False
+config_backups=[];candidate_files=[];backed=False;relay=None
 normal=verify_files(ROOT)
 normal_paths=[ROOT/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll',INSTALL/'runtime/server/GameServer.dll',INSTALL/'runtime/server/lib/GameServer.dll']
 normal_hashes={str(p):digest(p) for p in normal_paths}
@@ -60,12 +60,15 @@ try:
   witness.update(Mob_ID='codex-private-progression-witness',Name='Codex Progression Witness',ClassType='DOL.GS.GameNPC',Brain='DOL.AI.Brain.BlankBrain',Guild='',Level=1,Realm=0,Model=123,Flags=0,AggroLevel=0,AggroRange=0,Strength=1,Constitution=1,Dexterity=1,Quickness=1,Speed=0,RoamingRange=0,NPCTemplateID=0,RespawnInterval=3600,X=leader['Xpos']+80,Y=leader['Ypos'],Z=leader['Zpos'])
   keys=list(witness)
   db.execute('INSERT INTO Mob ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[witness[k] for k in keys])
-  if training_case=='on':
+  if training_case!='off':
    tutor=dict(witness);tutor.update(Mob_ID='codex-private-earned-points-trainer',Name='Codex Naturalist Trainer',ClassType='DOL.GS.Trainer.NaturalistTrainer',Brain='',Guild='Naturalist Trainer',Level=50,Realm=3,Model=342,X=leader['Xpos']-80)
    keys=list(tutor);db.execute('INSERT INTO Mob ('+','.join('"'+k+'"' for k in keys)+') VALUES ('+','.join('?' for _ in keys)+')',[tutor[k] for k in keys])
   for c in rows:
    db.execute('UPDATE Account SET PrivLevel=1,Realm=3 WHERE Name=?',(c['AccountName'],))
    db.execute("UPDATE DOLCharacters SET Class=53,Level=1,Experience=49,LastFreeLeveled=CURRENT_TIMESTAMP,LastFreeLevel=1,SerializedSpecs='',Health=200,Mana=100,Endurance=100,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='',HCFlag=0 WHERE DOLCharacters_ID=?",(c['DOLCharacters_ID'],))
+  if training_case=='cast':
+   # Injured ordinary healing witness only; never change health while logged in.
+   db.execute("UPDATE DOLCharacters SET Class=47,Level=20,Experience=25899950,Health=1,Xpos=?,Ypos=?,Zpos=?,Region=200 WHERE Name='Codexfriend'",(leader['Xpos']+20,leader['Ypos']+20,leader['Zpos']))
   result['checks']['ordinary_accounts_only']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
  for n,root in enumerate([RUN,RUN/'friend-session']):
   assert root.resolve().is_relative_to(RUN)
@@ -104,7 +107,7 @@ try:
  initial_entries={e['id']:dict(e) for e in ui().get('entries',[]) if e.get('kind')!='item'}
  result['initial_points']=dict(ui()['points'])
  result['initial_level']=ui()['info']['level']
- if training_case=='on':
+ if training_case!='off':
   original_heal=next(e for e in ui()['entries'] if e.get('kind')=='spell' and e.get('line')=='Regrowth')
   a.send('ui_assign',bar=2,bank=0,slot=9,entry_id=original_heal['id'],entry_token=original_heal['token'])
   wait(lambda:ui()['bars'][2][0][9].get('token')==original_heal['token'],'Original heal assigned before gaining level')
@@ -134,10 +137,10 @@ try:
  result['checks']['specialization_points_received']=ui()['points']['spec_points']>result['initial_points']['spec_points']
  final_entries={e['id']:dict(e) for e in ui().get('entries',[]) if e.get('kind')!='item'}
  result['checks']['server_skill_catalogue_remains_available']=bool(initial_entries) and bool(final_entries) and ui()['skills_ready']
- result['checks']['no_level_change_for_idle_peer']=b.snapshot['classic_ui']['info']['level']==1 and b.snapshot['classic_ui']['points']['xp']==49
+ result['checks']['no_level_change_for_idle_peer']=b.snapshot['classic_ui']['info']['level']==(20 if training_case=='cast' else 1) and b.snapshot['classic_ui']['points']['xp']==(25899950 if training_case=='cast' else 49)
  result['catalogue_before']=initial_entries;result['catalogue_after']=final_entries
  result['checks']['defeated_npc_no_longer_alive']=not any(e['id']==target['id'] and e.get('health',1)>0 and e.get('state')!='dead' for e in a.snapshot.get('entities',[]))
- if training_case=='on':
+ if training_case!='off':
   wait(lambda:any(e.get('name')==tutor['Name'] for e in a.snapshot['entities']),'Original Naturalist trainer visible')
   npc=next(e for e in a.snapshot['entities'] if e.get('name')==tutor['Name'])
   a.send('interact',entity_id=npc['id']);a.send('trainer_refresh')
@@ -156,10 +159,62 @@ try:
   slot=ui()['bars'][2][0][9]
   current=next((e for e in ui()['entries'] if e['id']==slot.get('id') and e['token']==slot.get('token')),None)
   result['checks']['saved_heal_still_matches_current_spell']=bool(current and current['name']==original_heal['name'] and current['kind']=='spell')
-  a.send('target_self');settle(.3)
-  a.send('ui_use',entry_id=current['id'],entry_token=current['token'])
-  wait(lambda:ui().get('feedback')=='Request sent to server.','Retained heal can request original spell after training')
-  result['checks']['retained_spell_request_accepted_after_training']=True
+  if training_case=='on':
+   a.send('target_self');settle(.3)
+   a.send('ui_use',entry_id=current['id'],entry_token=current['token'])
+   wait(lambda:ui().get('feedback')=='Request sent to server.','Retained heal can request original spell after training')
+   result['checks']['retained_spell_request_accepted_after_training']=True
+  else:
+   import importlib.util
+   helper=source_qa.parent/'magic_sight_relay.py';result['source_inputs'][str(helper)]=digest(helper)
+   spec=importlib.util.spec_from_file_location('progression_native_sight',helper);native_sight=importlib.util.module_from_spec(spec);spec.loader.exec_module(native_sight)
+   target_config=ROOT/'playable_project.json';target_cfg=json.loads(target_config.read_text());result['source_inputs'][str(target_config)]=digest(target_config)
+   project=(ROOT/target_cfg['project']).resolve();assert project.is_file()
+   result['native_world']=dict(project=str(project),map=target_cfg['map'],read_only=True,offscreen=True)
+   relay=native_sight.NativeSightRelay(a.sock,ROOT,a.session,a.snapshot,project=project,world=target_cfg['map'],report_dir=D/'NativeSight',offscreen=True,enabled_plugins=target_cfg.get('enable_plugins',[]));a.sock=relay
+   wait(lambda:relay.read_report().get('local_animation'),'Current native map read-only sight client ready',80)
+   def cast():return ui().get('casting',{})
+   def avitals():return state().get('vitals',{})
+   def bvitals():return b.snapshot.get('player_status',{}).get('vitals',{})
+   wait(lambda:any(e.get('name')=='Codexfriend' for e in a.snapshot['entities']) and bvitals().get('ready',True) and bvitals().get('health',0)>0,'Injured healing witness visible')
+   friend=next(e for e in a.snapshot['entities'] if e.get('name')=='Codexfriend')
+   assert bvitals()['health']<bvitals()['max_health']
+   result['checks']['ordinary_peer_still_injured_before_heal']=True
+   a.send('ui_bank',bar=2,bank=0);wait(lambda:ui()['banks'][2]==0,'Select page holding original saved heal')
+   a.send('target',entity_id=friend['id'])
+   wait(lambda:a.snapshot['interaction']['target']['id']==friend['id'],'Select ordinary healing recipient')
+   me=next(e for e in a.snapshot['entities'] if e['id']=='player:local')
+   import math
+   delta=[friend['position_m'][0]-me['position_m'][0],friend['position_m'][2]-me['position_m'][2]];length=math.hypot(*delta)
+   a.send('move',position_m=me['position_m'],forward_xz=[v/length for v in delta],speed_mps=0,target_entity_id=friend['id'],target_in_view=True);settle(.3)
+   seq=cast().get('seq',0);before_hp=bvitals()['health'];before_mana=avitals()['mana']
+   a.send('ui_use_slot',bar=2,slot=9)
+   wait(lambda:cast().get('seq',0)>seq and cast().get('phase')=='casting','Actual server confirms retained quickbar heal preparation')
+   result['checks']['trained_quickbar_heal_gets_server_cast']=True
+   wait(lambda:cast().get('phase')=='released','Actual server releases retained quickbar heal')
+   wait(lambda:bvitals()['health']>before_hp and avitals()['mana']<before_mana,'Server healing and power consumption')
+   wait(lambda:any('heal Codexfriend for' in m for m in a.snapshot.get('messages',[])),'Original heal result identifies recipient')
+   result['healing']={'hp_before':before_hp,'hp_after':bvitals()['health'],'mana_before':before_mana,'mana_after':avitals()['mana'],'cast':dict(cast())}
+   result['checks']['server_heal_result_names_actual_recipient']=True
+   result['checks']['actual_heal_increases_peer_health']=True
+   result['checks']['actual_heal_consumes_power']=True
+   wait(lambda:ui().get('reuse_ms',{}).get(current['id'],0)==0,'Original baseline spell has no remaining reuse timer')
+   settle(2);seq=cast().get('seq',0);before_mana=avitals()['mana']
+   a.send('ui_use_slot',bar=2,slot=9)
+   wait(lambda:cast().get('seq',0)>seq and cast().get('phase')=='casting','Retained quickbar can prepare another actual heal')
+   wait(lambda:cast().get('phase')=='released' and avitals()['mana']<before_mana,'Original repeat heal completes and consumes power')
+   result['checks']['retained_spell_can_cast_again_after_recovery']=True
+   buff=next(e for e in ui()['entries'] if e.get('kind')=='spell' and e.get('name')=='Minor Bark Skin')
+   a.send('ui_assign',bar=2,bank=0,slot=8,entry_id=buff['id'],entry_token=buff['token'])
+   wait(lambda:ui()['bars'][2][0][8].get('token')==buff['token'],'Place newly received level spell')
+   a.send('target_self');settle(2);seq=cast().get('seq',0)
+   a.send('ui_use_slot',bar=2,slot=8)
+   wait(lambda:cast().get('seq',0)>seq and cast().get('phase')=='casting','New level spell begins actual server cast')
+   wait(lambda:any(e.get('name')=='Minor Bark Skin' for e in ui().get('effects',[])),'Original server applies newly received buff effect')
+   result['checks']['new_level_spell_usable_from_quickbar']=True
+   result['checks']['new_level_buff_confirmed_in_server_effects']=True
+   result['buff_effects']=ui()['effects']
+   result['native_sight_answers']=relay.answers;result['checks']['actual_native_geometry_answered_server_sight']=bool(relay.answers) and all(e.get('question') for e in relay.answers)
   result['trained_specialization']='Regrowth';result['trained_rank']=2;result['final_spec_points']=0
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
@@ -183,6 +238,9 @@ finally:
   server.stdin.write('exit\n');server.stdin.flush()
   try:server.wait(timeout=45)
   except subprocess.TimeoutExpired:server.kill();server.wait();result['errors'].append('Private server forced stop')
+ if relay is not None:
+  try:result['native_normal_exit']=relay.finish()==0
+  except Exception:result['errors'].append('Native cleanup: '+traceback.format_exc())
  for handle in handles:handle.close()
  for target,saved in reversed(candidate_files):assert target.resolve().is_relative_to(RUN);shutil.copy2(saved,target)
  for config,raw in config_backups:config.write_bytes(raw)
@@ -191,7 +249,7 @@ finally:
    saved=db.execute("SELECT Level,Experience FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()
    result['checks']['normal_logout_saves_level_and_experience']=saved['Level']==result['final_level'] and saved['Experience']==result['final_points']['xp']
    result['passed']=result['passed'] and result['checks']['normal_logout_saves_level_and_experience']
-   if training_case=='on':
+   if training_case!='off':
     saved_specs=db.execute("SELECT SerializedSpecs FROM DOLCharacters WHERE Name='Codexdruid'").fetchone()[0]
     result['saved_specializations']=saved_specs
     result['checks']['trained_specialization_saved_on_logout']='Regrowth|2' in saved_specs
@@ -204,4 +262,4 @@ finally:
  result['normal_shutdown']=bool(clients) and all(c.returncode==0 for c,_ in clients) and server is not None and server.returncode==0
  result['normal_runtime_unchanged']=all(digest(Path(p))==h for p,h in normal_hashes.items())
  result['passed']=result['passed'] and result['normal_shutdown'] and result.get('database_restored',False) and result['normal_runtime_unchanged'] and not result['errors'] and all(digest(Path(p))==h for p,h in result['source_inputs'].items())
- (D/'verified.json').write_text(json.dumps(result,indent=2),encoding='utf-8');print(json.dumps({k:v for k,v in result.items() if k!='source_inputs'}));assert result['passed']
+ (D/'verified.json').write_text(json.dumps(result,indent=2),encoding='utf-8');print(json.dumps({k:v for k,v in result.items() if k not in ['source_inputs','catalogue_before','catalogue_after']}));assert result['passed']
