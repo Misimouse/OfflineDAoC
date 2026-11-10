@@ -147,6 +147,7 @@ private:
     bool TickGroundTargetAcceptance();
     bool TickSiegeWorldAcceptance();
     bool TickStealthMaterialAcceptance();
+    bool TickGroundObjectFrameAcceptance();
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
     void TickLocalStealthMaterials();

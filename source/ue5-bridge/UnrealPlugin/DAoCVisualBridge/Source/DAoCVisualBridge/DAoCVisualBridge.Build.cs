@@ -11,5 +11,6 @@ public class DAoCVisualBridge : ModuleRules
         PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
         PublicDependencyModuleNames.AddRange(new string[]{"Core","CoreUObject","Engine","InputCore"});
         PrivateDependencyModuleNames.AddRange(new string[]{"Sockets","Networking","Json","RenderCore","RHI","Slate","SlateCore","ProceduralMeshComponent"});
+        if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new string[]{"MeshDescription","StaticMeshDescription"});
     }
 }
