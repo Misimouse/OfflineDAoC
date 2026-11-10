@@ -7,10 +7,10 @@ from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
 source_mode=os.environ.get('DAOC_PROGRESSION_GODOT','installed');assert source_mode in ['installed','candidate']
 SOURCE=source_qa.parent/'Godot' if source_mode=='candidate' else ROOT/'Godot'
-training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast']
+training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast','return']
 assert source_mode!='candidate' or training_case=='on'
 budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
-D=ROOT/(('TrainerAffordabilityLab' if source_mode=='candidate' or (budget_probe and training_case=='on') else {'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab'}[training_case])+('/InstalledRealProtocol' if source_mode=='installed' and budget_probe and training_case=='on' else '/RealProtocol'))/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+D=ROOT/(('TrainerAffordabilityLab' if source_mode=='candidate' or (budget_probe and training_case=='on') else {'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab','return':'ProgressionReentryLab'}[training_case])+('/InstalledRealProtocol' if source_mode=='installed' and budget_probe and training_case=='on' else '/RealProtocol'))/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
 normal=verify_files(ROOT)
@@ -167,7 +167,7 @@ try:
   slot=ui()['bars'][2][0][9]
   current=next((e for e in ui()['entries'] if e['id']==slot.get('id') and e['token']==slot.get('token')),None)
   result['checks']['saved_heal_still_matches_current_spell']=bool(current and current['name']==original_heal['name'] and current['kind']=='spell')
-  if training_case=='on':
+  if training_case in ['on','return']:
    a.send('target_self');settle(.3)
    a.send('ui_use',entry_id=current['id'],entry_token=current['token'])
    wait(lambda:ui().get('feedback')=='Request sent to server.','Retained heal can request original spell after training')
@@ -224,6 +224,25 @@ try:
    result['buff_effects']=ui()['effects']
    result['native_sight_answers']=relay.answers;result['checks']['actual_native_geometry_answered_server_sight']=bool(relay.answers) and all(e.get('question') for e in relay.answers)
   result['trained_specialization']='Regrowth';result['trained_rank']=2;result['final_spec_points']=0
+ if training_case=='return':
+  a.send('ui_bank',bar=2,bank=0);wait(lambda:ui()['banks'][2]==0,'Select saved quickbar page before exit')
+  old_session=a.session;old_generation=state()['generation']
+  a.send('chat',text='/quit')
+  wait(lambda:not a.snapshot.get('in_game') and a.snapshot.get('character_lobby',{}).get('ready'),'Normal saved return to character selection',100)
+  result['checks']['saved_quit_preserves_bridge_connection']=a.session==old_session
+  result['checks']['selection_clears_old_world']=not a.snapshot.get('entities')
+  result['checks']['selection_clears_old_target']=not a.snapshot.get('interaction',{}).get('target',{}).get('id')
+  result['checks']['selection_clears_old_cast']=not ui().get('casting')
+  lobby=a.snapshot['character_lobby'];roster=next(e for e in lobby['characters'] if e['name']=='Codexdruid')
+  result['checks']['selection_roster_reflects_earned_level']=roster['level']==2
+  a.send('character_enter',name='Codexdruid',lobby_revision=lobby['revision'])
+  wait(lambda:a.snapshot.get('in_game') and state().get('ready') and state()['generation']>old_generation and ui().get('skills_ready'),'Same-connection character reentry receives fresh generation',40)
+  result['checks']['reentry_restores_server_progression']=ui()['info']['level']==2 and ui()['points']['xp']==64 and ui()['points']['spec_points']==0 and any(e['name']=='Regrowth' and e['level']==2 for e in ui()['specs'])
+  slot=ui()['bars'][2][0][9];fresh=next((e for e in ui()['entries'] if e['id']==slot.get('id') and e['token']==slot.get('token') and e['name']==original_heal['name']),None)
+  result['checks']['reentry_restores_valid_saved_shortcut_and_page']=bool(fresh) and ui()['banks'][2]==0
+  a.send('target_self');settle(.3);a.send('ui_use_slot',bar=2,slot=9)
+  wait(lambda:ui().get('feedback')=='Request sent to server.','Saved shortcut resolves after reentry')
+  result['checks']['saved_shortcut_request_accepted_after_reentry']=True
  result['passed']=all(result['checks'].values())
 except Exception:result['errors'].append(traceback.format_exc())
 finally:
