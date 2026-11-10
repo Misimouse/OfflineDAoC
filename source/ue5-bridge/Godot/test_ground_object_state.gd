@@ -44,6 +44,7 @@ func run()->void:
         var value:Dictionary=command(state,"object:2","get_object");value.world_generation=bad;check(not state.request(value,client,interaction,living,pos,true,207) and client.calls.is_empty(),"malformed generation never issues protocol requests")
     state.observe("remove",{"oid":2,"type":9});check(not state.objects.has("object:2"),"only original deletion removes the picked object")
     state.observe("object",packet(2,488,Vector3(105,130,100)));var recreated:String=state.objects["object:2"].object_token;check(recreated!=token,"removed and recreated OID never revives an old token")
+    interaction.selected_id="object:2";client.calls.clear();check(not state.request(command(state,"object:2","get_object"),client,interaction,living,pos,true,207) and client.calls.is_empty(),"fresh render token cannot pick up a reused OID without selecting it again")
     state.observe("npc",{"oid":2});check(not state.objects.has("object:2"),"living replacement clears ground identity")
     var door:=packet(4,488,pos);door.door=207000001;state.observe("object",door);check(not state.objects.has("object:4"),"doors never spawn loot bodies")
     state.observe("object",packet(4,488,Vector3(110,130,100)));check(not state.objects.has("object:4"),"source baked-world duplicate is suppressed")

@@ -160,6 +160,7 @@ func consume_world(kind: String, data: Dictionary) -> void:
         if oid_to_id.has(oid) and entities.has(oid_to_id[oid]):entities[oid_to_id[oid]]["equipment"]=gear
         return
     if kind == "object":
+        _erase(oid) # A reused OID must not retain an old living body.
         non_living[oid]=true;return
     if kind == "move" and not oid_to_id.has(oid) and not non_living.has(oid) and oid!=local_oid and oid>0 and oid<=65535 and int(data.get("zone",-1))==207:
         _request_missing(oid)

@@ -30,6 +30,7 @@ FString UDAoCBridgeSubsystem::CurrentTarget() const{return Str(Obj(InteractionSt
 void UDAoCBridgeSubsystem::SelectEntity(const FString& Id,bool Interact){
     if(!bLocalAvailable||Session.IsEmpty()||bExiting)return;
     if(Id==TEXT("player:local")&&!Interact){Send(TEXT("target_self"));return;}
+    if(Id.StartsWith(TEXT("object:"))){if(!Interact)SendGroundObjectAction(TEXT("target_object"),Id);return;}
     auto V=MakeShared<FJsonObject>();V->SetStringField(TEXT("entity_id"),Id);Send(Interact?TEXT("interact"):TEXT("target"),V);
 }
 bool UDAoCBridgeSubsystem::CanSelect(const FString& Id,FVector& Aim) const{

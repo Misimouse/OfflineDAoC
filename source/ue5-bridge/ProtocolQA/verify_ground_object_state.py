@@ -9,9 +9,10 @@ def function(text,name):
     return text[start:].split('\n\n\n',1)[0].expandtabs(4)+'\n'
 
 
-def verify(workspace,install,engine):
+def verify(workspace,install,engine,lab_name="GroundObjectsLab"):
+    assert lab_name in ["GroundObjectsLab","GroundObjectRuntimeLab"]
     source=Path(__file__).resolve().parents[1]
-    lab=workspace/'GroundObjectsLab';project=lab/'StateProject';project.mkdir(exist_ok=True)
+    lab=workspace/lab_name;lab.mkdir(exist_ok=True);project=lab/'StateProject';project.mkdir(exist_ok=True)
     (project/'project.godot').write_text('[application]\nconfig/name="Private ground object state QA"\n[rendering]\nrenderer/rendering_method="gl_compatibility"\n')
     paths=[source/'Godot'/n for n in ['ground_object_state.gd','interaction_state.gd','test_ground_object_state.gd']]
     paths += [install/'new-client/godot/game/net/server_world.gd',install/'new-client/godot/game/net/server.gd',source.parent/'server/GameServer/packets/Client/168/PlayerPickUpRequestHandler.cs']

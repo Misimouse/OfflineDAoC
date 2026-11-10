@@ -116,6 +116,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-GROUND-OBJECTS-AUDIT'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_82_supported_controls',notes='82 supported actions; full presets and remaining actions are separate.')
+    if (workspace/'GroundObjectRuntimeLab/installed.json').exists() and json.loads((workspace/'GroundObjectRuntimeLab/installed.json').read_text()).get('installed',False):
+        row('Original ground objects and pickup',['net/server_world.gd','net/DaocClient.cs','weapon_models.gd'],['Godot/ground_object_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeGroundObjects.cpp'],'installed_rigid_models_owner_review_pending','Separate128-object budget; current token/generation, original Target then PickUp/Interact, no optimistic grant/delete.68state,361gateway/regression,12ordinary-server,437installed native checks and2captures.918actual native geometry assets cover1021rigid IDs;39animated and669missing IDs remain explicit fallback gaps.')
+        result['next_package']='CLIENT-REMAINING-ORIGINAL-SELECTION-CONTROLS'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_84_supported_controls',notes='84 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

@@ -19,6 +19,7 @@ var server_sound:RefCounted
 var movement_flags:RefCounted
 var personal_torch:RefCounted
 var weapon_sprint:RefCounted
+var ground_objects:RefCounted
 var target_tracking:RefCounted
 var live_riding:RefCounted
 var travel_routes:RefCounted
@@ -88,6 +89,8 @@ func _ready()->void:
     chat_state=load(folder.path_join("chat_state.gd")).new()
     var zone_info=JSON.parse_string(FileAccess.get_file_as_string("res://content/zones/zone207/zone.json"))
     if zone_info is Dictionary:zone_lights=zone_info.get("lights",[])
+    ground_objects=load(folder.path_join("ground_object_state.gd")).new()
+    if zone_info is Dictionary:ground_objects.configure(zone_info)
     var config=JSON.parse_string(FileAccess.get_file_as_string(folder.path_join("../bridge_config.json")))
     if config is Dictionary:
         var point=config.get("initial_spawn_m",[])
@@ -264,6 +267,7 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
         combat_visual.remove(id)
 
 func world_event(kind:String,data:Dictionary)->void:
+    if ground_objects!=null:ground_objects.observe(kind,data)
     realm_war.consume(kind,data)
     siege.consume(kind,data,Time.get_ticks_msec())
     siege_visuals.consume(kind,data,adapter.oid_to_id,adapter.entities,Time.get_ticks_msec())
@@ -360,6 +364,11 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action in ["target_object","target_loot","get_object"]:
+        if ground_objects!=null:
+            ground_objects.request(value,server.client,interaction,adapter.entities,position,player_state.alive(),int(server.entry.get("zone",-1)))
+            if not ground_objects.feedback.is_empty():local_chat(ground_objects.feedback)
+        return
     if action in ["weapon_select","player_sprint"]:
         if weapon_sprint==null:return
         sync_inventory(Time.get_ticks_msec())
@@ -598,7 +607,7 @@ func _process(_delta:float)->void:
         last_publish=now
         if server.playing and not leaving:
             interaction.local_target={"name":character_name,"health":player_state.health_fraction() if player_state.ready else -1.0,"level":int(server.info.get("level",0)),"kind":"player","guild":""}
-            interaction.maintain(server.client,adapter.entities,position)
+            interaction.maintain(server.client,ground_objects.entities(adapter.entities) if ground_objects!=null else adapter.entities,position)
         var rows:Array=[]
         if server.playing and not leaving and int(server.entry.get("zone",-1))==207:
             rows=adapter.entities.values().filter(func(row):return row.id!="player:local")
@@ -623,6 +632,8 @@ func _process(_delta:float)->void:
         var pct:=int(server.max_speed_pct)
         transport.snapshot_metadata={"character":character_name,"status":status,"in_game":server.playing,
             "max_speed_mps":player_state.run_speed_mps(pct),"zone_lights":zone_lights}
+        if ground_objects!=null:
+            transport.snapshot_metadata["world_objects"]={"generation":ground_objects.generation,"objects":ground_objects.view(position) if server.playing and not leaving and int(server.entry.get("zone",-1))==207 else []}
         var states:Array=[]
         for id in door_states:states.append({"id":id,"open":door_states[id]})
         if chat_state!=null:transport.snapshot_metadata["chat"]=chat_state.snapshot()
@@ -643,7 +654,7 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states
-        transport.snapshot_metadata["interaction"]=travel_routes.annotate(interaction.snapshot(adapter.entities,position),adapter.entities)
+        transport.snapshot_metadata["interaction"]=travel_routes.annotate(interaction.snapshot(ground_objects.entities(adapter.entities) if ground_objects!=null else adapter.entities,position),adapter.entities)
         transport.snapshot_metadata["inventory"]=inventory.snapshot()
         var player_snapshot:Dictionary=player_state.snapshot()
         player_snapshot["weapon_stance"]=local_weapon_stance()

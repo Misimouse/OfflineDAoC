@@ -272,6 +272,8 @@ void UDAoCBridgeSubsystem::UpdateClassicInput(){
  if(KeyConfiguration->Pressed(PC,TEXT("inspect_item"))){auto E=ClassicEntry(FString::Printf(TEXT("srv:%d"),SelectedItemSlot));if(E.IsValid())ClassicInspect(CS(E,TEXT("id")),CS(E,TEXT("token")));}
  if(KeyConfiguration->Pressed(PC,TEXT("ground_target")))RequestGroundTarget();
  if(KeyConfiguration->Pressed(PC,TEXT("target_self")))SelectEntity(TEXT("player:local"));
+ if(KeyConfiguration->Pressed(PC,TEXT("target_loot")))SendGroundObjectAction(TEXT("target_loot"));
+ if(KeyConfiguration->Pressed(PC,TEXT("get_item")))SendGroundObjectAction(TEXT("get_object"),CurrentTarget());
  const auto GroupRows=FBridgeGroupTargeting::Ordered(CA(ClassicState,TEXT("group")));
  for(int32 Slot=1;Slot<8;++Slot)if(KeyConfiguration->Pressed(PC,FString::Printf(TEXT("target_group_%d"),Slot+1))){auto Member=FBridgeGroupTargeting::Member(GroupRows,Slot);if(Member.IsValid())SendGroupAction(TEXT("group_target"),Member);}
 

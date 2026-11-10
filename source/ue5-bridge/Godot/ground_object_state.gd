@@ -11,10 +11,12 @@ var zone_info:Dictionary={"x":35,"y":51}
 var baked:Array=[]
 var feedback:=""
 var rejected:=0
+var selection_id:=""
+var selection_token:=""
 func integer(value:Variant,minimum:int,maximum:int)->int:
     if not (value is int or value is float) or not is_finite(float(value)) or float(value)!=floor(float(value)) or value<minimum or value>maximum:return -1
     return int(value)
-func reset()->void:generation+=1;objects.clear();active=false;feedback=""
+func reset()->void:generation+=1;objects.clear();active=false;feedback="";selection_id="";selection_token=""
 func configure(info:Dictionary)->void:
     baked.clear()
     if info.has("x") and info.has("y"):zone_info={"x":int(info.x),"y":int(info.y)}
@@ -92,10 +94,13 @@ func request(value:Dictionary,client:Node,interaction:RefCounted,living:Dictiona
     if row.is_empty():return fail("No lootable object in range." if action=="target_loot" else "That object is no longer available.")
     if action!="target_loot" and (not value.get("object_token") is String or value.object_token!=row.object_token):return fail("That object has changed. Select it again.")
     if action in ["target_object","target_loot"]:
-        feedback="";return interaction.execute({"action":"target","entity_id":id},client,entities(living),pos)
+        feedback=""
+        var accepted:bool=interaction.execute({"action":"target","entity_id":id},client,entities(living),pos)
+        if accepted:selection_id=id;selection_token=String(row.object_token)
+        return accepted
     if action!="get_object":return false
     if not alive:return fail("You cannot pick up objects while dead.")
-    if interaction.selected_id!=id:return fail("Select that object first.")
+    if interaction.selected_id!=id or selection_id!=id or selection_token!=row.object_token:return fail("Select that object first.")
     # DOL pickup acts on TargetObject, not merely the supplied OID. Pin that
     # target immediately before the original request; await its inventory/delete.
     var rx:=int(pos.x*40.0+float(zone_info.x)*8192.0);var ry:=int(pos.z*40.0+float(zone_info.y)*8192.0)

@@ -148,6 +148,11 @@ private:
     bool TickSiegeWorldAcceptance();
     bool TickStealthMaterialAcceptance();
     bool TickGroundObjectFrameAcceptance();
+    bool TickGroundObjectRuntimeAcceptance();
+    void ApplyGroundObjects(const TSharedPtr<FJsonObject>& Snapshot,TSet<FString>& Seen);
+    bool SendGroundObjectAction(const FString& Action,const FString& Id=FString());
+    TSharedPtr<FJsonObject> GroundObjectCatalog;
+    int64 GroundObjectGeneration=-1;
     TSharedPtr<FBridgeStealthMaterials> StealthMaterials;
     bool bStealthMaterialsLoadTried=false;
     void TickLocalStealthMaterials();

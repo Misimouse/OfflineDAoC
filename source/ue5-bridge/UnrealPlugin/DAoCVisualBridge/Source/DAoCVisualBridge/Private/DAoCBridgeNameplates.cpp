@@ -39,7 +39,7 @@ void UDAoCBridgeSubsystem::DrawNameplates(AHUD* HUD,UCanvas* Canvas){
     }
 
     for(const auto& Pair:Entities){
-        if(Pair.Key==TEXT("player:local")||!IsValid(Pair.Value)||Pair.Value->IsHidden())continue;
+        if(Pair.Key==TEXT("player:local")||Pair.Key.StartsWith(TEXT("object:"))||!IsValid(Pair.Value)||Pair.Value->IsHidden())continue;
         const auto* Found=EntityRows.Find(Pair.Key);if(!Found)continue;const auto& Row=*Found;
         double Health=1;Row->TryGetNumberField(TEXT("health"),Health);if(Health<=0)continue;
         const bool Selected=Pair.Key==Target;const TSharedPtr<FJsonObject>* Plate=nullptr;Row->TryGetObjectField(TEXT("nameplate"),Plate);

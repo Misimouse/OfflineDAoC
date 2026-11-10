@@ -153,7 +153,7 @@ void UDAoCBridgeSubsystem::Deinitialize() {
 }
 void UDAoCBridgeSubsystem::OnWorldBeginPlay(UWorld& InWorld){Super::OnWorldBeginPlay(InWorld);FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);FWorldDelegates::LevelRemovedFromWorld.AddUObject(this,&UDAoCBridgeSubsystem::GeometryLevelChanged);ConfigureCollisions();ApplyQuality();ApplyApprovedBarkCompatibility(&InWorld);}
 TStatId UDAoCBridgeSubsystem::GetStatId() const {RETURN_QUICK_DECLARE_CYCLE_STAT(DAoCBridge,STATGROUP_Tickables);}
-void UDAoCBridgeSubsystem::ClearEntities(){ClearPersonalTorch();ClearNpcGhostMaterials();WorldClockHour=-1.;ClearLiveRiding();if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
+void UDAoCBridgeSubsystem::ClearEntities(){GroundObjectGeneration=-1;ClearPersonalTorch();ClearNpcGhostMaterials();WorldClockHour=-1.;ClearLiveRiding();if(TargetTracking)TargetTracking->Reset();if(MovementKeys)MovementKeys->Reset();CloseOptions();RemoveCharacterLobby();ClearSpellVisuals();ClearSpellAudio();ClearFootsteps();ClearWaterMovement();AnsweredSightQueries.Empty();RemoveClassicUI();RemoveChat();ClearLocalEquipment();RemovePlayerStatusUI();PlayerState.Reset();PlayerStatusRevision=-1;RemoveInventoryUI();InventoryState.Reset();InventoryRevision=-1;bInventoryOpen=false;SelectedItemSlot=-1;bInventoryMoving=false;bConfirmSale=false;RemoveInteractionUI();for(auto& P:Entities)if(IsValid(P.Value))P.Value->Destroy();Entities.Empty();AnimationStates.Empty();PosePlayback.Empty();EntityModels.Empty();RemoteMotion.Empty();EntityRows.Empty();NameplateVisibility.Empty();InteractionState.Reset();InteractionRevision=-1;bInteractionHovered=false;LocalPositionRevision=-1;bLocalAvailable=false;NpcCount=0;}
 void UDAoCBridgeSubsystem::Disconnect(){
     if(Socket){Socket->Close();ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);Socket=nullptr;}
     bConnected=false;Incoming.Empty();Outgoing.Empty();Session.Empty();Sequence=0;ClearEntities();RetryAt=FPlatformTime::Seconds()+1;
@@ -296,6 +296,7 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
             if(!Smoothed&&Id!=TEXT("player:local"))SetEntityAnimation(Id,State);
         }
     }
+    ApplyGroundObjects(M,Seen);
     TArray<FString> Gone;for(auto& Pair:Entities)if(!Seen.Contains(Pair.Key))Gone.Add(Pair.Key);
     for(auto& Id:Gone){if(IsValid(Entities[Id]))Entities[Id]->Destroy();Entities.Remove(Id);EntityModels.Remove(Id);RemoteMotion.Remove(Id);EntityRows.Remove(Id);NameplateVisibility.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);}
     if(!Seen.Contains(TEXT("player:local")))bLocalAvailable=false;
@@ -637,6 +638,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
     if(TickGroundObjectFrameAcceptance())return;
+    if(TickGroundObjectRuntimeAcceptance())return;
     if(TickStealthMaterialAcceptance())return;
     if(TickRealmWarAcceptance())return;
     if(TickSiegeAcceptance())return;
