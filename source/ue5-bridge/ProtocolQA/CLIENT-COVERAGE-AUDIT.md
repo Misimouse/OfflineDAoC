@@ -1,6 +1,6 @@
 # Client coverage checkpoint, 10 November
 
-The original Godot client has 27 UI source files. Current transport exposes 80 gameplay actions and 29 snapshot metadata fields. These are source contracts, not a migration percentage. Reproduce the inventory and evidence links with audit_client_coverage.py.
+The original Godot client has 27 UI source files. Current transport exposes 84 gameplay actions and 30 snapshot metadata fields. These are source contracts, not a migration percentage. Reproduce the inventory and evidence links with audit_client_coverage.py.
 
 The preceding installed delivery is original NPC ghost presentation: separate create-bit metadata, original race/monster classification, actor-local original-color translucency, front-surface depth treatment and whole-outfit fallback. It passes 534 installed native checks, 21 coordinator replay checks and a 16-frame animation comparison; predecessor guards and reversible backups are retained. Owner gameplay review remains deferred. See NPC-VISUAL-FLAGS-AUDIT.md. The prior personal/peer torch (593df25) remains installed: editable Shift+T, retained Training T and original time/storm weighting. See PERSONAL-TORCH-DELIVERY.md.
 
@@ -82,3 +82,5 @@ Owner gameplay review is pending.
 `REMOTE-MODEL-ROUNDTRIP-AUDIT.md` adds an ordinary two-player Bainshee cast/timer roundtrip (25 checks) and installed UE actor replay (34). It proves packet retention and actor replacement separately; native per-frame weapon/armour attachment acceptance remains open.
 
 `REMOTE-MODEL-EQUIPMENT-AUDIT.md` closes the subsequent native weapon attachment defect: three forms hide weapons, return restores them, NPC weapons are preserved, and95 equipment regressions pass. The guarded three-file native successor is installed and its per-frame probes pass against that installation. Rendered materials and all possible class/equipment combinations remain outside this bounded acceptance.
+
+Original player trade now has its exact22-file installed successor. Connected UE body picking and native buttons pass14 ordinary-server checks, with17 separate gateway cases,146 codec checks,43 state and35 controller checks. Installed native UI/market/handover acceptance remains separately recorded; owner two-player review is pending. See PLAYER-TRADE-DELIVERY-AUDIT.md. The next bounded package checks vault and trade lifecycle compatibility.

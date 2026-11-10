@@ -10,6 +10,8 @@ trade_probe=os.environ.get('DAOC_PLAYER_TRADE_PROBE','0')=='1'
 trade_state_probe=os.environ.get('DAOC_PLAYER_TRADE_STATE_PROBE','0')=='1'
 trade_controller_probe=os.environ.get('DAOC_PLAYER_TRADE_CONTROLLER_PROBE','0')=='1'
 trade_gateway_probe=os.environ.get('DAOC_PLAYER_TRADE_GATEWAY_PROBE','0')=='1'
+trade_native_ui_probe=os.environ.get('DAOC_PLAYER_TRADE_NATIVE_UI_PROBE','0')=='1'
+assert not trade_native_ui_probe or trade_gateway_probe
 assert not trade_gateway_probe or trade_controller_probe
 assert not trade_controller_probe or trade_state_probe
 assert not trade_state_probe or trade_probe
@@ -18,7 +20,7 @@ SOURCE=source_qa.parent/'Godot' if trade_gateway_probe else ROOT/'Godot' if mode
 dotnet=ENGINE/'Binaries/ThirdParty/DotNet/10.0/win-x64/dotnet.exe'
 assert dotnet.is_file()
 env.update(DOTNET_ROOT=str(dotnet.parent),DOTNET_ROOT_X64=str(dotnet.parent),PATH=str(dotnet.parent)+os.pathsep+env['PATH'])
-D=ROOT/('PlayerTradeLab/GatewayProtocol' if trade_gateway_probe else 'PlayerTradeLab/ControllerProtocol' if trade_controller_probe else 'PlayerTradeLab/StateProtocol' if trade_state_probe else 'PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+D=ROOT/('PlayerTradeGatewayLab/NativeLive' if trade_native_ui_probe else 'PlayerTradeLab/GatewayProtocol' if trade_gateway_probe else 'PlayerTradeLab/ControllerProtocol' if trade_controller_probe else 'PlayerTradeLab/StateProtocol' if trade_state_probe else 'PlayerTradeLab/RealProtocol' if trade_probe else 'RemoteModelRoundtripLab/RealProtocol' if model_roundtrip else 'RemotePlayerLab/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('RemotePlayer_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;nav_added=False
 normal=verify_files(ROOT)
@@ -74,6 +76,7 @@ try:
  if trade_probe:
   if trade_controller_probe:result['source_inputs'][str(source_qa.parent/'Godot/player_trade_controller.gd')]=digest(source_qa.parent/'Godot/player_trade_controller.gd')
   if trade_state_probe:result['source_inputs'][str(source_qa.parent/'Godot/player_trade_state.gd')]=digest(source_qa.parent/'Godot/player_trade_state.gd')
+  if trade_native_ui_probe:result['source_inputs'][str(source_qa/'player_trade_native_wire_case.py')]=digest(source_qa/'player_trade_native_wire_case.py')
   result['source_inputs'][str(source_qa/'player_trade_wire_case.py')]=digest(source_qa/'player_trade_wire_case.py')
   result['source_inputs'][str(Path(__file__).resolve())]=digest(Path(__file__).resolve())
   backend_path=Path(os.environ['DAOC_PLAYER_TRADE_BACKEND_PROOF']).resolve();assert backend_path.is_relative_to(ROOT/'PlayerTradeLab/WireCodec')
@@ -109,7 +112,7 @@ try:
    db.execute("UPDATE DOLCharacters SET Class=39,Level=5,Experience=0,SerializedSpecs='',Gender=1,Race=9,CreationModel=310,CurrentModel=310,Health=200,Mana=100,DeathTime=0,HasGravestone=0,DisabledSpells='',DisabledAbilities='' WHERE Name='Codexdruid'")
   for c in rows:
    db.execute('UPDATE Account SET PrivLevel=?,Realm=3 WHERE Name=?',(1,c['AccountName']))
-  db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=? WHERE Name=?',(leader['Xpos'],leader['Ypos'],leader['Zpos'],leader['Region'],'Codexfriend'))
+  db.execute('UPDATE DOLCharacters SET Xpos=?,Ypos=?,Zpos=?,Region=? WHERE Name=?',(leader['Xpos']+(80 if trade_native_ui_probe else 0),leader['Ypos'],leader['Zpos'],leader['Region'],'Codexfriend'))
   result['checks']['both_players_ordinary']=all(db.execute('SELECT PrivLevel FROM Account WHERE Name=?',(c['AccountName'],)).fetchone()[0]==1 for c in rows)
   if trade_probe:
    from player_trade_wire_case import prepare
@@ -206,7 +209,10 @@ try:
   clients.append((client,root));peers.append(Peer(port))
  wait(lambda:all(p.snapshot.get('classic_ui',{}).get('skills_ready') for p in peers),'Both ordinary players ready',40)
  a,b=peers
- if trade_probe:
+ if trade_native_ui_probe:
+  from player_trade_native_wire_case import run
+  run(a,b,wait,settle,result,checked,D,ROOT,ENGINE)
+ elif trade_probe:
   from player_trade_wire_case import run
   run(a,b,wait,settle,result,checked,D)
  else:

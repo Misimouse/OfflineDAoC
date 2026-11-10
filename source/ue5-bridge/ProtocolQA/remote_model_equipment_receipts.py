@@ -10,7 +10,7 @@ def inventory(workspace):
     producer=Path(__file__).resolve().parents[1]/'UnrealPlugin/DAoCVisualBridge'
     return [(candidate/'Binaries/Win64'/n,normal/'Binaries/Win64'/n) for n in ['UnrealEditor-DAoCVisualBridge.dll','UnrealEditor.modules']]+[(producer/'Source/DAoCVisualBridge/Private/DAoCBridgeEquipment.cpp',normal/'Source/DAoCVisualBridge/Private/DAoCBridgeEquipment.cpp')]
 
-def validate(workspace,data,check_target=True):
+def validate(workspace,data,check_target=True,successor_rows=None):
     root=workspace/'RemoteModelEquipmentLab';predecessor=workspace/'RemoteModelRoundtripLab/installed.json'
     assert data['installed'] and data['phase']=='complete'
     assert not any(data[k] for k in ['database_modified','server_rules_modified','map_modified','art_modified'])
@@ -27,7 +27,9 @@ def validate(workspace,data,check_target=True):
         after=build['source_sha256'][key] if source.suffix=='.cpp' else build['binaries_sha256'][source.name]
         before=old['source_sha256'][key] if source.suffix=='.cpp' else old['binaries_sha256'][source.name]
         assert row['after_sha256']==after and row['before_sha256']==before
-        if check_target:assert digest(target)==after
+        if check_target:
+            from player_trade_receipts import predecessor_hash
+            assert predecessor_hash(target,successor_rows or {})==after
     paths=[Path(data['proofs'][k]) for k in ['red','candidate','regression']]+[root/'native_build.json']
     assert all(p.resolve().is_relative_to(root.resolve()) for p in paths)
     assert set(data['evidence'])=={str(p) for p in paths} and all(digest(Path(p))==h for p,h in data['evidence'].items())
@@ -40,8 +42,11 @@ def validate(workspace,data,check_target=True):
     assert regression['passed'] and regression['checks']>=80 and not regression['normal_runtime_modified']
     return data
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
+    if successor_rows is None:
+        from player_trade_receipts import verify as verify_trade
+        _,successor_rows=verify_trade(workspace)
     path=workspace/'RemoteModelEquipmentLab/installed.json'
     if not path.exists():return None,{}
     data=read(path)
-    return (validate(workspace,data),{r['target']:r for r in data['files']}) if data.get('installed') else (None,{})
+    return (validate(workspace,data,successor_rows=successor_rows),{r['target']:r for r in data['files']}) if data.get('installed') else (None,{})

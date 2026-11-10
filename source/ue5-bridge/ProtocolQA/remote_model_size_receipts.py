@@ -17,7 +17,9 @@ def validate(workspace,data,check_target=True):
     successor,replacements=verify_equipment(workspace)
     replacement=replacements.get(str(native))
     if replacement:
-        assert digest(native)==replacement['after_sha256'] and replacement['before_sha256']==data['native_sha256']
+        from player_trade_receipts import verify as verify_trade, predecessor_hash
+        _,trade_rows=verify_trade(workspace)
+        assert predecessor_hash(native,trade_rows)==replacement['after_sha256'] and replacement['before_sha256']==data['native_sha256']
     else:assert digest(native)==data['native_sha256']
     assert len(data['files'])==1
     row=data['files'][0];source=Path(__file__).resolve().parents[1]/'Godot/decoded_world_adapter.gd'

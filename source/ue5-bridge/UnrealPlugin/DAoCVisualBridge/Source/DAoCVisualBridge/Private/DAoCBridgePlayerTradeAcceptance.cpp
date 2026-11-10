@@ -14,8 +14,47 @@
 #include "Framework/Application/SlateApplication.h"
 #include "UnrealClient.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "GameFramework/PlayerController.h"
+#include "Widgets/SViewport.h"
 extern bool VerifyDAoCPlayerTradeDrop();
 bool UDAoCBridgeSubsystem::TickPlayerTradeAcceptance(){
+ FString LivePath;
+ if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgePlayerTradeLive="),LivePath)){
+  static FString Last;static TWeakObjectPtr<ACameraActor> LiveCamera;
+  FString Raw;TSharedPtr<FJsonObject> Instruction;if(!FFileHelper::LoadFileToString(Raw,*LivePath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Raw),Instruction)||!Instruction)return false;
+  const FString Id=Instruction->GetStringField(TEXT("id")),Action=Instruction->GetStringField(TEXT("action"));if(Id.IsEmpty()||Id==Last)return false;
+  bool Ready=false;if(InventoryState)InventoryState->TryGetBoolField(TEXT("ready"),Ready);if(!bLocalAvailable||!Ready||Session.IsEmpty()||!Socket)return false;
+  auto* View=GetWorld()?GetWorld()->GetGameViewport():nullptr;auto* PC=GetWorld()?GetWorld()->GetFirstPlayerController():nullptr;if(!View||!PC||!PC->PlayerCameraManager||!View->GetGameViewportWidget())return false;
+  TFunction<void(TSharedRef<SWidget>,const FString&,TArray<TSharedPtr<SWidget>>&)> Collect;
+  Collect=[&](TSharedRef<SWidget> W,const FString& Type,TArray<TSharedPtr<SWidget>>& Found){if(W->GetTypeAsString()==Type)Found.Add(W);auto* Children=W->GetChildren();for(int32 I=0;Children&&I<Children->Num();++I)Collect(Children->GetChildAt(I),Type,Found);};
+  auto Button=[&](const FString& Label)->TSharedPtr<SButton>{TArray<TSharedPtr<SWidget>> Buttons;if(PlayerTradePanel)Collect(PlayerTradePanel.ToSharedRef(),TEXT("SButton"),Buttons);for(auto W:Buttons){TArray<TSharedPtr<SWidget>> Texts;Collect(W.ToSharedRef(),TEXT("STextBlock"),Texts);for(auto T:Texts)if(StaticCastSharedPtr<STextBlock>(T)->GetText().ToString()==Label)return StaticCastSharedPtr<SButton>(W);}return nullptr;};
+  const int32 Before=Outgoing.Num();bool OK=false;FString Finding;
+  if(Action==TEXT("ready"))OK=true;
+  else if(Action==TEXT("begin")){
+   FString Target;const FString Name=Instruction->GetStringField(TEXT("target_name"));for(const auto& Pair:EntityRows){FString Candidate;if(Pair.Key!=TEXT("player:local")&&Pair.Key.StartsWith(TEXT("player:"))&&Pair.Value->TryGetStringField(TEXT("name"),Candidate)&&Candidate==Name)Target=Pair.Key;}
+   auto* Actor=Entities.Find(Target);if(!Actor||!IsValid(*Actor))return false;const FBox Bounds=EntitySelectionBounds(*Actor);if(!Bounds.IsValid)return false;const FVector Aim=Bounds.GetCenter(),Location=Aim+FVector(0,-650,120);
+   if(!LiveCamera.IsValid())LiveCamera=GetWorld()->SpawnActor<ACameraActor>(Location,(Aim-Location).Rotation());else LiveCamera->SetActorLocationAndRotation(Location,(Aim-Location).Rotation());PC->SetViewTarget(LiveCamera.Get());PC->PlayerCameraManager->UpdateCamera(0);
+   FVector2D Pixel,Size;View->GetViewportSize(Size);const auto Geometry=View->GetGameViewportWidget()->GetCachedGeometry();if(!PC->ProjectWorldLocationToScreen(Aim,Pixel)||Size.GetMin()<=0||Geometry.GetLocalSize().GetMin()<=0)return false;
+   Finding=TargetAtCursor(false,Pixel);const int32 Slot=Instruction->GetIntegerField(TEXT("slot"));auto Item=InventoryItem(Slot);FString Token;if(!Item||!Item->TryGetStringField(TEXT("token"),Token))return false;
+   if(Finding==Target)GiveInventoryItemAtCursor(Slot,Token,Geometry.LocalToAbsolute(Pixel/Size*Geometry.GetLocalSize()));OK=Outgoing.Num()>Before;
+  }else if(Action==TEXT("offer")){
+   bool Visible=false;if(PlayerTradeState)PlayerTradeState->TryGetBoolField(TEXT("visible"),Visible);if(!Visible||!PlayerTradePanel)return false;
+   const auto Coins=Instruction->GetArrayField(TEXT("money"));if(Coins.Num()==5){PlayerTradeMoney.Empty();for(auto Coin:Coins)PlayerTradeMoney.Add(FString::FromInt(int32(Coin->AsNumber())));auto Value=MakeShared<FJsonObject>();Value->SetArrayField(TEXT("slots"),PlayerTradeState->GetObjectField(TEXT("offer"))->GetArrayField(TEXT("own_slots")));PlayerTradeRequest(TEXT("player_trade_update"),PlayerTradeState->GetStringField(TEXT("token")),InventoryState->GetIntegerField(TEXT("state_revision")),Value);OK=Outgoing.Num()>Before;}
+  }else if(Action==TEXT("accept")||Action==TEXT("cancel")){
+   auto Control=Button(Action==TEXT("accept")?TEXT("OK"):TEXT("X"));if(!Control||!Control->IsEnabled())return false;Control->SimulateClick();OK=Outgoing.Num()>Before;
+  }else if(Action==TEXT("offer_visible")){
+   const FString Name=Instruction->GetStringField(TEXT("name")).ToUpper();TArray<TSharedPtr<SWidget>> Labels;if(PlayerTradePanel)Collect(PlayerTradePanel.ToSharedRef(),TEXT("STextBlock"),Labels);for(auto Label:Labels)OK|=StaticCastSharedPtr<STextBlock>(Label)->GetText().ToString()==Name;if(!OK)return false;
+   FScreenshotRequest::RequestScreenshot(LivePath+TEXT(".png"),true,false);
+  }else if(Action==TEXT("closed")){bool Visible=false;if(PlayerTradeState)PlayerTradeState->TryGetBoolField(TEXT("visible"),Visible);if(Visible||PlayerTradePanel)return false;OK=true;}
+  else if(Action==TEXT("finish"))OK=true;
+  auto Result=MakeShared<FJsonObject>();Result->SetStringField(TEXT("id"),Id);Result->SetStringField(TEXT("action"),Action);Result->SetBoolField(TEXT("ok"),OK);Result->SetStringField(TEXT("picked"),Finding);
+  if(Outgoing.Num()>Before){FUTF8ToTCHAR Text(reinterpret_cast<const ANSICHAR*>(Outgoing.GetData()+Before),Outgoing.Num()-Before);TSharedPtr<FJsonObject> Command;if(FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(FString(Text.Length(),Text.Get()).TrimStartAndEnd()),Command)&&Command)Result->SetObjectField(TEXT("command"),Command);}
+  FString Text;FJsonSerializer::Serialize(Result,TJsonWriterFactory<>::Create(&Text));FFileHelper::SaveStringToFile(Text,*(LivePath+TEXT(".result.json")));Last=Id;
+  if(Action==TEXT("finish"))UKismetSystemLibrary::QuitGame(GetWorld(),PC,EQuitPreference::Quit,false);
+  return false;
+ }
  FString Path;if(!FParse::Value(FCommandLine::Get(),TEXT("DaocBridgePlayerTradeTest="),Path))return false;
  static int32 Phase=0,Checks=0;static double Started=0;static TSharedPtr<FJsonObject> Fixture;static TArray<TSharedPtr<FJsonValue>> Failures;
  auto Check=[&](bool OK,const FString& Name){++Checks;if(!OK)Failures.Add(MakeShared<FJsonValueString>(Name));UE_LOG(LogTemp,Display,TEXT("Player trade acceptance %d: %s %s"),Checks,OK?TEXT("PASS"):TEXT("FAIL"),*Name);};

@@ -22,7 +22,7 @@ def inventory(workspace,install,wire_proof):
 def validate(workspace,install,plan,after=False):
     assert plan['phase']=='prepared' and not any(plan[k] for k in ['database_modified','server_rules_modified','map_modified','normal_installation_modified'])
     root=workspace/'PlayerTradeGatewayLab';proofs={k:Path(p) for k,p in plan['proofs'].items()}
-    assert set(proofs)=={'codec','state','controller','real','ui','handover','native_build','content'}
+    assert set(proofs)=={'codec','state','controller','real','native_real','ui','handover','native_build','content'}
     for key,path in proofs.items():
         assert path.resolve().is_relative_to(workspace.resolve()) and path.is_file()
         assert digest(path)==plan['evidence'][str(path)]
@@ -38,6 +38,12 @@ def validate(workspace,install,plan,after=False):
     ui=read(proofs['ui']);assert ui['passed'] and ui['checks']>=28 and ui['exchange_regression_checks']>=34 and ui['normal_installation_modified'] is False
     handover=read(proofs['handover']);assert handover['passed'] and handover['checks']>=27 and handover['actual_viewport_picking'] and handover['normal_installation_modified'] is False
     build=read(proofs['native_build']);assert build['passed'] and build['normal_binary_modified'] is False
+    native_real=read(proofs['native_real'])
+    assert native_real['passed'] and all(native_real['checks'].values())
+    assert {'actual_native_body_drop','actual_native_cancel_preserves_goods','actual_native_partner_item_label','actual_native_accept_button','native_accept_does_not_predict_ownership','actual_native_trade_transfers_goods_and_money','native_commands_forwarded_without_rewrite','native_client_normal_shutdown','native_trade_saved_item_ownership','native_trade_saved_account_realm_balances'} <= native_real['checks'].keys()
+    assert all(native_real[k] for k in ['normal_shutdown','database_restored','private_server_restored','private_navigation_restored','normal_runtime_unchanged'])
+    assert native_real['production_gateway_guards_tested'] and not native_real['direct_transport_probe'] and not native_real['ui_installed']
+    assert native_real['source_inputs'][str(proofs['native_build'])]==digest(proofs['native_build'])
     assert ui['build_receipt_sha256']==handover['build_receipt_sha256']==digest(proofs['native_build'])
     old=read(workspace/'RemoteModelEquipmentLab/native_build.json');before={Path(k).as_posix():v for k,v in old['source_sha256'].items()};current={Path(k).as_posix():v for k,v in build['source_sha256'].items()}
     assert {k for k in current if current[k]!=before.get(k)}=={'DAoCVisualBridge/'+n for n in NATIVE}
@@ -59,7 +65,7 @@ def validate(workspace,install,plan,after=False):
     assert 'QA_TRADE_SEND' not in candidate.read_text(encoding='utf-8-sig')
     # A proof's pre-install source may only change through an explicitly listed
     # before->after row; no broad bypass for historical evidence.
-    for proof in [codec,state,controller,real]:
+    for proof in [codec,state,controller,real,native_real]:
         for name,sha in proof.get('source_inputs',{}).items():
             path=Path(name);actual=digest(path)
             if actual==sha:continue
@@ -78,5 +84,5 @@ def prepare(workspace,install,proofs):
     out=workspace/'PlayerTradeGatewayLab/delivery-plan.json';out.write_text(json.dumps(plan,indent=2));return dict(passed=True,files=len(plan['files']),plan=str(out),installed=False)
 if __name__=='__main__':
     p=argparse.ArgumentParser()
-    for key in ['workspace','install','codec','state','controller','real','ui','handover']:p.add_argument('--'+key,type=Path,required=True)
-    a=p.parse_args();workspace=a.workspace.resolve();proofs={k:getattr(a,k).resolve() for k in ['codec','state','controller','real','ui','handover']};proofs.update(native_build=workspace/'PlayerTradeGatewayLab/native_build.json',content=workspace/'PlayerTradeUILab/content_verified.json');print(json.dumps(prepare(workspace,a.install.resolve(),proofs)))
+    for key in ['workspace','install','codec','state','controller','real','native_real','ui','handover']:p.add_argument('--'+key,type=Path,required=True)
+    a=p.parse_args();workspace=a.workspace.resolve();proofs={k:getattr(a,k).resolve() for k in ['codec','state','controller','real','native_real','ui','handover']};proofs.update(native_build=workspace/'PlayerTradeGatewayLab/native_build.json',content=workspace/'PlayerTradeUILab/content_verified.json');print(json.dumps(prepare(workspace,a.install.resolve(),proofs)))

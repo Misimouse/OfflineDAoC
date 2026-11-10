@@ -2,6 +2,7 @@
 import argparse,copy,json
 from pathlib import Path
 from player_trade_delivery_plan import read,validate
+from prepare_combined_expansion_data import digest
 
 def verify(workspace,install):
     path=workspace/'PlayerTradeGatewayLab/delivery-plan.json';plan=read(path);validate(workspace,install,plan)
@@ -26,7 +27,7 @@ def verify(workspace,install):
         try:validate(workspace,install,candidate)
         except (AssertionError,KeyError,ValueError):rejected.append(name)
         else:raise AssertionError('Altered manifest accepted: '+name)
-    value=dict(passed=True,checks=1+len(rejected),altered_plans_rejected=rejected,normal_installation_modified=False,server_started=False)
+    value=dict(passed=True,checks=1+len(rejected),altered_plans_rejected=rejected,plan_sha256=digest(path),normal_installation_modified=False,server_started=False)
     out=workspace/'PlayerTradeGatewayLab/delivery_guards_verified.json';out.write_text(json.dumps(value,indent=2));return value
 if __name__=='__main__':
     p=argparse.ArgumentParser()

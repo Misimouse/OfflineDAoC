@@ -769,6 +769,7 @@ public partial class DaocClient : Node
 		var d = new Godot.Collections.Dictionary();
 		switch (code)
 		{
+			case 0xEA: return ReadTradeWindow1127(r);
 			case 0x21:                                    // DebugMode - or the companion raid window (CompanionRaid.Send:
 				if (r.Left >= 44)                         // 128 bytes, marker 0x52, version 1)
 				{

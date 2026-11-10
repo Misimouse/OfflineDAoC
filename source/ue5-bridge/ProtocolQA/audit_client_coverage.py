@@ -246,6 +246,12 @@ def audit(workspace,install):
         assert summary['real_checks']>=17 and summary['controller_checks']>=35 and summary['native_ui_checks']>=28 and summary['native_handover_checks']>=27
         row('Player-trade production gateway candidate',[],['Godot/player_trade_controller.gd','Godot/live_gateway.gd'],'private_gateway_candidate_not_installed','17 ordinary two-player production-action checks,35 controller guards,28 UI and27 viewport handover checks. Exact22-file plan verified; connected native-to-server acceptance and historical deployment receipts precede installation.')
         result['next_package']='CLIENT-PLAYER-TRADE-NATIVE-LIVE: connect real native UI controls to ordinary server exchange before guarded deployment'
+    from player_trade_receipts import verify as verify_player_trade
+    installed_trade,trade_rows=verify_player_trade(workspace)
+    if installed_trade:
+        path=workspace/'PlayerTradeGatewayLab/installed.json';inputs[str(path)]=digest(path)
+        row('Original player-trade installed',[],['Godot/player_trade_controller.gd','Godot/live_gateway.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgePlayerTrade.inl'],'installed_owner_review_pending','Exact22-file delivery. Original native body-drop/cancel/update/accept reaches ordinary server; items and money remain server-owned and persist after logout. Source/candidate/native evidence and historical successor chain verified. Owner two-player review remains separate.')
+        result['next_package']='CLIENT-VAULT-TRADE-LIFECYCLE: verify original personal/account bank operations and incompatible transaction state after player-trade integration; preserve server permissions and stored ownership'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
