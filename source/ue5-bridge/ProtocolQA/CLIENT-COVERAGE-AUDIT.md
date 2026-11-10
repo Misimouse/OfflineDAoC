@@ -1,6 +1,6 @@
 # Client coverage checkpoint, 10 November
 
-The original Godot client has 27 UI source files. Current transport exposes 75 gameplay actions and 28 snapshot metadata fields. These are source contracts, not a migration percentage. Reproduce the inventory and evidence links with audit_client_coverage.py.
+The original Godot client has 27 UI source files. Current transport exposes 77 gameplay actions and 28 snapshot metadata fields. These are source contracts, not a migration percentage. Reproduce the inventory and evidence links with audit_client_coverage.py.
 
 The preceding installed delivery is original NPC ghost presentation: separate create-bit metadata, original race/monster classification, actor-local original-color translucency, front-surface depth treatment and whole-outfit fallback. It passes 534 installed native checks, 21 coordinator replay checks and a 16-frame animation comparison; predecessor guards and reversible backups are retained. Owner gameplay review remains deferred. See NPC-VISUAL-FLAGS-AUDIT.md. The prior personal/peer torch (593df25) remains installed: editable Shift+T, retained Training T and original time/storm weighting. See PERSONAL-TORCH-DELIVERY.md.
 
@@ -10,7 +10,7 @@ The latest installed package restores the two exported effect-only NPC bodies, W
 
 The latest controls successor adds editable original server-authorized sprint and three weapon-set actions.58 state,346 gateway/regression,451 installed native and14 ordinary disposable-server checks pass. Its eight-file delivery has34 simulated chain checks and guarded recovery; existing saved bindings and accepted movement controls remain intact. No player data, server rules or WORK assets are replaced. See CONTROLS-PARITY-AUDIT.md. Owner gameplay review is pending.
 
-The next bounded package audits original keyboard turning, while preserving current A/D strafing and mouse camera behavior. Remaining controls are separated from existing aliases/fixed shortcuts before implementation. Original NPC torch metadata does not authorize invented map lights.
+The keyboard-turning successor adds editable Left/Right arrows while preserving accepted A/D strafing and mouse camera behavior. It retains the original180-degree/second turn, RMB strafe, LMB camera independence and existing movement heading packets.632 candidate native checks cover actual dispatch, cadence/tracking, UI and positive HP. Installed verification is recorded separately in its receipt. See KEYBOARD-TURNING-AUDIT.md. The next bounded audit concerns original group-target shortcuts and existing authoritative group targeting. Remaining controls are separated from existing aliases/fixed shortcuts before implementation. Original NPC torch metadata does not authorize invented map lights.
 
 Remaining separate work includes full original controls presets/unsupported actions, appearance review, cross-zone transport/world coverage, remaining unexported effect-only creatures, complete spell/equipment variants and battle-scale RvR performance. Diving/climbing audits preserve original Connacht permissions. Quest/crafting/poison UX modernization, Housing/decorations and expansion world population remain explicit later requirements.
 

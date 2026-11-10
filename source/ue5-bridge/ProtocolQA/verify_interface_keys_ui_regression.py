@@ -6,7 +6,7 @@ from prepare_combined_expansion_data import digest
 from verify_options_audio_native import read
 
 def verify(workspace,engine,lab_name="InterfaceKeysLab",installed=False):
-    assert lab_name in ["InterfaceKeysLab","OriginalControlsLab"]
+    assert lab_name in ["InterfaceKeysLab","OriginalControlsLab","KeyboardTurningLab"]
     root=workspace/lab_name;bp=root/'native_build.json';build=read(bp);assert build['passed']
     normal=workspace/'Client/Plugins/DAoCVisualBridge/Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll';before=digest(normal);assert before==(build['binaries_sha256'][normal.name] if installed else build['normal_binary_sha256'])
     output=root/('InstalledUIRegression' if installed else 'UIRegression')/datetime.now().strftime('%Y%m%d-%H%M%S-%f');output.mkdir(parents=True);reports={};inputs={str(bp):digest(bp)}

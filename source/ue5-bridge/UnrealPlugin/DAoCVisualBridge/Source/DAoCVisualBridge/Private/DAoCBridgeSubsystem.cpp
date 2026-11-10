@@ -6,6 +6,7 @@
 #include "HAL/FileManager.h"
 #include "DAoCBridgeCharacter.h"
 #include "DAoCBridgeMovementKeys.h"
+#include "DAoCBridgeKeyboardTurning.h"
 #include "DAoCBridgeTargetTracking.h"
 #include "SocketSubsystem.h"
 #include "Sockets.h"
@@ -404,7 +405,11 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(InputAvailable)for(const TCHAR* Action:{TEXT("face"),TEXT("follow"),TEXT("stick")})if(KeyConfiguration->Pressed(PC,Action))RequestTargetTracking(Action);
         float Fwd=Keys.Forward;
         float Right=Keys.Right;
-        FRotator Flat(0,CameraYaw,0);Desired=(Flat.Vector()*Fwd+FRotationMatrix(Flat).GetUnitAxis(EAxis::Y)*Right).GetClampedToMaxSize(1);
+        const bool TurnLeft=InputAvailable&&KeyConfiguration->Held(PC,TEXT("turn_left")),TurnRight=InputAvailable&&KeyConfiguration->Held(PC,TEXT("turn_right"));
+        auto Turn=FBridgeKeyboardTurning::Advance(InputAvailable,TurnLeft,TurnRight,bRightPointerHeld,bLeftPointerHeld,Dt,PlayerPawn->GetActorRotation().Yaw,CameraYaw);
+        Right=FMath::Clamp(Right+Turn.Strafe,-1.f,1.f);
+        const float MoveYaw=Turn.Turning?Turn.BodyYaw:CameraYaw;
+        FRotator Flat(0,MoveYaw,0);Desired=(Flat.Vector()*Fwd+FRotationMatrix(Flat).GetUnitAxis(EAxis::Y)*Right).GetClampedToMaxSize(1);
         if(bAutoTest){double Elapsed=FPlatformTime::Seconds()-PlayerStartedAt;Desired=(Elapsed>20&&Elapsed<25)?FVector(1,0,0):FVector::ZeroVector;
             if(bAutoWalk){int32 Leg=int32((Elapsed-20)/8);Desired=(Elapsed>=20&&Elapsed<52)?((Leg<2?Flat.Vector():FRotationMatrix(Flat).GetUnitAxis(EAxis::Y))*(Leg%2==0?1:-1)):FVector::ZeroVector;}
         }
@@ -413,9 +418,16 @@ void UDAoCBridgeSubsystem::UpdateControls(float Dt){
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoWaterTest"))){const double T=FPlatformTime::Seconds()-PlayerStartedAt;Desired=T>=8&&T<12?FVector(1,0,0):T>=16&&T<28&&PlayerPosition.X>StartPosition.X+15?FVector(-1,0,0):FVector::ZeroVector;}
         if(bAutoDoorTest)UpdateDoorTest(float(FPlatformTime::Seconds()-PlayerStartedAt),Desired);
         if(!PlayerCanMove()||ServerRunSpeed<=0){Desired=FVector::ZeroVector;PlayerPawn->ConsumeMovementInputVector();PlayerPawn->GetCharacterMovement()->StopMovementImmediately();}
-        const bool ManualTrackInput=KeyConfiguration->Held(PC,TEXT("move_forward"))||KeyConfiguration->Held(PC,TEXT("move_back"))||KeyConfiguration->Held(PC,TEXT("strafe_left"))||KeyConfiguration->Held(PC,TEXT("strafe_right"))||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock);
+        const bool ManualTrackInput=KeyConfiguration->Held(PC,TEXT("move_forward"))||KeyConfiguration->Held(PC,TEXT("move_back"))||KeyConfiguration->Held(PC,TEXT("strafe_left"))||KeyConfiguration->Held(PC,TEXT("strafe_right"))||(bLeftPointerHeld&&bRightPointerHeld)||(MovementKeys&&MovementKeys->RunLock)||((TurnLeft||TurnRight)&&(!TargetTracking||TargetTracking->Mode!=TEXT("face")));
         const bool Tracking=UpdateTargetTracking(TrackingEnabled,ManualTrackInput,Desired);
-        if(!Tracking&&!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
+        if(Tracking&&TargetTracking&&TargetTracking->Mode==TEXT("face")){
+            // The original face mode is not cancelled by a turn key. Its right-
+            // mouse variant can strafe around the target while retaining facing.
+            Turn=FBridgeKeyboardTurning::Advance(InputAvailable,TurnLeft,TurnRight,bRightPointerHeld,bLeftPointerHeld,Dt,PlayerPawn->GetActorRotation().Yaw,CameraYaw);
+            if(Turn.Strafe!=0)Desired=FRotationMatrix(PlayerPawn->GetActorRotation()).GetUnitAxis(EAxis::Y)*Turn.Strafe;
+        }
+        if(!FacingLocked&&Turn.Turning){PlayerPawn->SetActorRotation(FRotator(0,Turn.BodyYaw,0));CameraYaw=Turn.CameraYaw;PC->SetControlRotation(FRotator(CameraPitch,CameraYaw,0));}
+        else if(!Tracking&&!FacingLocked&&!Desired.IsNearlyZero())PlayerPawn->SetActorRotation(FRotator(0,CameraYaw,0));
         if(Focused&&KeyConfiguration->Pressed(PC,TEXT("jump"))){if(bLocalMounted)RequestDismount();else if(!FacingLocked&&!bLocalSwimming&&ServerRunSpeed>0&&PlayerPawn->GetCharacterMovement()->IsMovingOnGround())PlayerPawn->Jump();}
         if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeAutoJumpTest"))){
             const double T=FPlatformTime::Seconds()-PlayerStartedAt;

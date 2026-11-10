@@ -106,6 +106,11 @@ def audit(workspace,install):
         result['next_package']='CLIENT-KEYBOARD-TURNING-AUDIT'
         for feature in rows:
             if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_73_supported_controls',notes='73 supported actions; full presets, keyboard turning and remaining actions are separate.')
+    if (workspace/'KeyboardTurningLab/installed.json').exists() and json.loads((workspace/'KeyboardTurningLab/installed.json').read_text()).get('installed',False):
+        row('Original modern keyboard turning',['player.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeKeyboardTurning.h','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeSubsystem.cpp'],'installed_owner_review_deferred','Editable Left/Right arrows, original180 degree/second turn, RMB strafe, LMB independent camera. Existing movement heading packets and seated/dead/menu/riding gates.632 candidate and installed native checks; no new server/database contract. Full classic mode/presets remain separate.')
+        result['next_package']='CLIENT-GROUP-TARGET-SHORTCUT-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_75_supported_controls',notes='75 supported actions; full presets and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

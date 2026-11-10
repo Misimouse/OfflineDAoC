@@ -1,5 +1,9 @@
+#include "GameFramework/CharacterMovementComponent.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeKeyConfiguration.h"
+#include "DAoCBridgeCharacter.h"
+#include "DAoCBridgeTargetTracking.h"
+#include "Components/BoxComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerInput.h"
@@ -26,7 +30,7 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
             Check(KeyConfiguration->Text(TEXT("show_inventory"),0)==TEXT("I")&&KeyConfiguration->Text(TEXT("qb3_10"),0)==TEXT("Ctrl+Zero"),TEXT("new actions receive defaults without discarding saved movement"));
             KeyConfiguration->Reset();
         }
-        Check(K.Actions.Num()==73,TEXT("73 supported actions include server-authorized sprint and weapon selection"));
+        Check(K.Actions.Num()==75,TEXT("75 supported actions include original keyboard turning"));
         for(const auto& A:K.Actions)Check(A.Bindings==A.Defaults&&(A.Bindings[0].IsEmpty()||FBridgeKeyConfiguration::Parse(A.Bindings[0],Chord)),*FString::Printf(TEXT("valid unchanged default %s"),*A.Id));
         for(const FKey Key:{EKeys::Escape,EKeys::Enter,EKeys::F11,EKeys::F1,EKeys::F2,EKeys::F3,EKeys::F4,EKeys::F5,EKeys::LeftMouseButton})Check(!K.Bind(TEXT("jump"),0,Key.GetFName().ToString(),Message),TEXT("fixed action cannot be shadowed"));
         Check(!K.Bind(TEXT("unknown"),0,TEXT("Q"),Message)&&!K.Bind(TEXT("jump"),2,TEXT("Q"),Message),TEXT("invalid action and slot rejected"));
@@ -66,6 +70,7 @@ bool UDAoCBridgeSubsystem::TickKeyConfigurationAcceptance(){
                 Check(KeyConfiguration->Bind(TEXT("qb2_4"),0,TEXT("Ctrl+Q"),Message),TEXT("quickbar action accepts changed chord"));Press(TEXT("Ctrl+Q"));UpdateClassicInput();auto Changed=Capture(TEXT("ui_use_slot"));if(Changed)Check(Changed->GetIntegerField(TEXT("bar"))==1&&Changed->GetIntegerField(TEXT("slot"))==3,TEXT("remapped chord keeps authoritative quickbar indices"));
                 Press(TEXT("Alt+Four"));UpdateClassicInput();Check(Outgoing.IsEmpty(),TEXT("former quickbar chord no longer activates"));
                 for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("P"),TEXT("character")},{TEXT("H"),TEXT("skills")},{TEXT("J"),TEXT("combat")},{TEXT("G"),TEXT("group")}}){Press(Pair.Key);UpdateClassicInput();Check(ClassicTab==Pair.Value&&bClassicOpen,TEXT("actual existing window action retains original sheet"));}
+#include "DAoCBridgeKeyboardTurningAcceptance.inl"
                 if(FParse::Param(FCommandLine::Get(),TEXT("DaocBridgeWeaponSprintTest"))){
                     auto PreviousInventory=InventoryState;InventoryState=MakeShared<FJsonObject>();InventoryState->SetBoolField(TEXT("ready"),true);InventoryState->SetNumberField(TEXT("state_revision"),5);
                     TArray<TSharedPtr<FJsonValue>> WeaponItems;for(int32 Slot:{10,12,13}){auto Item=MakeShared<FJsonObject>();Item->SetNumberField(TEXT("slot"),Slot);Item->SetStringField(TEXT("token"),FString::Printf(TEXT("item-%d"),Slot));WeaponItems.Add(MakeShared<FJsonValueObject>(Item));}InventoryState->SetArrayField(TEXT("items"),WeaponItems);
