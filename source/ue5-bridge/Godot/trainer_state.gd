@@ -37,7 +37,7 @@ func sync(server:Node,client:Node,now:int)->void:
                 list.append({"level":int(skill.get("level",0)),"name":String(skill.get("name","")),"kind":{2:"style",3:"spell",4:"song",5:"ability"}.get(page,"skill"),"icon":int(icon[0]),"border":int(icon[1])})
             previews[str(int(index))]=list
     for row in specs:
-        row["kind"]="spec";row["cost"]=int(row.get("next",int(row.level)+1));row["can_train"]=int(row.level)<mini(character_level,50);row["token"]=identity(row)
+        row["kind"]="spec";row["cost"]=int(row.get("next",int(row.level)+1));row["can_train"]=int(row.level)<mini(character_level,50) and int(row.cost)>0 and int(row.cost)<=spec_points;row["token"]=identity(row)
     for row in realm:
         row["kind"]="realm";row["can_train"]=bool(row.get("available",false)) and int(row.get("cost",0))<=realm_points;row["token"]=identity(row)
     if not pending.is_empty():

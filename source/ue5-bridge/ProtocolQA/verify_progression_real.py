@@ -5,9 +5,12 @@ import sys
 source_qa=Path(os.environ.get("DAOC_BRIDGE_SOURCE_QA",str(ROOT.parent/"DAoC-Enhanced-Godot/source/ue5-bridge/ProtocolQA"))).resolve();assert (source_qa/"central_activation_receipts.py").is_file();sys.path.insert(0,str(source_qa))
 from central_activation_receipts import verify_files
 from prepare_combined_expansion_data import digest
-SOURCE=ROOT/'Godot'
+source_mode=os.environ.get('DAOC_PROGRESSION_GODOT','installed');assert source_mode in ['installed','candidate']
+SOURCE=source_qa.parent/'Godot' if source_mode=='candidate' else ROOT/'Godot'
 training_case=os.environ.get('DAOC_PROGRESSION_TRAINING','off');assert training_case in ['off','on','cast']
-D=ROOT/({'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab'}[training_case]+'/RealProtocol')/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
+assert source_mode!='candidate' or training_case=='on'
+budget_receipt=ROOT/'TrainerAffordabilityLab/installed.json';budget_probe=source_mode=='candidate' or (budget_receipt.exists() and json.loads(budget_receipt.read_text()).get('installed',False))
+D=ROOT/(('TrainerAffordabilityLab' if source_mode=='candidate' or (budget_probe and training_case=='on') else {'off':'ProgressionLab','on':'ProgressionTrainingLab','cast':'ProgressionCastingLab'}[training_case])+('/InstalledRealProtocol' if source_mode=='installed' and budget_probe and training_case=='on' else '/RealProtocol'))/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)
 BACKUP=ROOT/'Backups'/('Progression_'+time.strftime('%Y%m%d-%H%M%S'));BACKUP.mkdir()
 config_backups=[];candidate_files=[];backed=False;relay=None
 normal=verify_files(ROOT)
@@ -154,6 +157,11 @@ try:
   wait(lambda:any(e['name']=='Regrowth' and e['level']==2 for e in ui().get('specs',[])) and ui()['points']['spec_points']==0,'Character sheet receives trained rank and points')
   result['checks']['earned_points_spent_exactly_once']=True
   result['checks']['trained_rank_reaches_character_sheet']=True
+  if budget_probe:
+   unavailable=dict(next(e for e in trainer()['specs'] if e['name']=='Nurture'))
+   result['checks']['zero_budget_marks_lower_rank_unavailable']=unavailable['level']==1 and unavailable['cost']==2 and not unavailable['can_train']
+   a.send('trainer_train',training_kind='spec',training_index=unavailable['index'],training_token=unavailable['token']);settle(.5)
+   result['checks']['current_unaffordable_training_request_refused']=not trainer()['pending'] and trainer()['spec_points']==0 and 'requirements' in trainer().get('feedback','').lower() and any(e['name']=='Nurture' and e['level']==1 for e in trainer()['specs'])
   a.send('trainer_train',training_kind='spec',training_index=row['index'],training_token=row['token']);settle(.5)
   result['checks']['old_training_token_cannot_spend_again']=trainer()['spec_points']==0 and any(e['name']=='Regrowth' and e['level']==2 for e in trainer()['specs']) and 'changed' in trainer().get('feedback','').lower()
   slot=ui()['bars'][2][0][9]
