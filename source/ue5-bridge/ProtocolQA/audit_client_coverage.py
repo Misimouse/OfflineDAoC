@@ -101,6 +101,11 @@ def audit(workspace,install):
     if (workspace/'NpcEffectsLab/installed.json').exists() and json.loads((workspace/'NpcEffectsLab/installed.json').read_text()).get('installed',False):
         row('Original effect-only NPC bodies',['npcs/npc.gd','nif_particles.gd','nif_scene.gd'],['UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeNpcEffects.inl'],'installed_two_exported_models_owner_review_deferred','Wisp966 and Flies2020: original geometry/particles/textures, billboard/float/scale/range, bounded independent budgets, physical draw bounds for selection/names.595 installed native checks and32 captures.44 prepared resources are not44 fully accepted creatures; other warnings and Catacombs population remain separate.')
         result['next_package']='CLIENT-ORIGINAL-CONTROLS-AUDIT'
+    if (workspace/'OriginalControlsLab/installed.json').exists() and json.loads((workspace/'OriginalControlsLab/installed.json').read_text()).get('installed',False):
+        row('Original weapon and sprint shortcuts',['ui/game_ui.gd','net/server.gd','zone_viewer.gd'],['Godot/weapon_sprint_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeKeyConfiguration.cpp'],'installed_owner_review_deferred','Four editable actions; actual original UseSlot10/12/13 and DOL /sprint. Current item/generation gates, server acknowledgement, preserved saved bindings.58state,346gateway/regression,451installed native,14ordinary-server checks. No full preset activation.')
+        result['next_package']='CLIENT-KEYBOARD-TURNING-AUDIT'
+        for feature in rows:
+            if feature['feature']=='Full keyboard/settings interface':feature.update(status='partial_editable_73_supported_controls',notes='73 supported actions; full presets, keyboard turning and remaining actions are separate.')
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
