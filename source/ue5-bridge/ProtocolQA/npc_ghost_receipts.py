@@ -16,7 +16,7 @@ def read(path):
     return json.loads(path.read_text(encoding='utf-8-sig'))
 
 
-def expected_files(workspace, proofs):
+def expected_files(workspace, proofs, verify_sources=True):
     lab = workspace/'NpcVisualFlagsLab'
     build = read(lab/'native_build.json')
     old = read(workspace/'PersonalTorchLab/native_build.json')
@@ -31,7 +31,8 @@ def expected_files(workspace, proofs):
     state = read(lab/'state_tests.json')
     assert build['passed'] and build['normal_binary_sha256'] == old['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     assert state['passed'] and state['checks'] >= 1815
-    assert all(digest(Path(p)) == h for p, h in state['source_inputs'].items())
+    if verify_sources:
+        assert all(digest(Path(p)) == h for p, h in state['source_inputs'].items())
     assert native['passed'] and native['build_sha256'] == digest(lab/'native_build.json')
     assert {r['name']:r['checks'] for r in native['reports']} == dict(ghost=48, torch=19, pose=55, combat=25, motion=387)
     assert native['material_sha256'] == digest(materials)
@@ -50,7 +51,8 @@ def expected_files(workspace, proofs):
     rows = []
 
     def add(origin, target, before, after):
-        assert origin.is_file() and digest(origin) == after, str(origin)
+        if verify_sources:
+            assert origin.is_file() and digest(origin) == after, str(origin)
         assert target.resolve().is_relative_to(workspace.resolve()), str(target)
         rows.append(dict(source=str(origin), target=str(target), before_sha256=before, after_sha256=after))
 
@@ -85,7 +87,14 @@ def expected_files(workspace, proofs):
     return rows
 
 
-def verify(workspace):
+def verify(workspace, successor_rows=None):
+    successor_rows = successor_rows or {}
+    def current_hash(path):
+        replacement = successor_rows.get(str(path))
+        if replacement:
+            assert digest(path) == replacement['after_sha256']
+            return replacement['before_sha256']
+        return digest(path)
     path = workspace/'NpcVisualFlagsLab/installed.json'
     data = read(path) if path.exists() else None
     if not data or not data.get('installed'):
@@ -95,11 +104,13 @@ def verify(workspace):
     assert digest(predecessor) == data['predecessor_receipt_sha256']
     assert read(predecessor)['native_after_sha256'] == data['native_before_sha256']
     assert data['evidence'] and all(digest(Path(p)) == h for p, h in data['evidence'].items())
-    expected = {r['target']:r for r in expected_files(workspace, data['proofs'])}
+    # Installed verification compares the sealed build/evidence to the actual
+    # runtime. The development checkout may already contain its next candidate.
+    expected = {r['target']:r for r in expected_files(workspace, data['proofs'],verify_sources=False)}
     rows = {r['target']:r for r in data['files']}
     assert len(rows) == len(data['files']) == len(expected) and rows.keys() == expected.keys()
     for target, row in rows.items():
         assert all(row[k] == expected[target][k] for k in ['source','before_sha256','after_sha256'])
-        assert digest(Path(target)) == row['after_sha256']
+        assert current_hash(Path(target)) == row['after_sha256']
     assert data['native_after_sha256'] == read(workspace/'NpcVisualFlagsLab/native_build.json')['binaries_sha256']['UnrealEditor-DAoCVisualBridge.dll']
     return data, rows

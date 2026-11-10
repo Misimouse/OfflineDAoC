@@ -39,6 +39,7 @@ bool UDAoCBridgeSubsystem::CanSelect(const FString& Id,FVector& Aim) const{
     const float Range=Quality==TEXT("accessible")?6000:Quality==TEXT("balanced")?9000:Quality==TEXT("high")?12500:15000;
     if(FVector::DistSquared(PlayerPosition,(*A)->GetActorLocation())>FMath::Square(Range))return false;
     const FBox Body=EntitySelectionBounds(*A);
+    if((*A)->ActorHasTag(TEXT("DAoCBridgeEffectBody"))&&!Body.IsValid)return false;
     Aim=Body.IsValid?Body.GetCenter():(*A)->GetActorLocation()+FVector(0,0,90);
     auto* PC=GetWorld()->GetFirstPlayerController();if(!PC||!PC->PlayerCameraManager)return false;
     FCollisionQueryParams Q(SCENE_QUERY_STAT(BridgeTargetSight),true);Q.AddIgnoredActor(*A);if(PlayerPawn)Q.AddIgnoredActor(PlayerPawn);
@@ -51,7 +52,8 @@ FBox UDAoCBridgeSubsystem::EntitySelectionBounds(const AActor* Actor) const{
     TInlineComponentArray<UPrimitiveComponent*> Components;Actor->GetComponents(Components);
     for(auto* Component:Components){
         if(!Component->IsRegistered()||!Component->IsVisible()||Component->bHiddenInGame||Component->ComponentHasTag(TEXT("DAoCBridgeEquipment")))continue;
-        if(!Cast<UStaticMeshComponent>(Component)&&!Cast<USkinnedMeshComponent>(Component))continue;
+        if(!Cast<UStaticMeshComponent>(Component)&&!Cast<USkinnedMeshComponent>(Component)&&
+            !(Actor->ActorHasTag(TEXT("DAoCBridgeEffectBody"))&&Component->ComponentHasTag(TEXT("DAoCBridgeEffectBounds"))))continue;
         const FBox Box=Component->CalcBounds(Component->GetComponentTransform()).GetBox();
         if(Box.IsValid&&!Box.GetCenter().ContainsNaN()&&!Box.GetExtent().ContainsNaN()&&!Box.GetExtent().IsNearlyZero())Body+=Box;
     }

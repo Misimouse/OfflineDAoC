@@ -1,6 +1,7 @@
 #include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeApprovedEnvironment.h"
+#include "DAoCBridgeNpcEffectBody.h"
 #include "Misc/ScopeExit.h"
 #include "HAL/FileManager.h"
 #include "DAoCBridgeCharacter.h"
@@ -188,7 +189,11 @@ AActor* UDAoCBridgeSubsystem::CreateEntity(const FString& Id,TSharedPtr<FJsonObj
     Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     FString Asset,Kind;
     if(Entry&&(*Entry)->TryGetStringField(TEXT("type"),Kind)&&Kind==TEXT("hidden"))return nullptr;
-    if(Entry&&(*Entry)->TryGetStringField(TEXT("asset"),Asset)&&(*Entry)->TryGetStringField(TEXT("type"),Kind)){
+    if(Kind==TEXT("effect_body")){
+        FString EntityKind;if(!Row->TryGetStringField(TEXT("kind"),EntityKind)||EntityKind!=TEXT("npc"))return nullptr;
+        Actor=BridgeCreateNpcEffectBody(GetWorld(),Pos,Params);
+    }
+    if(!Actor&&Entry&&(*Entry)->TryGetStringField(TEXT("asset"),Asset)&&(*Entry)->TryGetStringField(TEXT("type"),Kind)){
         if(Kind==TEXT("skeletal")){
             if(auto* Mesh=LoadObject<USkeletalMesh>(nullptr,*Asset)){
                 auto* A=GetWorld()->SpawnActor<ASkeletalMeshActor>(Pos,FRotator::ZeroRotator,Params);

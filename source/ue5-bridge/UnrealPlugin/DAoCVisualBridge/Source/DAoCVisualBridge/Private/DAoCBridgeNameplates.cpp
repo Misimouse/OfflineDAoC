@@ -48,6 +48,7 @@ void UDAoCBridgeSubsystem::DrawNameplates(AHUD* HUD,UCanvas* Canvas){
         const float EntityRange=Quality==TEXT("accessible")?6000:Quality==TEXT("balanced")?9000:Quality==TEXT("high")?12500:15000;
         if(Distance>EntityRange||(!Selected&&Distance>4000))continue;
         FVector Anchor=Pair.Value->GetActorLocation()+FVector(0,0,210);
+        if(Pair.Value->ActorHasTag(TEXT("DAoCBridgeEffectBody"))){const FBox Body=EntitySelectionBounds(Pair.Value.Get());if(!Body.IsValid)continue;Anchor=FVector(Body.GetCenter().X,Body.GetCenter().Y,Body.Max.Z+20);}
         if(auto* Root=Cast<UPrimitiveComponent>(Pair.Value->GetRootComponent()))Anchor.Z=Root->Bounds.GetBox().Max.Z+20;
         FVector2D Screen;if(!PC->ProjectWorldLocationToScreen(Anchor,Screen)||Screen.X<0||Screen.Y<0||Screen.X>Canvas->SizeX||Screen.Y>Canvas->SizeY)continue;
         auto& Visibility=NameplateVisibility.FindOrAdd(Pair.Key);
