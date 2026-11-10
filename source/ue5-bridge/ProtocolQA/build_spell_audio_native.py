@@ -8,9 +8,9 @@ import subprocess
 from prepare_combined_expansion_data import digest
 
 
-def build(workspace, engine, lab_name='SpellAudioLab'):
+def build(workspace, engine, lab_name='SpellAudioLab', candidate_source=None):
     repo=Path(__file__).resolve().parents[3]
-    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab','PersonalTorchLab','NpcVisualFlagsLab','NpcEffectsLab','OriginalControlsLab','KeyboardTurningLab','GroupTargetKeysLab','GroundObjectsLab','GroundObjectRuntimeLab','ChatReplyLab','InterfaceVisibilityLab','ItemShortcutsLab','RealmWarKeysLab','RemoteModelEquipmentLab','PlayerTradeUILab','PlayerTradeGatewayLab']
+    assert lab_name in ['SpellAudioLab','CombatAudioLab','TargetSelectionLab','OptionsAudioLab','DoorAudioLab','FootstepAudioLab','ServerSoundAudioLab','WaterMovementLab','JumpLandingLab','MovementKeysLab','TargetTrackingLab','LiveRidingLab','KeyConfigurationLab','InterfaceKeysLab','DisplaySettingsLab','DisplaySettingsFixLab','GuildWindowLab','EmblemWindowLab','ItemHandoverLab','HoverDetailsLab','UIScaleLab','WindowRecoveryLab','PlayerVitalsLab','CompassLab','WorldClockLab','StealthLab','InventoryQuantityLab','RvRWindowsLab','SiegeWindowLab','GroundTargetLab','SiegeWorldLab','SiegeImpactLab','RemotePlayerLab','PersonalTorchLab','NpcVisualFlagsLab','NpcEffectsLab','OriginalControlsLab','KeyboardTurningLab','GroupTargetKeysLab','GroundObjectsLab','GroundObjectRuntimeLab','ChatReplyLab','InterfaceVisibilityLab','ItemShortcutsLab','RealmWarKeysLab','RemoteModelEquipmentLab','PlayerTradeUILab','PlayerTradeGatewayLab','QuestRewardsLab/Native']
     root=workspace/lab_name
     assert not (root/'installed.json').exists(), 'This delivery build is sealed; use a fresh candidate lab for its successor'
     host=root/'NativeHost'
@@ -37,7 +37,7 @@ def build(workspace, engine, lab_name='SpellAudioLab'):
     build_host=workspace/'ExpansionRaceLab/StarterNativeBuild/HostProject'
     build_plugin=build_host/'Plugins/DAoCVisualBridge'
     assert build_plugin.resolve().is_relative_to(workspace/'ExpansionRaceLab')
-    source=repo/'source/ue5-bridge/UnrealPlugin/DAoCVisualBridge/Source'
+    source=candidate_source or repo/'source/ue5-bridge/UnrealPlugin/DAoCVisualBridge/Source'
     hashes={str(p.relative_to(source)):digest(p) for p in source.rglob('*') if p.is_file()}
     shutil.copytree(source,build_plugin/'Source',dirs_exist_ok=True)
     command=[str(engine/'Build/BatchFiles/Build.bat'),'UnrealEditor','Win64','Development',

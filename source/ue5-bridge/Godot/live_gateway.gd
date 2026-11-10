@@ -11,6 +11,8 @@ var player_models:RefCounted
 var vault:RefCounted
 var exchange:RefCounted
 var player_trade:RefCounted
+var quest_rewards:RefCounted
+var quest_conversation_epoch:=0
 var player_state:RefCounted
 var combat_visual:RefCounted
 var combat_audio:RefCounted
@@ -103,6 +105,7 @@ func _ready()->void:
     vault=load(folder.path_join("vault_state.gd")).new()
     exchange=load(folder.path_join("exchange_state.gd")).new()
     player_trade=load(folder.path_join("player_trade_controller.gd")).new()
+    quest_rewards=load(folder.path_join("quest_reward_state.gd")).new()
     player_state=load(folder.path_join("player_combat_state.gd")).new()
     combat_visual=load(folder.path_join("combat_visual_state.gd")).new()
     combat_audio=load(folder.path_join("combat_audio_state.gd")).new()
@@ -268,7 +271,22 @@ func observe_combat_lifecycle(kind:String,oid:int)->void:
         var id:String="player:local" if oid==int(server.me_oid) else String(adapter.oid_to_id.get(oid,""))
         combat_visual.remove(id)
 
+func quest_context()->Dictionary:
+    var id:String=interaction.conversation_id
+    var row:Dictionary=adapter.entities.get(id,{})
+    return {"alive":server.playing and not leaving and player_state.alive(),"selected":interaction.selected_id,
+        "conversation":id,"conversation_epoch":quest_conversation_epoch,"npc":row,"distance_m":interaction._distance(row,position),
+        "exchange_busy":player_trade.blocks_inventory() or exchange.inventory_locked() or not inventory.pending.is_empty()}
+
 func world_event(kind:String,data:Dictionary)->void:
+    if kind=="quest_dialog":
+        for items in [data.get("fixed_items",[]),data.get("optional_items",[])]:
+            for item in items:
+                item["icon"]=server.item_icon(int(item.get("model",0)))
+        quest_rewards.receive(data,quest_context())
+        return
+    if kind!="death" or int(data.get("oid",0))==int(server.me_oid):
+        quest_rewards.observe(kind,data)
     player_trade.observe(kind,data,adapter.entities,position,player_state.alive())
     if kind=="player_trade" and player_trade.state.visible:
         if vault.valid:vault.reset()
@@ -371,6 +389,15 @@ func command(value:Dictionary)->void:
     if action in ["character_enter","character_create","character_refresh","character_customize"]:
         character_lobby.execute(value,server,Time.get_ticks_msec());return
     if not server.playing or leaving:return
+    if action=="quest_reward_response":
+        var now:=Time.get_ticks_msec()
+        journal.sync(server,now)
+        var reply:=value.duplicate()
+        reply["action"]=value.get("action_name","")
+        quest_rewards.request(reply,server.client,quest_context(),journal.entries,now)
+        return
+    if action=="journal_remove" and quest_rewards.finishing():return
+    if quest_rewards.finishing() and action in ["player_trade_begin","player_trade_update","player_trade_accept","inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell","exchange_buy","exchange_list","exchange_take","exchange_claim"]:return
     if action in ["target_object","target_loot","get_object"]:
         if ground_objects!=null:
             ground_objects.request(value,server.client,interaction,adapter.entities,position,player_state.alive(),int(server.entry.get("zone",-1)))
@@ -459,7 +486,9 @@ func command(value:Dictionary)->void:
         send_position(speed)
         last_position_send=Time.get_ticks_msec()
     elif action in ["target","interact","keyword","dialog_response","dismiss_interaction"]:
-        interaction.execute(value,server.client,adapter.entities,position)
+        if interaction.execute(value,server.client,adapter.entities,position) and action=="interact":
+            quest_conversation_epoch+=1
+        quest_rewards.maintain(quest_context(),journal.entries,Time.get_ticks_msec())
     elif action in ["inventory_move","inventory_equip","inventory_unequip","inventory_give","merchant_buy","merchant_sell"]:
         if action=="inventory_give" and (not player_state.alive()):inventory.fail("You cannot hand over items right now.");return
         if player_trade.blocks_inventory():inventory.fail("Finish the player trade first.");return
@@ -624,6 +653,7 @@ func _process(_delta:float)->void:
         sync_party(now)
         realm_war.maintain(now)
         journal.sync(server,now);classic_ui.journal=journal.snapshot()
+        quest_rewards.maintain(quest_context(),journal.entries,now)
         trainer.sync(server,server.client,now);classic_ui.trainer=trainer.snapshot()
         pet.sync(server,adapter.entities,adapter.oid_to_id);classic_ui.pet=pet.snapshot()
         concentration.sync(server,player_state.vitals,player_state.ready,now);classic_ui.concentration=concentration.snapshot()
@@ -677,6 +707,11 @@ func _process(_delta:float)->void:
         transport.snapshot_metadata["guild"]=guild_state.snapshot()
         emblem_picker.sync(server,character_name)
         transport.snapshot_metadata["emblem_picker"]=emblem_picker.snapshot()
+        if not server.playing or leaving:
+            quest_rewards.reset()
+        else:
+            quest_rewards.maintain(quest_context(),journal.entries,now)
+        transport.snapshot_metadata["quest_rewards"]=quest_rewards.snapshot()
         transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states

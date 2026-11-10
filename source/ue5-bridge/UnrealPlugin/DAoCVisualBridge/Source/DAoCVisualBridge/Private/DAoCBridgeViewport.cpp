@@ -54,6 +54,6 @@ void UDAoCBridgeSubsystem::ApplyInterfaceVisibility(){
     if(!bLocalAvailable||CharacterLobbyOverlay.IsValid()||bExiting)InterfaceSettings->SetHidden(false);
     InterfaceSettings->ApplyVisibility({ClassicOverlay,ChatOverlay,ClassicDetailOverlay,ClassicGroupConfirmOverlay,
         ClassicJournalOverlay,ClassicTrainerOverlay,ClassicVaultOverlay,ClassicMerchantOverlay,GuildOverlay,
-        EmblemPickerOverlay,PlayerTradeOverlay,ExchangeOverlay,ClassicQuantityOverlay,SiegeOverlay,RealmWarOverlay,ZoneMapOverlay,
+        EmblemPickerOverlay,PlayerTradeOverlay,QuestRewardOverlay,ExchangeOverlay,ClassicQuantityOverlay,SiegeOverlay,RealmWarOverlay,ZoneMapOverlay,
         PlayerStatusOverlay,InventoryOverlay,InteractionOverlay,WorldMessageOverlay});
 }

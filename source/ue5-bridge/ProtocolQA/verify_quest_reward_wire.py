@@ -4,12 +4,20 @@ from datetime import datetime
 from pathlib import Path
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine,backend_proof):
+def verify(workspace,install,engine,backend_proof,gateway=False,installed=False):
     from central_activation_receipts import verify_files
-    assert verify_files(workspace)['player_trade_installed']
-    backend=json.loads(backend_proof.read_text());assert backend['passed'] and backend['candidate_dispatch_enabled'] and backend['checks']>=264
-    assert all(digest(Path(p))==h for p,h in backend['source_inputs'].items())
-    candidate=Path(backend['candidate_backend']).parent;assert digest(candidate/'MMOEngine.dll')==backend['candidate_backend_sha256']
+    active=verify_files(workspace)
+    assert active['player_trade_installed'] and active['quest_rewards_installed']==installed
+    assert not installed or gateway
+    backend=json.loads(backend_proof.read_text());assert backend['passed'] and backend['candidate_dispatch_enabled'] and backend['checks']>=265
+    if installed:
+        plan=json.loads((workspace/'QuestRewardsLab/delivery-plan.json').read_text())
+        assert plan['proofs']['codec']==str(backend_proof)
+        candidate=install/'new-client/godot/.godot/mono/temp/bin/Debug'
+    else:
+        assert all(digest(Path(p))==h for p,h in backend['source_inputs'].items())
+        candidate=Path(backend['candidate_backend']).parent
+    assert digest(candidate/'MMOEngine.dll')==backend['candidate_backend_sha256']
     qa=Path(__file__).resolve().parent;out=workspace/'QuestRewardsLab/Runners'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True)
     text=(qa/'verify_journal_lifecycle_real.py').read_text();line=next(l for l in text.splitlines() if l.startswith('D=ROOT/'))
     text=text.replace(line,"D=ROOT/'QuestRewardsLab/RealProtocol'/time.strftime('%Y%m%d-%H%M%S');D.mkdir(parents=True)",1)
@@ -31,6 +39,13 @@ def verify(workspace,install,engine,backend_proof):
   q.write_text(staged,encoding='utf-8')
   q=root/'Godot/visual_bridge.gd';staged=q.read_text(encoding='utf-8-sig');assert '["character",' in staged;q.write_text(staged.replace('["character",','["qa_quest_dialog","qa_quest_request","character",',1))
 '''
+    if gateway:
+        text=text.replace('QuestRewardsLab/RealProtocol','QuestRewardsLab/InstalledProtocol' if installed else 'QuestRewardsLab/GatewayProtocol').replace('from quest_reward_wire_case import','from quest_reward_gateway_case import')
+        hook='''
+  from stage_quest_reward_gateway import stage_gateway
+  stage_gateway(root/'Godot', Path(os.environ['DAOC_BRIDGE_SOURCE_QA']).parent/'Godot/quest_reward_state.gd')
+'''
+        if installed:hook=''
     needle=" candidate_root=ROOT/'GuildWindowLab/ServerCandidate'";at=text.index(needle);text=text[:at]+hook+text[at:]
     runner=out/'verify_candidate.py';runner.write_text(text)
     os.environ.update(DAOC_INSTALL=str(install),DAOC_BRIDGE_SOURCE_QA=str(qa),DAOC_QUEST_REWARD_BACKEND_PROOF=str(backend_proof))
@@ -49,10 +64,13 @@ def verify(workspace,install,engine,backend_proof):
         for target,saved in reversed(backups):shutil.copy2(saved,target);assert digest(target)==digest(saved)
         recovery.write_text(json.dumps(dict(phase='restored',files=[dict(target=str(t),backup=str(s)) for t,s in backups]),indent=2))
         assert verify_files(workspace)['player_trade_installed']
-    result=dict(passed=True,checks=len(report['checks']),proof=str(proof),candidate_backend_proof=str(backend_proof),private_backend_restored=True,normal_runtime_modified=False,installed=False)
-    (workspace/'QuestRewardsLab/wire_verified.json').write_text(json.dumps(result,indent=2));return result
+    result=dict(passed=True,checks=len(report['checks']),proof=str(proof),candidate_backend_proof=str(backend_proof),private_backend_restored=True,normal_runtime_modified=False,installed=installed)
+    name='installed_protocol_verified.json' if installed else 'gateway_verified.json' if gateway else 'wire_verified.json'
+    (workspace/'QuestRewardsLab'/name).write_text(json.dumps(result,indent=2));return result
 
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for key in ['workspace','install','engine','backend_proof']:p.add_argument('--'+key.replace('_','-'),type=Path,required=True)
-    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.backend_proof.resolve())))
+    p.add_argument('--gateway',action='store_true')
+    p.add_argument('--installed',action='store_true')
+    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.backend_proof.resolve(),a.gateway,a.installed)))

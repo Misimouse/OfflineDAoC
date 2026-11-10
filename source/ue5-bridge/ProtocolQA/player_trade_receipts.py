@@ -16,12 +16,15 @@ def verify(workspace):
     assert data['files']==plan['files']
     assert data['native_before_sha256']==plan['native_before_sha256']
     assert data['native_after_sha256']==plan['native_after_sha256']
-    validate_plan(workspace,Path(data['install_root']),plan,after=True)
+    from quest_reward_delivery import verify_installed as verify_quest_rewards
+    from inventory_quantity_receipts import compose
+    _, successor_rows=verify_quest_rewards(workspace)
+    validate_plan(workspace,Path(data['install_root']),plan,after=True,successor_rows=successor_rows)
     guards=workspace/'PlayerTradeGatewayLab/delivery_guards_verified.json'
     assert digest(guards)==data['guards_sha256']
     assert read(guards)['passed'] and read(guards)['checks']>=17
     assert read(guards)['plan_sha256']==digest(path)
-    return data,{r['target']:r for r in data['files']}
+    return data,compose({r['target']:r for r in data['files']},successor_rows)
 
 def predecessor_hash(path,replacements):
     row=replacements.get(str(path))

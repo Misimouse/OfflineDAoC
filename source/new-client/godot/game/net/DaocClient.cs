@@ -1417,6 +1417,7 @@ public partial class DaocClient : Node
 				return d;
 			}
 			case 0x81:                                    // Dialog (168): a yes / no or OK box from the server
+				if (r.Left >= 2 && (r.At(1) == 0x21 || r.At(1) == 0x22)) return ReadQuestRewardDialog1127(r);
 				d["kind"] = "dialog";
 				r.Byte();
 				d["code"] = (int)r.Byte();

@@ -449,6 +449,15 @@ private:
     FString PlayerTradeSignature,PlayerTradeWindowToken;
     TArray<FString> PlayerTradeMoney;
     void ApplyPlayerTrade(TSharedPtr<FJsonObject> State);
+    void ApplyQuestRewards(TSharedPtr<FJsonObject> State);
+    bool TickQuestRewardAcceptance();
+    bool CloseQuestRewards(bool Notify=true);
+    void RefreshQuestRewards();
+    void RespondQuestRewards(const FString& Action,const FString& Token);
+    TSharedPtr<FJsonObject> QuestRewardState;
+    TSharedPtr<SWidget> QuestRewardOverlay,QuestRewardPanel;
+    FString QuestRewardToken,QuestRewardDismissedToken;
+    TArray<int32> QuestRewardChoices;
     void RefreshPlayerTrade();
     bool ClosePlayerTrade(bool Notify=true);
     bool PlayerTradeTyping() const;

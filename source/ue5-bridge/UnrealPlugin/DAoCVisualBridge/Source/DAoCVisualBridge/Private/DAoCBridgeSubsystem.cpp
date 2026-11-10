@@ -248,6 +248,8 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
     const TSharedPtr<FJsonObject>* Siege=nullptr;ApplySiege(M->TryGetObjectField(TEXT("siege"),Siege)?*Siege:nullptr);
     const TSharedPtr<FJsonObject>* War=nullptr;ApplyRealmWar(M->TryGetObjectField(TEXT("realm_war"),War)?*War:nullptr);
     ApplyChat(M);
+    const TSharedPtr<FJsonObject>* Rewards=nullptr;
+    ApplyQuestRewards(M->TryGetObjectField(TEXT("quest_rewards"),Rewards)?*Rewards:nullptr);
     const TSharedPtr<FJsonObject>* Trade=nullptr;if(M->TryGetObjectField(TEXT("player_trade"),Trade))ApplyPlayerTrade(*Trade);
     const TSharedPtr<FJsonObject>* Exchange=nullptr;if(M->TryGetObjectField(TEXT("exchange"),Exchange))ApplyExchange(*Exchange);
     const TSharedPtr<FJsonObject>* Guild=nullptr;if(M->TryGetObjectField(TEXT("guild"),Guild))ApplyGuild(*Guild);
@@ -673,6 +675,7 @@ void UDAoCBridgeSubsystem::Tick(float Dt){
     UpdateUILayout();
     UpdateChatInput();
     if(TickExchangeAcceptance())return;
+    if(TickQuestRewardAcceptance())return;
     if(TickPlayerTradeAcceptance())return;
     if(TickKeyConfigurationAcceptance())return;
     if(TickOptionsAudioAcceptance())return;

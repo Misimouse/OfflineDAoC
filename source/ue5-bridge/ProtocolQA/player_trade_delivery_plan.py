@@ -19,7 +19,16 @@ def inventory(workspace,install,wire_proof):
     pairs += [(workspace/'PlayerTradeUILab/Content/ClassicUI/trade.png',normal/'Content/ClassicUI/trade.png')]
     return pairs
 
-def validate(workspace,install,plan,after=False):
+def validate(workspace,install,plan,after=False,successor_rows=None):
+    successor_rows=successor_rows or {}
+
+    def current_hash(path):
+        actual=digest(path)
+        changed=successor_rows.get(str(path))
+        if not changed:
+            return actual
+        assert after and actual==changed['after_sha256']
+        return changed['before_sha256']
     assert plan['phase']=='prepared' and not any(plan[k] for k in ['database_modified','server_rules_modified','map_modified','normal_installation_modified'])
     root=workspace/'PlayerTradeGatewayLab';proofs={k:Path(p) for k,p in plan['proofs'].items()}
     assert set(proofs)=={'codec','state','controller','real','native_real','ui','handover','native_build','content'}
@@ -53,8 +62,8 @@ def validate(workspace,install,plan,after=False):
     expected=inventory(workspace,install,proofs['codec']);rows={r['target']:r for r in plan['files']}
     assert len(rows)==len(plan['files'])==len(expected)==22 and set(rows)=={str(t) for _,t in expected}
     for source,target in expected:
-        row=rows[str(target)];assert row['source']==str(source) and digest(source)==row['after_sha256']
-        if after:assert target.is_file() and digest(target)==row['after_sha256']
+        row=rows[str(target)];assert row['source']==str(source) and current_hash(source)==row['after_sha256']
+        if after:assert target.is_file() and current_hash(target)==row['after_sha256']
         else:assert (digest(target) if target.exists() else None)==row['before_sha256']
     # The only core decoder difference is the original 0xEA dispatch. Debug sends
     # and unrelated network edits are not deployable through this manifest.
@@ -67,7 +76,7 @@ def validate(workspace,install,plan,after=False):
     # before->after row; no broad bypass for historical evidence.
     for proof in [codec,state,controller,real,native_real]:
         for name,sha in proof.get('source_inputs',{}).items():
-            path=Path(name);actual=digest(path)
+            path=Path(name);actual=current_hash(path)
             if actual==sha:continue
             row=rows.get(str(path));assert after and row and row['before_sha256']==sha and row['after_sha256']==actual
     content=read(proofs['content']);assert content['passed'] and digest(Path(content['source_art']))==digest(Path(content['candidate_art']))==content['sha256']
