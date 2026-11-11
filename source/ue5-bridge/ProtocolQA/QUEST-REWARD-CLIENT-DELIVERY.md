@@ -6,4 +6,6 @@ A response is bound to the current nearby NPC and dialog. Stale clicks and repea
 
 The codec passed 265 checks, the dialog state passed 49 and the rendered Unreal controls passed 19. The private ordinary-player run passed 14 original protocol checks and nine gateway checks. The nine gateway checks passed again with the installed files. The fixture used an isolated quest and original DOL handlers. The delivery includes the decoder, gateway and UE5 window. The installer records the prior files for rollback.
 
-Next, exercise insufficient inventory space and retry after making room.
+A further 11 ordinary-player checks verified the original backpack refusal. With one free slot and two rewards, the quest and inventory stayed intact. Equipping an item freed space, a fresh dialog completed the quest, and both rewards persisted after logout.
+
+The installed DataQuest catalogue contains 1,540 rows and none define optional reward items. The pinned public DOL DataQuest catalogue also contains no optional reward items. The choice path was exercised with a disposable quest. Scripted quests have separate definitions.
