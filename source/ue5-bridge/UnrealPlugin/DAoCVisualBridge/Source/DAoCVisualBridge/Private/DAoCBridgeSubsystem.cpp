@@ -272,6 +272,15 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
         if(!Row->TryGetStringField(TEXT("id"),Id)||Id.Len()>128||!Row->TryGetStringField(TEXT("kind"),Kind)||
            !Row->TryGetArrayField(TEXT("position_m"),P)||!ValidPoint(*P,3)||!Row->TryGetArrayField(TEXT("forward_xz"),F)||!ValidPoint(*F,2))continue;
         if(Id.IsEmpty()||(Kind!=TEXT("player")&&Kind!=TEXT("npc"))||Seen.Contains(Id))continue;
+        int32 Model=Row->GetIntegerField(TEXT("model_id"));
+        // Godot masks the high bit before resolving an NPC figure definition.
+        // Keep the resolved model in the row used by motion, appearance and gear.
+        if(Kind==TEXT("npc") && Model>=0x8000 && Model<=0xffff)
+        {
+            Model&=0x7fff;
+            Row=MakeShared<FJsonObject>(*Row);
+            Row->SetNumberField(TEXT("model_id"),Model);
+        }
         Seen.Add(Id);EntityRows.Add(Id,Row);FVector Position=UEPoint(*P);float Yaw=FMath::RadiansToDegrees(FMath::Atan2((*F)[1]->AsNumber(),(*F)[0]->AsNumber()));
         if(Id==TEXT("player:local")&&Kind==TEXT("player")){
             double Revision=-1;Row->TryGetNumberField(TEXT("position_revision"),Revision);
@@ -282,7 +291,6 @@ void UDAoCBridgeSubsystem::ApplySnapshot(TSharedPtr<FJsonObject> M){
             /* Local visuals are updated below; never treat remote players as the local pawn. */
         }
         if(Kind==TEXT("npc"))++NpcCount;
-        const int32 Model=Row->GetIntegerField(TEXT("model_id"));
         if(EntityModels.Contains(Id)&&EntityModels[Id]!=Model){
             if(auto* Old=Entities.Find(Id))if(IsValid(*Old))(*Old)->Destroy();
             Entities.Remove(Id);EntityModels.Remove(Id);AnimationStates.Remove(Id);PosePlayback.Remove(Id);

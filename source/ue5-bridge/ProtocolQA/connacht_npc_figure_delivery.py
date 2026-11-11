@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 
+from inventory_quantity_receipts import compose, latest
 from quest_reward_delivery import BINARIES, NATIVE, SOURCE, apply_delivery, current, digest, read, write
 
 CHANGED = {
@@ -49,13 +50,16 @@ def expected(workspace):
     return rows
 
 
-def validate(workspace, plan, after=False):
+def validate(workspace, plan, after=False, successors=None):
+    successors = successors or {}
     assert plan["predecessor"] == digest(workspace / "ConnachtNpcCoverageLab/Batch3/installed.json")
     assert all(digest(Path(path)) == sha for path, sha in plan["proofs"].items())
     rows = {}
     for src, dst, old, new in expected(workspace):
-        assert digest(src) == new and current(dst) == (new if after else old), str(dst)
-        rows[str(dst)] = dict(source=str(src), target=str(dst), before_sha256=old, after_sha256=new)
+        row = dict(source=str(src), target=str(dst), before_sha256=old, after_sha256=new)
+        expected_hash = latest(successors, row, new) if after else old
+        assert digest(src) == new and current(dst) == expected_hash, str(dst)
+        rows[str(dst)] = row
     assert list(rows.values()) == plan["files"]
     return rows
 
@@ -89,7 +93,9 @@ def verify_installed(workspace):
     receipt = read(path)
     plan = root / "delivery-plan.json"
     assert receipt["phase"] == "complete" and receipt["plan_sha256"] == digest(plan)
-    return validate(workspace, read(plan), after=True)
+    from connacht_npc_model_flag_delivery import verify_installed as verify_flags
+    successors = verify_flags(workspace)
+    return compose(validate(workspace, read(plan), after=True, successors=successors), successors)
 
 
 if __name__ == "__main__":

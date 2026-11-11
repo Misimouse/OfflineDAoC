@@ -38,8 +38,25 @@ bool UDAoCBridgeSubsystem::TickEntityAcceptance(){
                 Check(IsValid(Actor),Label+TEXT(": actor ")+Id);if(!IsValid(Actor))continue;
                 auto P=Row->GetArrayField(TEXT("position_m"));FVector Expected((P[0]->AsNumber()-1364)*100,(P[2]->AsNumber()-1263)*100,(P[1]->AsNumber()-130)*100);
                 Check(Actor->GetActorLocation().Equals(Expected,.02),Label+TEXT(": position ")+Id);
+                const int32 WireModel=Row->GetIntegerField(TEXT("model_id"));
+                double ExpectedModel=WireModel;
+                const bool ExpectResolved=Row->TryGetNumberField(TEXT("expected_model_id"),ExpectedModel);
+                const int32 Model=int32(ExpectedModel);
+                if(ExpectResolved)
+                {
+                    const auto* Resolved=EntityRows.Find(Id);
+                    Check(Resolved&&(*Resolved)->GetIntegerField(TEXT("model_id"))==Model,
+                          Label+TEXT(": resolved NPC model row ")+Id);
+                    if(BeforeModels.Contains(Id)&&BeforeModels[Id]==Model)
+                        Check(Before[Id].Get()==Actor,Label+TEXT(": actor retained ")+Id);
+                    if(Row->GetStringField(TEXT("kind"))==TEXT("npc"))
+                    {
+                        auto* Mesh=Actor->FindComponentByClass<USkeletalMeshComponent>();
+                        Check(Mesh&&Mesh->GetSkeletalMeshAsset(),Label+TEXT(": original NPC mesh loaded ")+Id);
+                    }
+                }
                 double Heading=0;if(Row->TryGetNumberField(TEXT("heading_4096"),Heading)){
-                    double Offset=0;if(auto* Entry=ModelCatalog.Find(FString::FromInt(Row->GetIntegerField(TEXT("model_id")))))(*Entry)->TryGetNumberField(TEXT("yaw_offset"),Offset);
+                    double Offset=0;if(auto* Entry=ModelCatalog.Find(FString::FromInt(Model)))(*Entry)->TryGetNumberField(TEXT("yaw_offset"),Offset);
                     const float ExpectedYaw=float(90+Heading*360/4096+Offset);
                     Check(FMath::Abs(FRotator::NormalizeAxis(Actor->GetActorRotation().Yaw-ExpectedYaw))<.01,Label+TEXT(": server heading ")+Id);
                 }
@@ -55,7 +72,6 @@ bool UDAoCBridgeSubsystem::TickEntityAcceptance(){
                                 Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("FigureTexture")),Texture);
                     Check(Texture&&Texture->GetPathName()==FaceTexture,Label+TEXT(": original NPC face ")+Id);
                 }
-                const int32 Model=Row->GetIntegerField(TEXT("model_id"));
                 Check(EntityModels.FindRef(Id)==Model,Label+TEXT(": model ")+Id);
                 if(BeforeModels.Contains(Id)&&BeforeModels[Id]!=Model)Check(Before[Id].Get()!=Actor,Label+TEXT(": rebuilt model"));
                 if(Id==TEXT("player:local")){Local=true;Check(PlayerPosition.Equals(Expected,.02),Label+TEXT(": local authority"));}
