@@ -326,6 +326,18 @@ def audit(workspace,install):
             'installed_owner_review_pending',
             'Sixteen original creature bodies cover 68 registered spawns. Verified 280 native replay checks and 949 Unreal packages. Across the three batches, 25 models cover 409 spawns.')
         result['next_package']='CLIENT-CONNACHT-NPC-FIGURES: verify original race bodies, appearance and equipped items for the remaining 132 humanoid spawns'
+    path=workspace/'ConnachtNpcCoverageLab/Figures/installed.json'
+    if path.exists() and json.loads(path.read_text())['installed']:
+        from connacht_npc_figure_delivery import verify_installed as verify_figures
+        assert verify_figures(workspace)
+        post=workspace/'ConnachtNpcCoverageLab/audit_after_figures.json'
+        evidence=json.loads(post.read_text());assert evidence['passed'] and not evidence['database_modified']
+        assert evidence['active_spawns_by_status']['original_figure_available']==10
+        inputs[str(path)]=digest(path);inputs[str(post)]=digest(post)
+        row('Connacht humanoid race figures installed',[],['ProtocolQA/prepare_connacht_npc_figures.py','ProtocolQA/connacht_npc_figure_delivery.py'],
+            'installed_owner_review_pending',
+            '37 original model IDs cover 122 registered spawns. 764 native checks, including the original face chosen for each NPC identity. Briton and Norse exports are staged for their own import.')
+        result['next_package']='CLIENT-CONNACHT-BRITON-NORSE: import and validate the two outstanding modular race bodies and their original animation sets'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

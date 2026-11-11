@@ -6,6 +6,7 @@ import shutil
 
 from quest_reward_delivery import BINARIES, SOURCE, NATIVE, apply_delivery, current, digest, read, write
 from stage_quest_map import stage_gateway
+from inventory_quantity_receipts import compose, latest
 
 
 PATCHED = ["Private/DAoCBridgeSubsystem.cpp", "Private/DAoCBridgeZoneMap.cpp"]
@@ -26,7 +27,8 @@ def pairs(workspace, build):
     return result
 
 
-def validate(workspace, plan, after=False):
+def validate(workspace, plan, after=False, successors=None):
+    successors = successors or {}
     root = workspace / "QuestMapLab"
     assert plan["predecessor_sha256"] == digest(workspace / "QuestIndicatorLab/installed.json")
     proofs = {key: Path(path) for key, path in plan["proofs"].items()}
@@ -54,7 +56,8 @@ def validate(workspace, plan, after=False):
     for src, dst in expected:
         row = rows[str(dst)]
         assert row["source"] == str(src) and digest(src) == row["after_sha256"]
-        assert current(dst) == row["after_sha256" if after else "before_sha256"], str(dst)
+        expected_hash = latest(successors, row, row["after_sha256"]) if after else row["before_sha256"]
+        assert current(dst) == expected_hash, str(dst)
         if src.name in BINARIES:
             assert row["before_sha256"] == previous["binaries_sha256"][src.name]
             assert row["after_sha256"] == build["binaries_sha256"][src.name]
@@ -101,7 +104,9 @@ def verify_installed(workspace):
     result = read(receipt)
     path = root / "delivery-plan.json"
     assert result["phase"] == "complete" and result["plan_sha256"] == digest(path)
-    return validate(workspace, read(path), after=True)
+    from connacht_npc_figure_delivery import verify_installed as verify_figures
+    successors = {key: row for key, row in verify_figures(workspace).items() if key != str(workspace / "models.json")}
+    return compose(validate(workspace, read(path), after=True, successors=successors), successors)
 
 
 if __name__ == "__main__":

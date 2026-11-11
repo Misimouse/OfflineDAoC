@@ -26,18 +26,47 @@ FLinearColor Tint(const TArray<TSharedPtr<FJsonValue>>& V,bool Skin){if(V.Num()<
 }
 FString DAoCAppearancePath(){FString Path;if(FParse::Value(FCommandLine::Get(),TEXT("DaocBridgeLobbyAppearance="),Path))return Path;Path=FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/Pregame/appearance_catalog.json");return FPaths::FileExists(Path)?Path:FString();}
 void ClearCharacterAppearance(ASkeletalMeshActor* Actor){if(!Actor)return;TArray<USkeletalMeshComponent*> Previous;Actor->GetComponents(Previous);for(auto* Part:Previous)if(Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead"))||Part->ComponentHasTag(TEXT("DAoCBridgeAppearanceHair")))Part->DestroyComponent();}
-bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<FJsonObject> Look,TSharedPtr<FJsonObject> Armour,const FString& CatalogPath,TSharedPtr<FJsonObject> Worn){
+bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<FJsonObject> Look,TSharedPtr<FJsonObject> Armour,const FString& CatalogPath,TSharedPtr<FJsonObject> Worn,uint32 NpcOid){
     if(!Actor)return false;
-    FString Text;TSharedPtr<FJsonObject> Catalog;if(!FFileHelper::LoadFileToString(Text,*CatalogPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Catalog))return false;
+    static FString NpcCatalogPath;
+    static TSharedPtr<FJsonObject> NpcCatalog;
+    TSharedPtr<FJsonObject> Catalog;
+    if(NpcOid && NpcCatalogPath==CatalogPath)
+        Catalog=NpcCatalog;
+    if(!Catalog)
+    {
+        FString Text;
+        if(!FFileHelper::LoadFileToString(Text,*CatalogPath)||!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),Catalog))
+            return false;
+        if(NpcOid)
+        {
+            NpcCatalogPath=CatalogPath;
+            NpcCatalog=Catalog;
+        }
+    }
     auto Figure=Obj(Obj(Catalog,TEXT("figures")),FString::FromInt(Model)),Meta=Obj(Figure,TEXT("meta")),Parts=Obj(Figure,TEXT("parts"));
     auto* Parent=Actor->GetSkeletalMeshComponent();auto* Body=Parent->GetSkeletalMeshAsset();auto Definition=Obj(Obj(Armour,TEXT("figures")),Body?Body->GetPathName():TEXT(""));
     if(!Meta||!Parts||!Definition||!Body)return false;
+    if(NpcOid)
+    {
+        // Fig3Figure.npc_look hashes the original ASCII "srv<oid>" identity.
+        uint32 Hash=5381;
+        for(TCHAR C:FString::Printf(TEXT("srv%u"),NpcOid))
+            Hash=Hash*33+uint32(C);
+        const auto Pick=[Hash](int32 Count,uint32 Salt){return Count>0 ? (Hash/Salt)%uint32(Count) : 0u;};
+        const uint32 Hair=Pick(Arr(Meta,TEXT("hair_styles")).Num(),13);
+        Look=MakeShared<FJsonObject>();
+        Look->SetNumberField(TEXT("face"),Pick(Arr(Meta,TEXT("faces")).Num(),1));
+        Look->SetNumberField(TEXT("hair"),Hair);
+        Look->SetNumberField(TEXT("eyes"),Pick(Arr(Meta,TEXT("eyes")).Num(),31));
+        Look->SetNumberField(TEXT("hair_color"),Pick(Arr(Choice(Meta,TEXT("hair_styles"),int32(Hair)),TEXT("colours")).Num(),97));
+    }
     // Expansion figures may retain their validated materials without replacing
     // the globally calibrated appearance of existing races.
     auto MaterialPath=[Figure,Catalog](const TCHAR* Kind){const FString Override=Str(Obj(Figure,TEXT("materials")),Kind);return Override.IsEmpty()?Str(Obj(Catalog,TEXT("materials")),Kind):Override;};
     auto* HeadMesh=LoadObject<USkeletalMesh>(nullptr,*Str(Obj(Parts,TEXT("head")),TEXT("asset")));auto* Master=LoadObject<UMaterialInterface>(nullptr,*MaterialPath(TEXT("skin")));
     if(!HeadMesh||!Master)return false;
-    auto Texture=[Catalog](const FString& Name)->UTexture2D*{const FString Path=Str(Obj(Catalog,TEXT("textures")),Name.ToLower());auto* T=Path.IsEmpty()?nullptr:LoadObject<UTexture2D>(nullptr,*Path);if(T)T->SetForceMipLevelsToBeResident(60);return T;};
+    auto Texture=[Catalog,NpcOid](const FString& Name)->UTexture2D*{const FString Path=Str(Obj(Catalog,TEXT("textures")),Name.ToLower());auto* T=Path.IsEmpty()?nullptr:LoadObject<UTexture2D>(nullptr,*Path);if(T&&!NpcOid)T->SetForceMipLevelsToBeResident(60);return T;};
     auto SourceColour=[Catalog](UMaterialInstanceDynamic* M,const FString& Name,UTexture2D* Enhanced){
         const FString Path=Str(Obj(Catalog,TEXT("original_color_textures")),Name.ToLower());
         if(auto* T=Path.IsEmpty()?nullptr:LoadObject<UTexture2D>(nullptr,*Path)){
@@ -52,7 +81,7 @@ bool ApplyCharacterAppearance(ASkeletalMeshActor* Actor,int32 Model,TSharedPtr<F
     auto Helmet=Obj(Obj(Obj(Armour,TEXT("helmets")),Str(Definition,TEXT("base_id"))),FString::FromInt(Num(Worn,TEXT("helmet"))));bool FullHelmet=false;if(HelmetComponent&&Helmet)Helmet->TryGetBoolField(TEXT("full"),FullHelmet);
     bool Hood=false;for(auto V:Arr(Definition,TEXT("sections"))){auto S=V->AsObject();if(Str(S,TEXT("slot"))==TEXT("cloak")&&Num(S,TEXT("variant"))==2&&Parent->IsMaterialSectionShown(Num(S,TEXT("index")),0))Hood=true;}
     if(HelmetComponent&&Helmet){auto* HM=HelmetComponent->GetSkeletalMeshAsset();auto* HR=HM?HM->GetResourceForRendering():nullptr;if(HR)for(auto V:Arr(Helmet,TEXT("sections"))){auto S=V->AsObject();bool Hair=false;S->TryGetBoolField(TEXT("hair"),Hair);if(!Hair)continue;const int32 Mat=Num(S,TEXT("index"));for(int32 L=0;L<HR->LODRenderData.Num();++L){const auto& D=HR->LODRenderData[L];for(int32 I=0;I<D.RenderSections.Num();++I)if(D.RenderSections[I].MaterialIndex==Mat)HelmetComponent->ShowMaterialSection(Mat,I,false,L);}}}
-    auto Attach=[Actor,Parent](USkeletalMesh* Mesh){auto* C=NewObject<USkeletalMeshComponent>(Actor,NAME_None,RF_Transient);Actor->AddInstanceComponent(C);C->SetSkeletalMesh(Mesh);C->SetupAttachment(Parent);C->SetRelativeTransform(FTransform::Identity);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCanEverAffectNavigation(false);C->SetCastShadow(false);C->RegisterComponent();C->SetLeaderPoseComponent(Parent,false,true);C->SetForcedLOD(1);C->SetTextureForceResidentFlag(true);return C;};
+    auto Attach=[Actor,Parent,NpcOid](USkeletalMesh* Mesh){auto* C=NewObject<USkeletalMeshComponent>(Actor,NAME_None,RF_Transient);Actor->AddInstanceComponent(C);C->SetSkeletalMesh(Mesh);C->SetupAttachment(Parent);C->SetRelativeTransform(FTransform::Identity);C->SetCollisionEnabled(ECollisionEnabled::NoCollision);C->SetCanEverAffectNavigation(false);C->SetCastShadow(false);C->RegisterComponent();C->SetLeaderPoseComponent(Parent,false,true);if(!NpcOid){C->SetForcedLOD(1);C->SetTextureForceResidentFlag(true);}return C;};
     auto* Head=Attach(HeadMesh);Head->ComponentTags.Add(TEXT("DAoCBridgeAppearanceHead"));Head->SetVisibility(!FullHelmet);auto* Material=UMaterialInstanceDynamic::Create(Master,Head);Material->SetTextureParameterValue(TEXT("FigureTexture"),FaceTexture);
     auto Tones=Arr(Meta,TEXT("skin_tones"));FLinearColor Skin=FLinearColor::White;if(!Tones.IsEmpty())Skin=Tint(Tones[FMath::Clamp(Num(Look,TEXT("skin")),0,Tones.Num()-1)]->AsArray(),true);
     // Keep the original saved tone index and palette metadata. An optional

@@ -150,12 +150,36 @@ void UDAoCBridgeSubsystem::UpdateRemoteEquipment(){
         auto Body=Model?GearObj(*Model,TEXT("ghost_render")):nullptr;
         bool RaceFigure=false;
         const bool PlayerForm=GearStr(*Row,TEXT("kind"))==TEXT("player")&&GearFlag(Body,TEXT("known"))&&Body.IsValid()&&Body->TryGetBoolField(TEXT("race_figure"),RaceFigure)&&!RaceFigure;
-        if(!Gear.IsValid()||PlayerForm){if(auto* Old=RemoteEquipment.Find(Pair.Key)){for(auto& B:Old->Bindings)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();RemoteEquipment.Remove(Pair.Key);}continue;}
+        uint32 NpcOid=0;
+        const int32 AppearanceModel=Model?int32(GearNum(*Model,TEXT("npc_appearance_model"))):0;
+        if(AppearanceModel>0 && GearStr(*Row,TEXT("kind"))==TEXT("npc"))
+        {
+            TArray<FString> Fields;
+            Pair.Key.ParseIntoArray(Fields,TEXT(":"));
+            if(Fields.Num()>=2 && (Fields[0]==TEXT("npc") || Fields[0]==TEXT("corpse")))
+                LexTryParseString(NpcOid,*Fields[1]);
+        }
+        if((!Gear.IsValid()&&!NpcOid)||PlayerForm){if(auto* Old=RemoteEquipment.Find(Pair.Key)){for(auto& B:Old->Bindings)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();RemoteEquipment.Remove(Pair.Key);}continue;}
         const bool Combat=GearFlag(*Row,TEXT("combat_active"));const int32 Ws=int32(GearNum(Gear,TEXT("weapon_slots"),255))&15;
         const FString Fingerprint=FString::Printf(TEXT("%lld:%d:%d"),int64(GearNum(Gear,TEXT("revision"))),int32(Combat),int32(GearNum(*Row,TEXT("model_id"))));auto& State=RemoteEquipment.FindOrAdd(Pair.Key);
         if(State.Actor.Get()==Actor&&State.Fingerprint==Fingerprint)continue;
         for(auto& B:State.Bindings)if(B.Value.Component.IsValid())B.Value.Component->DestroyComponent();State.Bindings.Empty();State.Actor=Actor;State.Fingerprint=Fingerprint;ApplyBodyArmour(Actor,Gear);
-        TMap<int32,TSharedPtr<FJsonObject>> Items;const TArray<TSharedPtr<FJsonValue>>* Rows=nullptr;if(Gear->TryGetArrayField(TEXT("items"),Rows))for(auto V:*Rows)if(V->Type==EJson::Object){auto I=V->AsObject();const int32 Slot=int32(GearNum(I,TEXT("slot")));if(Slot>=10&&Slot<=13&&GearNum(I,TEXT("model"))>0)Items.Add(Slot,I);}
+        if(NpcOid)
+        {
+            auto Worn=MakeShared<FJsonObject>();
+            static const TMap<int32,FString> Names={{21,TEXT("helmet")},{22,TEXT("gloves")},{23,TEXT("boots")},{25,TEXT("torso")},{26,TEXT("cloak")},{27,TEXT("legs")},{28,TEXT("arms")}};
+            const TArray<TSharedPtr<FJsonValue>>* Equipped=nullptr;
+            if(Gear&&Gear->TryGetArrayField(TEXT("items"),Equipped))
+                for(const auto& Value:*Equipped)
+                    if(Value->Type==EJson::Object)
+                    {
+                        auto Item=Value->AsObject();
+                        if(const FString* Slot=Names.Find(int32(GearNum(Item,TEXT("slot")))))
+                            Worn->SetNumberField(*Slot,GearNum(Item,TEXT("model")));
+                    }
+            ApplyCharacterAppearance(Actor,AppearanceModel,nullptr,ArmourCatalog,DAoCAppearancePath(),Worn,NpcOid);
+        }
+        TMap<int32,TSharedPtr<FJsonObject>> Items;const TArray<TSharedPtr<FJsonValue>>* Rows=nullptr;if(Gear&&Gear->TryGetArrayField(TEXT("items"),Rows))for(auto V:*Rows)if(V->Type==EJson::Object){auto I=V->AsObject();const int32 Slot=int32(GearNum(I,TEXT("slot")));if(Slot>=10&&Slot<=13&&GearNum(I,TEXT("model"))>0)Items.Add(Slot,I);}
         int32 Set=Ws;if(Ws==15)Set=Items.Contains(12)?2:Items.Contains(10)||Items.Contains(11)?0:3;
         const TArray<int32> Slots=Set==2?TArray<int32>{12}:Set==3?TArray<int32>{13}:TArray<int32>{10,11};
         const bool Drawn=Combat||Actor->GetSkeletalMeshComponent()->GetBoneIndex(TEXT("Bip01-R-Belt"))==INDEX_NONE;

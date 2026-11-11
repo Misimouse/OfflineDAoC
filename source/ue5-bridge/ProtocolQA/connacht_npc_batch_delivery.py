@@ -97,7 +97,10 @@ def verify_installed(workspace):
         assert result["phase"] == "complete" and result["plan_sha256"] == digest(plan)
         plans.append((batch, read(plan)))
         batch += 1
-    rows = {}
+    from connacht_npc_figure_delivery import verify_installed as verify_figures
+    figure_rows = verify_figures(workspace)
+    catalog = str(workspace / "models.json")
+    rows = {catalog: figure_rows[catalog]} if catalog in figure_rows else {}
     for batch, plan in reversed(plans):
         rows = compose(validate(workspace, plan, batch, after=True, successors=rows), rows)
     return rows

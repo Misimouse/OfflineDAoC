@@ -1,6 +1,9 @@
 // Offline replay of decoded Godot events through the real native consumer.
 #include "DAoCBridgeSubsystem.h"
 #include "Engine/World.h"
+#include "Engine/Texture.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Materials/MaterialInterface.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "Misc/CommandLine.h"
@@ -25,6 +28,7 @@ bool UDAoCBridgeSubsystem::TickEntityAcceptance(){
             TMap<FString,TWeakObjectPtr<AActor>> Before;for(const auto& Pair:Entities)Before.Add(Pair.Key,Pair.Value.Get());
             auto BeforeModels=EntityModels;
             ApplySnapshot(Snapshot);
+            if(Case->HasField(TEXT("check_npc_appearance")))UpdateRemoteEquipment();
             auto Rows=Snapshot->GetArrayField(TEXT("entities"));
             Check(Entities.Num()==Rows.Num(),Label+TEXT(": entity count"));
             int32 Npcs=0;bool Local=false;
@@ -38,6 +42,18 @@ bool UDAoCBridgeSubsystem::TickEntityAcceptance(){
                     double Offset=0;if(auto* Entry=ModelCatalog.Find(FString::FromInt(Row->GetIntegerField(TEXT("model_id")))))(*Entry)->TryGetNumberField(TEXT("yaw_offset"),Offset);
                     const float ExpectedYaw=float(90+Heading*360/4096+Offset);
                     Check(FMath::Abs(FRotator::NormalizeAxis(Actor->GetActorRotation().Yaw-ExpectedYaw))<.01,Label+TEXT(": server heading ")+Id);
+                }
+                FString FaceTexture;
+                if(Row->TryGetStringField(TEXT("expected_face_texture"),FaceTexture))
+                {
+                    TArray<USkeletalMeshComponent*> Components;
+                    Actor->GetComponents(Components);
+                    UTexture* Texture=nullptr;
+                    for(auto* Component:Components)
+                        if(Component->ComponentHasTag(TEXT("DAoCBridgeAppearanceHead")))
+                            if(auto* Material=Component->GetMaterial(0))
+                                Material->GetTextureParameterValue(FMaterialParameterInfo(TEXT("FigureTexture")),Texture);
+                    Check(Texture&&Texture->GetPathName()==FaceTexture,Label+TEXT(": original NPC face ")+Id);
                 }
                 const int32 Model=Row->GetIntegerField(TEXT("model_id"));
                 Check(EntityModels.FindRef(Id)==Model,Label+TEXT(": model ")+Id);
