@@ -287,6 +287,15 @@ def audit(workspace,install):
             'installed_owner_review_pending',
             'Original Evan delivery verifies16 ordinary checks including separate player state,zone filtering,canonical return coordinates,completion,save and logout. Fifteen adapter checks and six native map checks. NPCs were brought nearby only in the private lab; full world travel remains unverified.')
         result['next_package']='CLIENT-QUEST-ABANDON-MAP-LIFECYCLE: verify original abandonment and character re-entry clear objective markers without leaving stale actions'
+    path=workspace/'QuestMapLifecycleLab/verified.json'
+    if path.exists():
+        summary=json.loads(path.read_text());assert summary['passed'] and summary['installed_files'] and summary['checks']==10
+        proof=Path(summary['proof']);evidence=json.loads(proof.read_text());assert evidence['passed'] and all(evidence['checks'].values())
+        inputs[str(path)]=digest(path);inputs[str(proof)]=digest(proof)
+        row('Quest abandonment and character switching',[],['ProtocolQA/quest_map_lifecycle_case.py'],
+            'installed_behavior_verified_owner_review_pending',
+            'Ten ordinary checks on installed files. Objective hidden in character menu and on alternate character, restored from original server for its owner, then cleared on abandonment without reward or saved completion.')
+        result['next_package']='CLIENT-CONNACHT-NPC-MODEL-COVERAGE: measure active Connacht NPC model coverage against original client assets and the DOL reference'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

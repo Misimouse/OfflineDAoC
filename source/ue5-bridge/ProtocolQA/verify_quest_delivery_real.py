@@ -4,12 +4,14 @@ from datetime import datetime
 from pathlib import Path
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine,map_markers=False):
+def verify(workspace,install,engine,map_markers=False,lifecycle=False):
     from central_activation_receipts import verify_files
     active=verify_files(workspace)
     assert active['player_trade_installed']
     qa=Path(__file__).resolve().parent
-    lab='QuestMapLab' if map_markers else 'QuestDeliveryLab'
+    if lifecycle:
+        assert active.get('quest_map_installed')
+    lab='QuestMapLifecycleLab' if lifecycle else 'QuestMapLab' if map_markers else 'QuestDeliveryLab'
     out=workspace/lab/'Runners'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True)
     # Export only the world NPC row from a read-only original database connection.
     with sqlite3.connect((install/'runtime/data/opendaoc.sqlite3.db').as_uri()+'?mode=ro',uri=True) as db:
@@ -30,6 +32,9 @@ def verify(workspace,install,engine,map_markers=False):
         assert text.count(anchor)==1
         if not active.get('quest_map_installed'):
             text=text.replace(anchor,"  from stage_quest_map import stage_gateway\n  stage_gateway(root/'Godot')\n"+anchor,1)
+    if lifecycle:
+        text=text.replace("D=ROOT/'QuestDeliveryLab/RealProtocol'","D=ROOT/'QuestMapLifecycleLab/RealProtocol'",1)
+        text=text.replace("from quest_delivery_case import", "from quest_map_lifecycle_case import")
     runner=out/'verify_installed.py';runner.write_text(text)
     original_config=install/'runtime/server/classic-quests.json';assert original_config.is_file()
     original_config_hash=digest(original_config)
@@ -67,5 +72,7 @@ def verify(workspace,install,engine,map_markers=False):
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for key in ['workspace','install','engine']:p.add_argument('--'+key,type=Path,required=True)
-    p.add_argument('--map-markers',action='store_true')
-    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.map_markers)))
+    mode=p.add_mutually_exclusive_group()
+    mode.add_argument('--map-markers',action='store_true')
+    mode.add_argument('--map-lifecycle',action='store_true')
+    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.map_markers,a.map_lifecycle)))
