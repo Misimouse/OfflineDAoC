@@ -12,7 +12,7 @@ from prepare_combined_expansion_data import digest
 BODY_SLOTS = {22: "gloves", 23: "boots", 25: "body", 26: "cloak", 27: "legs", 28: "arms"}
 
 
-def audit(workspace, install):
+def audit(workspace, install, candidate=False, installed=False):
     lab = workspace / "ConnachtNpcCoverageLab"
     zone_path = install / "new-client/godot/content/zones/zones_index.json"
     db_path = install / "runtime/data/opendaoc.sqlite3.db"
@@ -22,7 +22,7 @@ def audit(workspace, install):
     original_models = game / "monsters/monsters.json"
     original_armour = game / "characters/armor.json"
     original_helms = game / "helms/helms.json"
-    catalogue = workspace / "models.json"
+    catalogue = lab / "Equipment/candidate_catalog.json" if candidate else workspace / "models.json"
     equipment_path = workspace / "equipment_catalog_v01.json"
     inputs = {str(path): digest(path) for path in (zone_path, db_path, catalogue, equipment_path, original_models, original_armour, original_helms)}
     zone = read(zone_path)["207"]
@@ -120,7 +120,8 @@ def audit(workspace, install):
                   gaps=[dict(reason=reason, figure=figure, slot=slot, item=item, possible_spawns=count,
                              examples=sorted(examples[(reason, figure, slot, item)])[:4])
                         for (reason, figure, slot, item), count in gaps.most_common()])
-    path = lab / "npc_equipment_audit.json"
+    report_name = "Equipment/candidate_equipment_audit.json" if candidate else "Equipment/installed_equipment_audit.json" if installed else "npc_equipment_audit.json"
+    path = lab / report_name
     path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     return dict(passed=True, counts=report["counts"], gap_classes=dict(Counter(row["reason"] for row in report["gaps"])), report=str(path))
 
@@ -129,5 +130,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("workspace", "install"):
         parser.add_argument("--" + key, type=Path, required=True)
+    state = parser.add_mutually_exclusive_group()
+    state.add_argument("--candidate", action="store_true")
+    state.add_argument("--installed", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve())))
+    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve(), args.candidate, args.installed)))

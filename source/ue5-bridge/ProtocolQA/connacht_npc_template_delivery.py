@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shutil
 
+from inventory_quantity_receipts import compose, latest
 from quest_reward_delivery import apply_delivery, current, digest, read, write
 
 LAB = "ConnachtNpcCoverageLab"
@@ -78,7 +79,8 @@ def expected(workspace, root):
             yield asset, workspace / "Client" / plugin / asset.relative_to(source), None
 
 
-def validate(workspace, plan, installed=False):
+def validate(workspace, plan, installed=False, successors=None):
+    successors = successors or {}
     lab = workspace / LAB
     root = lab / "FinalCoverage"
     assert plan["evidence"] == {str(p): digest(p) for p in evidence(lab)}
@@ -90,8 +92,9 @@ def validate(workspace, plan, installed=False):
     rows = {}
     for src, dst, before in expected(workspace, root):
         after = digest(src)
-        assert current(dst) == (after if installed else before), str(dst)
-        rows[str(dst)] = dict(source=str(src), target=str(dst), before_sha256=before, after_sha256=after)
+        row = dict(source=str(src), target=str(dst), before_sha256=before, after_sha256=after)
+        assert current(dst) == (latest(successors, row, after) if installed else before), str(dst)
+        rows[str(dst)] = row
     assert list(rows.values()) == plan["files"]
     return rows
 
@@ -126,7 +129,49 @@ def verify_installed(workspace):
     receipt = read(path)
     plan = root / "delivery-plan.json"
     assert receipt["phase"] == "complete" and receipt["plan_sha256"] == digest(plan)
-    return validate(workspace, read(plan), installed=True)
+    successor = equipment_rows(workspace, installed=True)
+    return compose(validate(workspace, read(plan), installed=True, successors=successor), successor)
+
+
+def equipment_rows(workspace, installed=False):
+    lab = workspace / LAB
+    root = lab / "Equipment"
+    receipt = root / "installed.json"
+    plan = root / "delivery-plan.json"
+    if installed and (not receipt.exists() or not read(receipt).get("installed")):
+        return {}
+    before = lab / "FinalCoverage/models_candidate.json"
+    candidate = root / "candidate_catalog.json"
+    old, new = read(before), read(candidate)
+    assert old.keys() == new.keys()
+    assert {key for key in new if old[key] != new[key]} == {"307", "1985"}
+    for ident, base in (("307", "1984"), ("1985", "310")):
+        expected = dict(old[base], name=old[ident]["name"], ghost_render=old[ident]["ghost_render"],
+                        npc_appearance_model=int(base))
+        assert new[ident] == expected and expected["ghost_render"]["race_figure"]
+    original = lab / "npc_equipment_audit.json"
+    audited = root / "candidate_equipment_audit.json"
+    checked = read(audited)
+    assert read(original)["counts"]["equipment_gap_possible"] == 31
+    assert checked["passed"] and checked["counts"] == {
+        "equipment_references_available": 413, "without_equipment_rows": 897
+    }
+    assert checked["inputs"][str(candidate)] == digest(candidate)
+    native = root / "equipped_replay.json.native.json"
+    test = read(native)
+    assert test["passed"] and test["checks"] == 86 and test["native_actor_consumer"]
+    target = workspace / "models.json"
+    row = dict(source=str(candidate), target=str(target), before_sha256=digest(before), after_sha256=digest(candidate))
+    proof = dict(evidence={str(path): digest(path) for path in (original, audited, native, lab / "FinalCoverage/installed.json")},
+                 files=[row])
+    assert current(target) == row["after_sha256" if installed else "before_sha256"]
+    if installed:
+        result = read(receipt)
+        assert result["phase"] == "complete" and result["plan_sha256"] == digest(plan)
+        assert proof == read(plan)
+    else:
+        write(plan, proof)
+    return {str(target): row}
 
 
 if __name__ == "__main__":
@@ -134,11 +179,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--equipment", action="store_true")
     args = parser.parse_args()
     workspace = args.workspace.resolve()
     assert verify_files(workspace)["connacht_npc_model_flags_installed"]
     root = workspace / LAB / "FinalCoverage"
-    if args.apply:
+    if args.equipment:
+        assert verify_files(workspace)["connacht_npc_templates_installed"]
+        root = workspace / LAB / "Equipment"
+        rows = equipment_rows(workspace)
+        result = (apply_delivery(workspace, root, "ConnachtNpcEquipment", read(root / "delivery-plan.json"), "connacht_npc_equipment_installed")
+                  if args.apply else dict(passed=True, files=len(rows)))
+    elif args.apply:
         plan = read(root / "delivery-plan.json")
         validate(workspace, plan)
         result = apply_delivery(workspace, root, "ConnachtTemplateModels", plan, "connacht_npc_templates_installed")
