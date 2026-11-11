@@ -338,6 +338,20 @@ def audit(workspace,install):
             'installed_owner_review_pending',
             '37 original model IDs cover 122 registered spawns. 764 native checks, including the original face chosen for each NPC identity. Briton and Norse exports are staged for their own import.')
         result['next_package']='CLIENT-CONNACHT-BRITON-NORSE: import and validate the two outstanding modular race bodies and their original animation sets'
+    path=workspace/'ConnachtNpcCoverageLab/FinalCoverage/installed.json'
+    if path.exists() and json.loads(path.read_text())['installed']:
+        from connacht_npc_template_delivery import verify_installed as verify_templates
+        assert verify_templates(workspace)
+        template=workspace/'ConnachtNpcCoverageLab/audit_server_template_models_installed.json'
+        evidence=json.loads(template.read_text());assert evidence['passed'] and not evidence['database_modified']
+        assert evidence['original_client_mask_counts']=={'covered':1310}
+        replay=workspace/'ConnachtNpcCoverageLab/FinalCoverage/installed_replay.json.native.json'
+        proof=json.loads(replay.read_text());assert proof['passed'] and proof['checks']==252
+        for source in (path,template,replay):inputs[str(source)]=digest(source)
+        row('Connacht persisted NPC model coverage',[],['ProtocolQA/audit_connacht_runtime_models.py','ProtocolQA/connacht_npc_template_delivery.py'],
+            'installed_owner_review_pending',
+            'All 1,310 placed rows resolve to installed body, effect or intentional hidden presentation after server templates and original model flags. The final eight added visible IDs passed 252 checks on installed files. This is a model audit, not a world traversal or equipment acceptance.')
+        result['next_package']='CLIENT-CONNACHT-NPC-EQUIPMENT: verify original equipment on villainous youth and Lucan through their modular Celt bodies'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

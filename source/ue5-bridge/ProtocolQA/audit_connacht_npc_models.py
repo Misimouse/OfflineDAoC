@@ -12,7 +12,7 @@ def read(path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def audit(workspace, install, reference, installed_batch=0, after_figures=False):
+def audit(workspace, install, reference, installed_batch=0, after_figures=False, after_templates=False):
     game = install / "new-client/godot"
     content = workspace / "Client/Plugins/DAoCVisualBridge/Content"
     zone_path = game / "content/zones/zones_index.json"
@@ -98,6 +98,8 @@ def audit(workspace, install, reference, installed_batch=0, after_figures=False)
     name = f"audit_after_batch{installed_batch}.json" if installed_batch else "audit.json"
     if after_figures:
         name = "audit_after_figures.json"
+    if after_templates:
+        name = "audit_after_templates.json"
     target = workspace / "ConnachtNpcCoverageLab" / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(proof, indent=2), encoding="utf-8")
@@ -110,5 +112,6 @@ if __name__ == "__main__":
         parser.add_argument("--" + key, type=Path, required=True)
     parser.add_argument("--after-install", type=int, nargs="?", const=1, default=0)
     parser.add_argument("--after-figures", action="store_true")
+    parser.add_argument("--after-templates", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve(), args.reference.resolve(), args.after_install, args.after_figures)))
+    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve(), args.reference.resolve(), args.after_install, args.after_figures, args.after_templates)))

@@ -32,9 +32,9 @@ def template_models(value, fallback):
     return options or {fallback}
 
 
-def audit(workspace, install):
+def audit(workspace, install, after_templates=False):
     lab = workspace / "ConnachtNpcCoverageLab"
-    audit_path = lab / "audit_after_figures.json"
+    audit_path = lab / ("audit_after_templates.json" if after_templates else "audit_after_figures.json")
     prior = read(audit_path)
     assert prior["passed"] and not prior["database_modified"]
     database = install / "runtime/data/opendaoc.sqlite3.db"
@@ -119,7 +119,7 @@ def audit(workspace, install):
                   counts=dict(coverage), original_client_mask_counts=dict(original_coverage), high_bit_model_options=dict(tagged),
                   unresolved_model_possible_spawns=dict(remaining),
                   template_overrides=overrides, inputs=inputs, database_modified=False)
-    target = lab / "audit_server_template_models.json"
+    target = lab / ("audit_server_template_models_installed.json" if after_templates else "audit_server_template_models.json")
     target.write_text(json.dumps(result, indent=2), encoding="utf-8")
     return {key: result[key] for key in ("passed", "scope", "counts", "original_client_mask_counts", "high_bit_model_options", "unresolved_model_possible_spawns")}
 
@@ -128,5 +128,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     for key in ("workspace", "install"):
         parser.add_argument("--" + key, type=Path, required=True)
+    parser.add_argument("--after-templates", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve())))
+    print(json.dumps(audit(args.workspace.resolve(), args.install.resolve(), args.after_templates)))

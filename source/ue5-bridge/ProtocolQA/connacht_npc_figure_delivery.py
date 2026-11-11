@@ -94,7 +94,8 @@ def verify_installed(workspace):
     plan = root / "delivery-plan.json"
     assert receipt["phase"] == "complete" and receipt["plan_sha256"] == digest(plan)
     from connacht_npc_model_flag_delivery import verify_installed as verify_flags
-    successors = verify_flags(workspace)
+    from connacht_npc_template_delivery import verify_installed as verify_templates
+    successors = compose(verify_flags(workspace), verify_templates(workspace))
     return compose(validate(workspace, read(plan), after=True, successors=successors), successors)
 
 
