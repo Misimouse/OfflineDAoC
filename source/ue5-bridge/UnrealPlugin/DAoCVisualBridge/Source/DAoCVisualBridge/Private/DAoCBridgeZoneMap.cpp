@@ -1,5 +1,6 @@
 #include "DAoCBridgeSubsystem.h"
 #include "DAoCBridgeQuestIndicator.h"
+#include "DAoCBridgeQuestMap.h"
 #include "DAoCBridgeCharacter.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -49,6 +50,18 @@ int32 OnPaint(const FPaintArgs& Args,const FGeometry& G,const FSlateRect& Cull,F
   for(const auto& Mark:QuestMarks())
   {
    const FVector2D Center=Mark.Fraction*G.GetLocalSize();
+   if(Mark.Indicator==0)
+   {
+       TArray<FVector2D> Circle;
+       for(int32 I=0;I<=16;++I)
+       {
+           const double Angle=UE_TWO_PI*I/16.0;
+           Circle.Add(Center+FVector2D(FMath::Cos(Angle),FMath::Sin(Angle))*.5);
+       }
+       FSlateDrawElement::MakeLines(Out,Layer+1,G.ToPaintGeometry(),Circle,ESlateDrawEffect::None,FLinearColor(.08,.05,0),true,7);
+       FSlateDrawElement::MakeLines(Out,Layer+2,G.ToPaintGeometry(),Circle,ESlateDrawEffect::None,FLinearColor(.95,.2,.15),true,5);
+       continue;
+   }
    const FLinearColor Tint=BridgeQuestIndicator::Color(Mark.Indicator);
    TArray<FVector2D> Stem;
    if(Mark.Indicator==2) Stem={Center+FVector2D(-2,-3),Center+FVector2D(0,-5),Center+FVector2D(2,-3),Center+FVector2D(0,-1)};
@@ -61,7 +74,7 @@ int32 OnPaint(const FPaintArgs& Args,const FGeometry& G,const FSlateRect& Cull,F
        FSlateDrawElement::MakeLines(Out,Layer+1,G.ToPaintGeometry(),Dot,ESlateDrawEffect::None,Tint,true,2);
    }
   }
-  ++Layer;
+  Layer+=2;
  }
  auto F=Fraction();if(F.X<0||F.Y<0||F.X>1||F.Y>1)return Layer;
  FVector2D At=F*G.GetLocalSize(),Dir=Forward?Forward().GetSafeNormal():FVector2D(0,-1),Side=FVector2D(-Dir.Y,Dir.X);TArray<FVector2D> Points={At+Dir*7,At-Dir*4+Side*4.5,At-Dir*2,At-Dir*4-Side*4.5,At+Dir*7};
@@ -112,6 +125,11 @@ void UDAoCBridgeSubsystem::RefreshZoneMap(){
         if(Position.Num()!=3)continue;
         const FVector2D Fraction=ZoneMapFraction({Position[0]->AsNumber()*40,Position[2]->AsNumber()*40});
         if(Fraction.X>=0&&Fraction.X<=1&&Fraction.Y>=0&&Fraction.Y<=1)Marks.Add({Fraction,Indicator});
+    }
+    for(const FVector2D& Point:BridgeQuestMap::StepUnits(ClassicState))
+    {
+        const FVector2D Fraction=ZoneMapFraction(Point);
+        if(Fraction.X>=0&&Fraction.X<=1&&Fraction.Y>=0&&Fraction.Y<=1)Marks.Add({Fraction,0});
     }
     return Marks;
  }).Fraction([this](){return ZoneMapFraction({(PlayerPosition.X/100+1364)*40,(PlayerPosition.Y/100+1263)*40});}).Forward([this](){FVector Dir=PlayerPawn?PlayerPawn->GetActorForwardVector():FRotator(0,CameraYaw,0).Vector();return FVector2D(Dir.X,Dir.Y);}).Click([this](FVector2D P){if(ZoneMapRegion<0)return;for(auto V:A(ShownZoneMap(),TEXT("zones"))){auto Z=V->AsObject();FVector2D L(N(Z,TEXT("left"))/256.,N(Z,TEXT("top"))/256.),R=L+FVector2D(N(Z,TEXT("width"))/256.,N(Z,TEXT("height"))/256.);if(P.X>=L.X&&P.Y>=L.Y&&P.X<=R.X&&P.Y<=R.Y){ZoneMapZone=int32(N(Z,TEXT("zone")));ZoneMapRegion=-1;ZoneMapArea=-1;bZoneMapFollow=false;RefreshZoneMap();break;}}}));

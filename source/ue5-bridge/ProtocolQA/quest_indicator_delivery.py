@@ -35,7 +35,8 @@ def pairs(workspace, build):
     return result
 
 
-def validate(workspace, plan, after=False):
+def validate(workspace, plan, after=False, successor_rows=None):
+    successor_rows = successor_rows or {}
     root = workspace / "QuestIndicatorLab"
     rewards = workspace / "QuestRewardsLab"
     assert plan["predecessor_sha256"] == digest(rewards / "installed.json")
@@ -65,7 +66,12 @@ def validate(workspace, plan, after=False):
     for src, dst in expected:
         row = rows[str(dst)]
         assert row["source"] == str(src) and digest(src) == row["after_sha256"]
-        assert current(dst) == row["after_sha256" if after else "before_sha256"], str(dst)
+        expected_hash = row["after_sha256" if after else "before_sha256"]
+        successor = successor_rows.get(str(dst))
+        if successor:
+            assert after and successor["before_sha256"] == expected_hash
+            expected_hash = successor["after_sha256"]
+        assert current(dst) == expected_hash, str(dst)
         if src.name in BINARIES:
             assert row["before_sha256"] == previous["binaries_sha256"][src.name]
             assert row["after_sha256"] == build["binaries_sha256"][src.name]
@@ -107,6 +113,9 @@ def prepare(workspace, native, protocol):
 
 
 def verify_installed(workspace):
+    from inventory_quantity_receipts import compose
+    from quest_map_delivery import verify_installed as verify_map
+
     root = workspace / "QuestIndicatorLab"
     receipt = root / "installed.json"
     if not receipt.is_file():
@@ -116,7 +125,8 @@ def verify_installed(workspace):
         return {}
     path = root / "delivery-plan.json"
     assert result["phase"] == "complete" and result["plan_sha256"] == digest(path)
-    return validate(workspace, read(path), after=True)
+    successors = verify_map(workspace)
+    return compose(validate(workspace, read(path), after=True, successor_rows=successors), successors)
 
 
 def install(workspace):

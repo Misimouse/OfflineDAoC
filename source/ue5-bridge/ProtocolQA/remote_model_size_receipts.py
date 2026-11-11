@@ -39,6 +39,9 @@ def validate(workspace,data,check_target=True,successor_rows=None):
     assert new['source_inputs'][str(source)]==row['after_sha256']
     assert digest(green.parent/'Project/decoded_world_adapter.gd')==row['after_sha256']
     if check_target:
+        if successor_rows is None:
+            from player_trade_receipts import verify as verify_trade
+            _, successor_rows = verify_trade(workspace)
         expected = row['after_sha256']
         successor = (successor_rows or {}).get(row['target'])
         if successor:

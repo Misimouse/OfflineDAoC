@@ -267,6 +267,26 @@ def audit(workspace,install):
         inputs[str(path)]=digest(path)
         row('Original reward quest gap',[],['ProtocolQA/audit_quest_rewards.py'],'source_gap_confirmed_not_installed','Original goals/reward choices and distinct QuestRewardChosen response need migration. Existing basic dialog response is insufficient. Quest UI modernization stays deferred.')
         result['next_package']='CLIENT-QUEST-REWARDS-WIRE: verify strict inactive codec against original ordinary-server offer/choice/save before token-bound state and original UI'
+    from quest_reward_delivery import verify_installed as verify_quest_rewards
+    rewards, reward_rows = verify_quest_rewards(workspace)
+    if rewards:
+        path=workspace/'QuestRewardsLab/installed.json';inputs[str(path)]=digest(path)
+        row('Original reward offers and choices installed',[],['Godot/quest_reward_state.gd','Godot/live_gateway.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeQuestRewards.inl'],
+            'installed_owner_review_pending',
+            'Original offer/choice window and protocol installed. Ordinary offer,decline,exact selected/fixed reward,money,persistence,double-click and full-backpack retry verified. Optional choices use a private fixture because installed Ardee DataQuests have none.')
+        result['next_package']='CLIENT-QUEST-INDICATORS: carry original per-player NPC indicators and quest map objective coordinates into Unreal'
+    if reward_rows.get(str(workspace/'Client/Plugins/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeQuestIndicator.cpp')):
+        path=workspace/'QuestIndicatorLab/installed.json';inputs[str(path)]=digest(path)
+        row('Per-player NPC quest indicators installed',[],['Godot/decoded_world_adapter.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeQuestIndicator.cpp'],
+            'installed_owner_review_pending',
+            'Seven ordinary protocol checks and eight native checks. NPC creation and later effect subtype7 update each viewing player independently. Ground rings and original zone map display the authoritative category; death,logout and removal clear it.')
+        result['next_package']='CLIENT-QUEST-OBJECTIVE-MAP: forward original quest step coordinates and verify projection,completion and logout'
+    if reward_rows.get(str(workspace/'Godot/quest_map_state.gd')):
+        path=workspace/'QuestMapLab/installed.json';inputs[str(path)]=digest(path)
+        row('Original quest objective map installed',[],['Godot/quest_map_state.gd','UnrealPlugin/DAoCVisualBridge/Source/DAoCVisualBridge/Private/DAoCBridgeQuestMap.h'],
+            'installed_owner_review_pending',
+            'Original Evan delivery verifies16 ordinary checks including separate player state,zone filtering,canonical return coordinates,completion,save and logout. Fifteen adapter checks and six native map checks. NPCs were brought nearby only in the private lab; full world travel remains unverified.')
+        result['next_package']='CLIENT-QUEST-ABANDON-MAP-LIFECYCLE: verify original abandonment and character re-entry clear objective markers without leaving stale actions'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

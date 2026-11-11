@@ -4,11 +4,13 @@ from datetime import datetime
 from pathlib import Path
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine):
+def verify(workspace,install,engine,map_markers=False):
     from central_activation_receipts import verify_files
-    assert verify_files(workspace)['player_trade_installed']
+    active=verify_files(workspace)
+    assert active['player_trade_installed']
     qa=Path(__file__).resolve().parent
-    out=workspace/'QuestDeliveryLab/Runners'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True)
+    lab='QuestMapLab' if map_markers else 'QuestDeliveryLab'
+    out=workspace/lab/'Runners'/datetime.now().strftime('%Y%m%d-%H%M%S-%f');out.mkdir(parents=True)
     # Export only the world NPC row from a read-only original database connection.
     with sqlite3.connect((install/'runtime/data/opendaoc.sqlite3.db').as_uri()+'?mode=ro',uri=True) as db:
         db.row_factory=sqlite3.Row;row=db.execute("SELECT * FROM Mob WHERE Name='Meara' AND Region=200 ORDER BY Mob_ID LIMIT 1").fetchone();assert row
@@ -19,6 +21,15 @@ def verify(workspace,install,engine):
     text=text.replace(line,line+"\n  from quest_delivery_case import prepare\n  prepare(db,leader,world,result,Path(os.environ['DAOC_QUEST_TARGET_REFERENCE']))",1)
     start=text.index(' def journal(peer=a):');end=text.index(" result['passed']=all(result['checks'].values())",start)
     text=text[:start]+" from quest_delivery_case import run\n run(a,b,wait,settle,result,checked,D,world,leader)\n"+text[end:]
+    if map_markers:
+        text=text.replace("D=ROOT/'QuestDeliveryLab/RealProtocol'","D=ROOT/'QuestMapLab/RealProtocol'",1)
+        before=" run(a,b,wait,settle,result,checked,D,world,leader)"
+        assert text.count(before)==1
+        text=text.replace(before,before[:-1]+",map_checks=True)",1)
+        anchor=" candidate_root=ROOT/'GuildWindowLab/ServerCandidate'"
+        assert text.count(anchor)==1
+        if not active.get('quest_map_installed'):
+            text=text.replace(anchor,"  from stage_quest_map import stage_gateway\n  stage_gateway(root/'Godot')\n"+anchor,1)
     runner=out/'verify_installed.py';runner.write_text(text)
     original_config=install/'runtime/server/classic-quests.json';assert original_config.is_file()
     original_config_hash=digest(original_config)
@@ -49,10 +60,12 @@ def verify(workspace,install,engine):
         recovery.write_text(json.dumps(dict(phase='restored',files=[dict(target=str(t),backup=str(s) if s else None) for t,s in backups]),indent=2))
         assert digest(original_config)==original_config_hash
         assert verify_files(workspace)['player_trade_installed']
-    result=dict(passed=True,installed_files=True,checks=len(report['checks']),proof=str(proof),private_backend_restored=True,normal_runtime_modified=False)
-    (workspace/'QuestDeliveryLab/verified.json').write_text(json.dumps(result,indent=2));return result
+    installed_files=not map_markers or active.get('quest_map_installed',False)
+    result=dict(passed=True,installed_files=installed_files,candidate_gateway=not installed_files,checks=len(report['checks']),proof=str(proof),private_backend_restored=True,normal_runtime_modified=False)
+    (workspace/lab/'verified.json').write_text(json.dumps(result,indent=2));return result
 
 if __name__=='__main__':
     p=argparse.ArgumentParser()
     for key in ['workspace','install','engine']:p.add_argument('--'+key,type=Path,required=True)
-    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve())))
+    p.add_argument('--map-markers',action='store_true')
+    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.map_markers)))

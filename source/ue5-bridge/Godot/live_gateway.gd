@@ -86,6 +86,7 @@ var door_requests:=0
 var door_events:=0
 var peak_move_speed:=0.0
 var entry_revision:=0
+var quest_map_state = preload("quest_map_state.gd")
 
 func _ready()->void:
     folder=get_script().resource_path.get_base_dir()
@@ -235,6 +236,7 @@ func characters_ready(realm:String)->void:
 
 func enter_character(chosen:Dictionary)->void:
     if entered or server.playing:return
+    quest_map_state.reset(server)
     var task_file:String=folder.path_join("../SourceModels/tasks.json")
     if FileAccess.file_exists(task_file):
         var tasks=JSON.parse_string(FileAccess.get_file_as_string(task_file))
@@ -580,6 +582,7 @@ func request_logout(exit_application:bool=true)->void:
 func return_to_character_menu(data:Dictionary)->void:
     # Invoked only after the original server confirms Quit (saved session).
     world_event("quit",data)
+    quest_map_state.reset(server)
     movement_flags.reset()
     target_tracking.reset()
     adapter.clear_world()
@@ -712,7 +715,9 @@ func _process(_delta:float)->void:
         else:
             quest_rewards.maintain(quest_context(),journal.entries,now)
         transport.snapshot_metadata["quest_rewards"]=quest_rewards.snapshot()
-        transport.snapshot_metadata["classic_ui"]=classic_ui.snapshot()
+        var classic_snapshot:Dictionary=classic_ui.snapshot()
+        classic_snapshot["quest_map_marks"]=quest_map_state.snapshot(server,leaving)
+        transport.snapshot_metadata["classic_ui"]=classic_snapshot
         transport.snapshot_metadata["messages"]=chat_lines.duplicate()
         transport.snapshot_metadata["doors"]=states
         transport.snapshot_metadata["interaction"]=travel_routes.annotate(interaction.snapshot(ground_objects.entities(adapter.entities) if ground_objects!=null else adapter.entities,position),adapter.entities)

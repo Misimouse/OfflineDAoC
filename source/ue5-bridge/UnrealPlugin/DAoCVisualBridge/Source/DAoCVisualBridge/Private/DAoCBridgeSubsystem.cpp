@@ -1,5 +1,6 @@
 #include "DAoCBridgeKeyConfiguration.h"
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeQuestMap.h"
 #include "DAoCBridgeApprovedEnvironment.h"
 #include "DAoCBridgeNpcEffectBody.h"
 #include "Misc/ScopeExit.h"
@@ -643,6 +644,7 @@ void UDAoCBridgeSubsystem::UpdateProfile(double Now,double BridgeMs,double WallM
     if(Elapsed>ProfileEndTime()){WriteReport();UKismetSystemLibrary::QuitGame(GetWorld(),GetWorld()->GetFirstPlayerController(),EQuitPreference::Quit,false);}
 }
 void UDAoCBridgeSubsystem::Tick(float Dt){
+#include "DAoCBridgeQuestMapAcceptance.inl"
 #include "DAoCBridgeQuestIndicatorAcceptance.inl"
     if(TickGroundObjectFrameAcceptance())return;
     if(TickGroundObjectRuntimeAcceptance())return;

@@ -10,8 +10,8 @@ from prepare_combined_expansion_data import digest
 from player_trade_delivery_plan import read
 
 
-def verify(workspace, engine):
-    root = workspace / "QuestIndicatorLab"
+def verify(workspace, engine, lab="QuestIndicatorLab", test="QuestIndicator", checks=8, kinds=("rings", "map")):
+    root = workspace / lab
     build_receipt = root / "native_build.json"
     build = read(build_receipt)
     assert build["passed"]
@@ -47,7 +47,7 @@ def verify(workspace, engine):
     result_file = output / "indicators"
     args = [str(engine / "Binaries/Win64/UnrealEditor-Cmd.exe"), str(project), "/Engine/Maps/Entry",
             "-game", "-DaocBridge", "-DaocBridgeReadOnly", "-DaocBridgePort=19739",
-            "-DaocBridgeQuestIndicatorTest="+str(result_file), "-nosound", "-unattended", "-nosplash",
+            "-DaocBridge"+test+"Test="+str(result_file), "-nosound", "-unattended", "-nosplash",
             "-d3d11", "-RenderOffscreen", "-windowed", "-ResX=1280", "-ResY=720", "-abslog="+str(output/"engine.log")]
     for key, name in [("DisplaySettings","display.ini"), ("KeyConfiguration","keys.ini"), ("ControlsSettings","camera.json"), ("AudioSettings","audio.ini")]:
         args.append("-DaocBridge"+key+"="+str(output / name))
@@ -55,8 +55,8 @@ def verify(workspace, engine):
         run = subprocess.run(args, stdout=log, stderr=subprocess.STDOUT, timeout=180, creationflags=subprocess.CREATE_NO_WINDOW)
     assert run.returncode == 0 and result_file.with_suffix(".json").is_file(), str(output)
     result = read(result_file.with_suffix(".json"))
-    assert result["passed"] and result["checks"] == 8, result
-    captures = {kind: output / f"indicators-{kind}.png" for kind in ("rings", "map")}
+    assert result["passed"] and result["checks"] == checks, result
+    captures = {kind: output / f"indicators-{kind}.png" for kind in kinds}
     assert all(path.is_file() for path in captures.values()), str(output)
     assert digest(normal / "Binaries/Win64" / binary_name) == build["normal_binary_sha256"]
     result.update(build_sha256=digest(build_receipt), screenshots={key:str(value) for key,value in captures.items()})
