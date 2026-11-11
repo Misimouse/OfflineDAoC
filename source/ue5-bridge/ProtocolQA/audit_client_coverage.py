@@ -316,6 +316,16 @@ def audit(workspace,install):
             'installed_owner_review_pending',
             'Six further original models cover148 registered spawns. Verified120 native replay checks and all361 Unreal packages. Model1 has a skeleton and clips but its converted source has no visible geometry.')
         result['next_package']='CLIENT-CONNACHT-NPC-BATCH3: import the remaining original non-figure meshes; keep bodyless and humanoid cases separate'
+    path=workspace/'ConnachtNpcCoverageLab/Batch3/installed.json'
+    if path.exists() and json.loads(path.read_text())['installed']:
+        post=workspace/'ConnachtNpcCoverageLab/audit_after_batch3.json'
+        evidence=json.loads(post.read_text());assert evidence['passed'] and not evidence['database_modified']
+        assert evidence['active_spawns_by_status']['original_mesh_available']==0
+        inputs[str(path)]=digest(path);inputs[str(post)]=digest(post)
+        row('Third Connacht creature model batch installed',[],['ProtocolQA/prepare_connacht_npc_batch.py','ProtocolQA/connacht_npc_batch_delivery.py'],
+            'installed_owner_review_pending',
+            'Sixteen original creature bodies cover 68 registered spawns. Verified 280 native replay checks and 949 Unreal packages. Across the three batches, 25 models cover 409 spawns.')
+        result['next_package']='CLIENT-CONNACHT-NPC-FIGURES: verify original race bodies, appearance and equipped items for the remaining 132 humanoid spawns'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':
