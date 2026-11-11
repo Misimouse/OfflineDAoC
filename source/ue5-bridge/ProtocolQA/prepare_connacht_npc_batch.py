@@ -20,9 +20,9 @@ def glb_json(path):
         return json.loads(stream.read(length))
 
 
-def export(workspace, install, engine):
+def export(workspace, install, engine, batch=1, count=3):
     lab = workspace / "ConnachtNpcCoverageLab"
-    audit_path = lab / "audit.json"
+    audit_path = lab / (f"audit_after_batch{batch-1}.json" if batch > 1 else "audit.json")
     audit = read(audit_path)
     assert audit["passed"] and audit["zone"] == 207 and not audit["database_modified"]
     assert all(digest(Path(path)) == value for path, value in audit["sources"].items())
@@ -31,9 +31,11 @@ def export(workspace, install, engine):
     original = read(metadata)
     catalog_path = workspace / "models.json"
     catalog = read(catalog_path)
-    top = [row for row in audit["models"] if row["active_spawns"] > 0 and row["status"] == "original_mesh_available"][:3]
-    assert len(top) == 3
-    root = lab / "Batch1"
+    top = [row for row in audit["models"] if row["active_spawns"] > 0 and row["status"] == "original_mesh_available"][:count]
+    assert top and count > 0 and batch > 0
+    root = lab / f"Batch{batch}"
+    receipt = root / "installed.json"
+    assert not receipt.is_file() or not read(receipt).get("installed"), "Installed batches retain their verified assets"
     output = root / "SourceModels"
     output.mkdir(parents=True, exist_ok=True)
     original_script = Path(__file__).resolve().parents[1] / "Godot/export_connacht_models.gd"
@@ -76,7 +78,7 @@ def export(workspace, install, engine):
     with log.open("w", encoding="utf-8") as stream:
         result = subprocess.run(args, env=env, stdout=stream, stderr=subprocess.STDOUT,
                                 timeout=180, creationflags=subprocess.CREATE_NO_WINDOW)
-    assert result.returncode == 0 and "BRIDGE_MODEL_EXPORT_PASS count=3" in log.read_text(encoding="utf-8"), str(log)
+    assert result.returncode == 0 and f"BRIDGE_MODEL_EXPORT_PASS count={len(top)}" in log.read_text(encoding="utf-8"), str(log)
     rows_path = output / "exported.json"
     rows = read(rows_path)
     assert [row["id"] for row in rows] == [row["id"] for row in tasks]
@@ -103,5 +105,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     for key in ("workspace", "install", "engine"):
         parser.add_argument("--" + key, type=Path, required=True)
+    parser.add_argument("--batch", type=int, default=1)
+    parser.add_argument("--count", type=int, default=3)
     args = parser.parse_args()
-    print(json.dumps(export(args.workspace.resolve(), args.install.resolve(), args.engine.resolve())))
+    print(json.dumps(export(args.workspace.resolve(), args.install.resolve(), args.engine.resolve(), args.batch, args.count)))

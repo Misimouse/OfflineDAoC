@@ -19,12 +19,13 @@ def snapshot(sequence, rows):
                 seq=sequence, zone_id=207, origin_m=[1364,130,1263], entities=rows)
 
 
-def verify(workspace, engine):
-    root = workspace / "ConnachtNpcCoverageLab/Batch1"
+def verify(workspace, engine, batch=1):
+    assert batch > 0
+    root = workspace / "ConnachtNpcCoverageLab" / f"Batch{batch}"
     export_path = root / "export_verified.json"
     export = read(export_path)
     ids = list(export["models"])
-    assert export["passed"] and len(ids) == 3
+    assert export["passed"] and ids
     assert all(digest(Path(path)) == sha for path, sha in export["inputs"].items())
     assert all(digest(Path(row["file"])) == row["sha256"] for row in export["models"].values())
     assert digest(root / "SourceModels/exported.json") == export["exported_sha256"]
@@ -34,7 +35,7 @@ def verify(workspace, engine):
     normal = workspace / "Client/Plugins/DAoCVisualBridge"
     host = root / "AssetHost"
     plugin = host / "Plugins/DAoCVisualBridge"
-    namespace = "ConnachtNpcBatch1_v01"
+    namespace = f"ConnachtNpcBatch{batch}_v01"
     normal_assets = normal / "Content" / namespace
     assert not normal_assets.exists(), "Batch is already active"
     content = plugin / "Content" / namespace
@@ -53,7 +54,7 @@ def verify(workspace, engine):
         dict(Name=name, Enabled=True) for name in ("DAoCVisualBridge", "PythonScriptPlugin", "EditorScriptingUtilities")
     ])), encoding="utf-8")
     config = root / "import_config.json"
-    config.write_text(json.dumps(dict(catalog=str(catalog), model_ids=ids)), encoding="utf-8")
+    config.write_text(json.dumps(dict(catalog=str(catalog), model_ids=ids, batch=batch)), encoding="utf-8")
     script = Path(__file__).resolve().parents[1] / "import_connacht_missing_unreal.py"
     command = [str(engine / "Binaries/Win64/UnrealEditor-Cmd.exe"), str(project)]
     flags = ["-nullrhi", "-unattended", "-nosound", "-nosplash"]
@@ -96,7 +97,7 @@ def verify(workspace, engine):
                              stdout=log, stderr=subprocess.STDOUT, timeout=150, creationflags=subprocess.CREATE_NO_WINDOW)
     assert run.returncode == 0 and report.is_file(), str(root / "native_engine.log")
     replay = read(report)
-    assert replay["passed"] and replay["native_actor_consumer"] and replay["checks"] >= 60
+    assert replay["passed"] and replay["native_actor_consumer"] and replay["checks"] == 24 + 16 * len(ids)
     errors = [line for line in (root/"native_engine.log").read_text(encoding="utf-8", errors="replace").splitlines()
               if namespace in line and any(word in line for word in ("Failed to load", "Couldn't find", "Can't find file"))]
     assert not errors, errors
@@ -115,5 +116,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     for key in ("workspace", "engine"):
         parser.add_argument("--" + key, type=Path, required=True)
+    parser.add_argument("--batch", type=int, default=1)
     args = parser.parse_args()
-    print(json.dumps(verify(args.workspace.resolve(), args.engine.resolve())))
+    print(json.dumps(verify(args.workspace.resolve(), args.engine.resolve(), args.batch)))

@@ -12,7 +12,7 @@ def read(path):
     return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def audit(workspace, install, reference, after_install=False):
+def audit(workspace, install, reference, installed_batch=0):
     game = install / "new-client/godot"
     content = workspace / "Client/Plugins/DAoCVisualBridge/Content"
     zone_path = game / "content/zones/zones_index.json"
@@ -77,7 +77,10 @@ def audit(workspace, install, reference, after_install=False):
         elif str(original.get("figure", "")).casefold() == "invisible":
             status = "original_invisible"
         elif source and source.is_file():
-            status = "original_figure_available" if race else "original_mesh_available"
+            if race:
+                status = "original_figure_available"
+            else:
+                status = "original_mesh_available" if read(source).get("meshes") else "original_body_missing"
         else:
             status = "original_source_missing"
         models.append(dict(model_id=int(model), active_spawns=active[model], dol_reference_spawns=upstream[model],
@@ -92,7 +95,8 @@ def audit(workspace, install, reference, after_install=False):
                  active_unique_models=len(active), dol_reference_spawn_count=sum(upstream.values()),
                  dol_reference_unique_models=len(upstream), active_spawns_by_status=dict(counts),
                  sources=sources, models=models, database_modified=False)
-    target = workspace / "ConnachtNpcCoverageLab" / ("audit_after_batch1.json" if after_install else "audit.json")
+    name = f"audit_after_batch{installed_batch}.json" if installed_batch else "audit.json"
+    target = workspace / "ConnachtNpcCoverageLab" / name
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(proof, indent=2), encoding="utf-8")
     return {key: value for key, value in proof.items() if key not in ("sources", "models")} | {"proof": str(target)}
@@ -102,6 +106,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     for key in ("workspace", "install", "reference"):
         parser.add_argument("--" + key, type=Path, required=True)
-    parser.add_argument("--after-install", action="store_true")
+    parser.add_argument("--after-install", type=int, nargs="?", const=1, default=0)
     args = parser.parse_args()
     print(json.dumps(audit(args.workspace.resolve(), args.install.resolve(), args.reference.resolve(), args.after_install)))

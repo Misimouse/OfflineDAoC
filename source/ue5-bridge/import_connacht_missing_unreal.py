@@ -13,11 +13,12 @@ if config_path:
     config=json.loads(config_path.read_text(encoding='utf-8'))
     D=config_path.parent
     S=D/'SourceModels'
-    namespace='ConnachtNpcBatch1_v01'
+    batch=int(config.get('batch',1))
+    namespace=f'ConnachtNpcBatch{batch}_v01'
     catalog_path=Path(config['catalog']).resolve()
     candidate_path=D/'candidate_catalog.json'
     expected_ids=config['model_ids']
-    assert D.name=='Batch1' and D.parent.name=='ConnachtNpcCoverageLab'
+    assert batch>0 and D.name==f'Batch{batch}' and D.parent.name=='ConnachtNpcCoverageLab'
     content=(Path(unreal.Paths.project_plugins_dir()).resolve()/'DAoCVisualBridge/Content'/namespace).resolve()
     assert content.is_relative_to(D) and content.is_dir()
 assets=unreal.get_editor_subsystem(unreal.EditorAssetSubsystem);tools=unreal.AssetToolsHelpers.get_asset_tools()
