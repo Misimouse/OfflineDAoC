@@ -4,12 +4,13 @@ from datetime import datetime
 from pathlib import Path
 from prepare_combined_expansion_data import digest
 
-def verify(workspace,install,engine,backend_proof,gateway=False,installed=False,backpack=False):
+def verify(workspace,install,engine,backend_proof,gateway=False,installed=False,backpack=False,markers=False):
     from central_activation_receipts import verify_files
     active=verify_files(workspace)
     assert active['player_trade_installed'] and active['quest_rewards_installed']==installed
     assert not installed or gateway
-    assert not backpack or installed
+    assert not (backpack or markers) or installed
+    assert not (backpack and markers)
     backend=json.loads(backend_proof.read_text());assert backend['passed'] and backend['candidate_dispatch_enabled'] and backend['checks']>=265
     if installed:
         plan=json.loads((workspace/'QuestRewardsLab/delivery-plan.json').read_text())
@@ -41,14 +42,18 @@ def verify(workspace,install,engine,backend_proof,gateway=False,installed=False,
   q=root/'Godot/visual_bridge.gd';staged=q.read_text(encoding='utf-8-sig');assert '["character",' in staged;q.write_text(staged.replace('["character",','["qa_quest_dialog","qa_quest_request","character",',1))
 '''
     if gateway:
-        lab='BackpackProtocol' if backpack else 'InstalledProtocol' if installed else 'GatewayProtocol'
-        case='quest_reward_backpack_case' if backpack else 'quest_reward_gateway_case'
+        lab='IndicatorProtocol' if markers else 'BackpackProtocol' if backpack else 'InstalledProtocol' if installed else 'GatewayProtocol'
+        case='quest_indicator_real_case' if markers else 'quest_reward_backpack_case' if backpack else 'quest_reward_gateway_case'
         text=text.replace('QuestRewardsLab/RealProtocol','QuestRewardsLab/'+lab).replace('from quest_reward_wire_case import','from '+case+' import')
         hook='''
   from stage_quest_reward_gateway import stage_gateway
   stage_gateway(root/'Godot', Path(os.environ['DAOC_BRIDGE_SOURCE_QA']).parent/'Godot/quest_reward_state.gd')
 '''
         if installed:hook=''
+        if markers:hook='''
+  from stage_quest_indicators import stage_markers
+  stage_markers(root/'Godot',telemetry=True)
+'''
     needle=" candidate_root=ROOT/'GuildWindowLab/ServerCandidate'";at=text.index(needle);text=text[:at]+hook+text[at:]
     runner=out/'verify_candidate.py';runner.write_text(text)
     os.environ.update(DAOC_INSTALL=str(install),DAOC_BRIDGE_SOURCE_QA=str(qa),DAOC_QUEST_REWARD_BACKEND_PROOF=str(backend_proof))
@@ -68,7 +73,7 @@ def verify(workspace,install,engine,backend_proof,gateway=False,installed=False,
         recovery.write_text(json.dumps(dict(phase='restored',files=[dict(target=str(t),backup=str(s)) for t,s in backups]),indent=2))
         assert verify_files(workspace)['player_trade_installed']
     result=dict(passed=True,checks=len(report['checks']),proof=str(proof),candidate_backend_proof=str(backend_proof),private_backend_restored=True,normal_runtime_modified=False,installed=installed)
-    name='backpack_verified.json' if backpack else 'installed_protocol_verified.json' if installed else 'gateway_verified.json' if gateway else 'wire_verified.json'
+    name='indicators_verified.json' if markers else 'backpack_verified.json' if backpack else 'installed_protocol_verified.json' if installed else 'gateway_verified.json' if gateway else 'wire_verified.json'
     (workspace/'QuestRewardsLab'/name).write_text(json.dumps(result,indent=2));return result
 
 if __name__=='__main__':
@@ -77,4 +82,5 @@ if __name__=='__main__':
     p.add_argument('--gateway',action='store_true')
     p.add_argument('--installed',action='store_true')
     p.add_argument('--backpack',action='store_true')
-    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.backend_proof.resolve(),a.gateway,a.installed,a.backpack)))
+    p.add_argument('--markers',action='store_true')
+    a=p.parse_args();print(json.dumps(verify(a.workspace.resolve(),a.install.resolve(),a.engine.resolve(),a.backend_proof.resolve(),a.gateway,a.installed,a.backpack,a.markers)))

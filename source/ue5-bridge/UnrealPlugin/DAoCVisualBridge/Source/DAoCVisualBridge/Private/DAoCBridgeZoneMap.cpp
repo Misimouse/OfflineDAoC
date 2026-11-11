@@ -1,4 +1,5 @@
 #include "DAoCBridgeSubsystem.h"
+#include "DAoCBridgeQuestIndicator.h"
 #include "DAoCBridgeCharacter.h"
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
@@ -32,16 +33,41 @@ FReply OnMouseMove(const FGeometry& G,const FPointerEvent& E)override{if(!Draggi
 FReply OnMouseButtonUp(const FGeometry&,const FPointerEvent&)override{if(!Dragging)return FReply::Unhandled();Dragging=false;if(End)End();return FReply::Handled().ReleaseMouseCapture();}
 private:bool Dragging=false;FVector2D Last;TFunction<void(FVector2D)> Move;TFunction<void()> End;
 };
+struct FZoneQuestMark
+{
+    FVector2D Fraction;
+    int32 Indicator;
+};
 class SZoneMapPicture:public SCompoundWidget {
-public:SLATE_BEGIN_ARGS(SZoneMapPicture){}SLATE_ARGUMENT(const FSlateBrush*,Image)SLATE_ARGUMENT(TFunction<FVector2D()>,Fraction)SLATE_ARGUMENT(TFunction<FVector2D()>,Forward)SLATE_ARGUMENT(TFunction<void(FVector2D)>,Click)SLATE_END_ARGS()
-void Construct(const FArguments& Args){Fraction=Args._Fraction;Forward=Args._Forward;Click=Args._Click;ChildSlot[SNew(SImage).Image(Args._Image)];}
+public:SLATE_BEGIN_ARGS(SZoneMapPicture){}SLATE_ARGUMENT(const FSlateBrush*,Image)SLATE_ARGUMENT(TFunction<FVector2D()>,Fraction)SLATE_ARGUMENT(TFunction<FVector2D()>,Forward)SLATE_ARGUMENT(TFunction<TArray<FZoneQuestMark>()>,QuestMarks)SLATE_ARGUMENT(TFunction<void(FVector2D)>,Click)SLATE_END_ARGS()
+void Construct(const FArguments& Args){Fraction=Args._Fraction;Forward=Args._Forward;QuestMarks=Args._QuestMarks;Click=Args._Click;ChildSlot[SNew(SImage).Image(Args._Image)];}
 FReply OnMouseButtonDown(const FGeometry& G,const FPointerEvent& E)override{if(E.GetEffectingButton()==EKeys::LeftMouseButton&&Click){Click(G.AbsoluteToLocal(E.GetScreenSpacePosition())/G.GetLocalSize());return FReply::Handled();}return FReply::Unhandled();}
 int32 OnPaint(const FPaintArgs& Args,const FGeometry& G,const FSlateRect& Cull,FSlateWindowElementList& Out,int32 Layer,const FWidgetStyle& Style,bool Enabled)const override {
- Layer=SCompoundWidget::OnPaint(Args,G,Cull,Out,Layer,Style,Enabled);if(!Fraction)return Layer;auto F=Fraction();if(F.X<0||F.Y<0||F.X>1||F.Y>1)return Layer;
+ Layer=SCompoundWidget::OnPaint(Args,G,Cull,Out,Layer,Style,Enabled);if(!Fraction)return Layer;
+ if(QuestMarks)
+ {
+  for(const auto& Mark:QuestMarks())
+  {
+   const FVector2D Center=Mark.Fraction*G.GetLocalSize();
+   const FLinearColor Tint=BridgeQuestIndicator::Color(Mark.Indicator);
+   TArray<FVector2D> Stem;
+   if(Mark.Indicator==2) Stem={Center+FVector2D(-2,-3),Center+FVector2D(0,-5),Center+FVector2D(2,-3),Center+FVector2D(0,-1)};
+   else if(Mark.Indicator==16) Stem={Center+FVector2D(-3,0),Center+FVector2D(0,-3),Center+FVector2D(3,0),Center+FVector2D(0,3),Center+FVector2D(-3,0)};
+   else Stem={Center+FVector2D(0,-5),Center+FVector2D(0,-1)};
+   FSlateDrawElement::MakeLines(Out,Layer+1,G.ToPaintGeometry(),Stem,ESlateDrawEffect::None,Tint,true,2);
+   if(Mark.Indicator!=16)
+   {
+       const TArray<FVector2D> Dot={Center+FVector2D(0,2),Center+FVector2D(0,3)};
+       FSlateDrawElement::MakeLines(Out,Layer+1,G.ToPaintGeometry(),Dot,ESlateDrawEffect::None,Tint,true,2);
+   }
+  }
+  ++Layer;
+ }
+ auto F=Fraction();if(F.X<0||F.Y<0||F.X>1||F.Y>1)return Layer;
  FVector2D At=F*G.GetLocalSize(),Dir=Forward?Forward().GetSafeNormal():FVector2D(0,-1),Side=FVector2D(-Dir.Y,Dir.X);TArray<FVector2D> Points={At+Dir*7,At-Dir*4+Side*4.5,At-Dir*2,At-Dir*4-Side*4.5,At+Dir*7};
  FSlateDrawElement::MakeLines(Out,++Layer,G.ToPaintGeometry(),Points,ESlateDrawEffect::None,FLinearColor(.1,.04,0),true,3);FSlateDrawElement::MakeLines(Out,++Layer,G.ToPaintGeometry(),Points,ESlateDrawEffect::None,FLinearColor(1,.85,.25),true,1.5);return Layer;
 }
-private:TFunction<FVector2D()> Fraction,Forward;TFunction<void(FVector2D)> Click;
+private:TFunction<FVector2D()> Fraction,Forward;TFunction<TArray<FZoneQuestMark>()> QuestMarks;TFunction<void(FVector2D)> Click;
 };
 }
 void UDAoCBridgeSubsystem::LoadZoneMaps(){if(ZoneMaps.IsValid())return;FString Text;if(FFileHelper::LoadFileToString(Text,*(FPaths::ProjectPluginsDir()/TEXT("DAoCVisualBridge/Content/ClassicUI/maps/maps.json"))))FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text),ZoneMaps);}
@@ -75,7 +101,20 @@ void UDAoCBridgeSubsystem::RefreshZoneMap(){
  }).ButtonContent()[Label(TEXT("Select map"),8)]);
  Add({210,22},{70,18},SNew(SButton).IsFocusable(false).OnClicked_Lambda([this](){bZoneMapFollow=!bZoneMapFollow;if(bZoneMapFollow)FollowZoneMap();RefreshZoneMap();return FReply::Handled();})[Label(bZoneMapFollow?TEXT("Follow: ON"):TEXT("Follow: OFF"),8)]);
  FString Image=S(Shown,TEXT("map"));Image.RemoveFromEnd(TEXT(".png"));const FSlateBrush* Art=Image.IsEmpty()?nullptr:ClassicArt(TEXT("maps/")+Image);
- Add({16,46},{260,260},SNew(SZoneMapPicture).Image(Art).Fraction([this](){return ZoneMapFraction({(PlayerPosition.X/100+1364)*40,(PlayerPosition.Y/100+1263)*40});}).Forward([this](){FVector Dir=PlayerPawn?PlayerPawn->GetActorForwardVector():FRotator(0,CameraYaw,0).Vector();return FVector2D(Dir.X,Dir.Y);}).Click([this](FVector2D P){if(ZoneMapRegion<0)return;for(auto V:A(ShownZoneMap(),TEXT("zones"))){auto Z=V->AsObject();FVector2D L(N(Z,TEXT("left"))/256.,N(Z,TEXT("top"))/256.),R=L+FVector2D(N(Z,TEXT("width"))/256.,N(Z,TEXT("height"))/256.);if(P.X>=L.X&&P.Y>=L.Y&&P.X<=R.X&&P.Y<=R.Y){ZoneMapZone=int32(N(Z,TEXT("zone")));ZoneMapRegion=-1;ZoneMapArea=-1;bZoneMapFollow=false;RefreshZoneMap();break;}}}));
+ Add({16,46},{260,260},SNew(SZoneMapPicture).Image(Art).QuestMarks([this](){
+    TArray<FZoneQuestMark> Marks;
+    for(const auto& Pair:EntityRows)
+    {
+        const auto& Row=Pair.Value;
+        const int32 Indicator=Row?BridgeQuestIndicator::FromRow(*Row):0;
+        if(!Indicator)continue;
+        const auto Position=A(Row,TEXT("position_m"));
+        if(Position.Num()!=3)continue;
+        const FVector2D Fraction=ZoneMapFraction({Position[0]->AsNumber()*40,Position[2]->AsNumber()*40});
+        if(Fraction.X>=0&&Fraction.X<=1&&Fraction.Y>=0&&Fraction.Y<=1)Marks.Add({Fraction,Indicator});
+    }
+    return Marks;
+ }).Fraction([this](){return ZoneMapFraction({(PlayerPosition.X/100+1364)*40,(PlayerPosition.Y/100+1263)*40});}).Forward([this](){FVector Dir=PlayerPawn?PlayerPawn->GetActorForwardVector():FRotator(0,CameraYaw,0).Vector();return FVector2D(Dir.X,Dir.Y);}).Click([this](FVector2D P){if(ZoneMapRegion<0)return;for(auto V:A(ShownZoneMap(),TEXT("zones"))){auto Z=V->AsObject();FVector2D L(N(Z,TEXT("left"))/256.,N(Z,TEXT("top"))/256.),R=L+FVector2D(N(Z,TEXT("width"))/256.,N(Z,TEXT("height"))/256.);if(P.X>=L.X&&P.Y>=L.Y&&P.X<=R.X&&P.Y<=R.Y){ZoneMapZone=int32(N(Z,TEXT("zone")));ZoneMapRegion=-1;ZoneMapArea=-1;bZoneMapFollow=false;RefreshZoneMap();break;}}}));
  if(!Art)Add({30,150},{230,30},Label(TEXT("Map image unavailable")));
  Add({16,313},{260,18},Label(TEXT("M: map   Esc: close   Yellow arrow: you"),8));
  auto Panel=SNew(SZoneMapFrame).Content(C).Move([this](FVector2D Delta){ZoneMapPosition+=Delta;ZoneMapOverlay->Invalidate(EInvalidateWidgetReason::Layout);}).End([this](){SaveClassicLayout();});ZoneMapPanel=Panel;

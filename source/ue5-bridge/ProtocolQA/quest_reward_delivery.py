@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 
 from player_trade_delivery_plan import read
+from inventory_quantity_receipts import compose
 from prepare_combined_expansion_data import digest
 from stage_quest_reward_gateway import stage_gateway
 
@@ -55,7 +56,8 @@ def pairs(workspace, install, codec):
     return result
 
 
-def validate(workspace, install, plan, after=False):
+def validate(workspace, install, plan, after=False, successor_rows=None):
+    successor_rows = successor_rows or {}
     root = workspace / "QuestRewardsLab"
     assert plan["predecessor_sha256"] == digest(workspace / "PlayerTradeGatewayLab/installed.json")
     proof = {key: Path(path) for key, path in plan["proofs"].items()}
@@ -93,11 +95,17 @@ def validate(workspace, install, plan, after=False):
             assert row["after_sha256"] == new_sources[src.relative_to(native_source).as_posix()]
         if src.name in BINARIES:
             assert row["after_sha256"] == build["binaries_sha256"][src.name]
-        assert current(dst) == row["after_sha256" if after else "before_sha256"]
+        successor = successor_rows.get(str(dst))
+        expected_hash = row["after_sha256" if after else "before_sha256"]
+        if successor:
+            assert after and successor["before_sha256"] == expected_hash
+            expected_hash = successor["after_sha256"]
+        assert current(dst) == expected_hash
     for evidence in (codec, gateway):
         for name, sha in evidence["source_inputs"].items():
             row = rows.get(name)
-            assert (row["before_sha256"] if row and after else digest(Path(name))) == sha
+            baseline = row or successor_rows.get(name)
+            assert (baseline["before_sha256"] if baseline and after else digest(Path(name))) == sha
     return rows
 
 
@@ -126,6 +134,8 @@ def prepare(workspace, install, proofs):
 
 
 def verify_installed(workspace):
+    from quest_indicator_delivery import verify_installed as verify_indicators
+
     root = workspace / "QuestRewardsLab"
     receipt = root / "installed.json"
     if not receipt.is_file():
@@ -136,7 +146,9 @@ def verify_installed(workspace):
     path = root / "delivery-plan.json"
     assert result["phase"] == "complete" and result["plan_sha256"] == digest(path)
     plan = read(path)
-    return result, validate(workspace, Path(plan["install_root"]), plan, after=True)
+    successors = verify_indicators(workspace)
+    rows = validate(workspace, Path(plan["install_root"]), plan, after=True, successor_rows=successors)
+    return result, compose(rows, successors)
 
 
 def replace(source, target):
@@ -160,12 +172,20 @@ def install_client(workspace, install):
     plan = read(path)
     assert Path(plan["install_root"]) == install
     validate(workspace, install, plan)
+    return apply_delivery(workspace, root, "QuestRewards", plan, "quest_rewards_installed")
+
+
+def apply_delivery(workspace, root, backup_label, plan, required_feature):
+    from central_activation_receipts import verify_files
+
+    path = root / "delivery-plan.json"
+    receipt = root / "installed.json"
     connections = subprocess.check_output(["netstat", "-ano", "-p", "tcp"], text=True, errors="replace", timeout=15)
     for line in connections.splitlines():
         columns = line.split()
         if len(columns) == 5 and columns[0] == "TCP":
             assert not columns[1].endswith(":19727") or columns[4] == "0", "Normal bridge must be stopped"
-    backup = workspace / "Backups" / ("QuestRewards_" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+    backup = workspace / "Backups" / (backup_label + "_" + datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
     backup.mkdir(parents=True)
     backups = {}
     for index, row in enumerate(plan["files"]):
@@ -189,9 +209,8 @@ def install_client(workspace, install):
             assert digest(target) == row["after_sha256"]
         result = dict(installed=True, phase="complete", files=len(changed), plan_sha256=digest(path), backup=str(backup))
         write(receipt, result)
-        assert verify_installed(workspace)[0]["installed"]
         checks = verify_files(workspace)
-        assert checks["player_trade_installed"] and checks["quest_rewards_installed"]
+        assert checks["player_trade_installed"] and checks["quest_rewards_installed"] and checks[required_feature]
         write(root / "installed_verification.json", checks)
         return result
     except BaseException:

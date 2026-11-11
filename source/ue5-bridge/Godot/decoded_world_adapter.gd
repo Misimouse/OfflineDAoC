@@ -123,6 +123,17 @@ func _player_position(data:Dictionary)->void:
     row.motion.direction_xz=direction;row.motion.speed_mps=absf(float(data.speed)*.025)
     row.motion.source_packet="player_position1127"
 
+# Mirrors ServerWorld._quest_indicator for 1.127 NPCCreate.
+static func _quest_indicator(data: Dictionary) -> int:
+    var flags2 := int(data.get("flags2", 0))
+    var flags3 := int(data.get("flags3", 0))
+    if flags2 & 0x08: return 1
+    if flags2 & 0x10: return 2
+    if flags3 & 0x01: return 4
+    if flags3 & 0x02: return 8
+    if flags3 & 0x20: return 16
+    return 0
+
 func consume_world(kind: String, data: Dictionary) -> void:
     events += 1
     if kind=="player_move":_player_position(data);return
@@ -148,9 +159,18 @@ func consume_world(kind: String, data: Dictionary) -> void:
             row.health=float(health)/100.0;row.health_known=true
             if health==0 and String(row.state)!="dead":
                 row.state="dead";row.speed_mps=0.0;_motion_sample(row,{},"death")
+                row.erase("quest_indicator")
         return
     if not data.has("oid"):return
     var oid:=int(data.oid)
+    if kind == "visual_effect":
+        if int(data.get("effect", -1)) != 7:
+            return
+        var indicator: int = int(data.get("value", -1))
+        var row: Dictionary = entities.get(oid_to_id.get(oid, ""), {})
+        if indicator in [0, 1, 2, 4, 8, 16] and row.get("kind", "") == "npc" and float(row.get("health", 0)) > 0:
+            row["quest_indicator"] = indicator
+        return
     if kind=="equipment":
         if oid<=0 or oid>65535:return
         equipment_revision+=1
@@ -201,6 +221,7 @@ func consume_world(kind: String, data: Dictionary) -> void:
             # Only the create packet owns these bits. Movement flags encode zones.
             # Replace, never merge: a reused OID must not inherit a prior ghost.
             row.npc_visual=NPCVisualFlags.decode(data)
+            row["quest_indicator"] = _quest_indicator(data) if float(row.get("health", 0)) > 0 else 0
         _motion_sample(row,data,kind)
         entities[id]=row;oid_to_id[oid]=id
     elif oid_to_id.has(oid):
@@ -220,6 +241,7 @@ func consume_world(kind: String, data: Dictionary) -> void:
             _update(row,change)
         elif kind == "death":
             row.health=0.0;row.state="dead";row.speed_mps=0.0
+            row.erase("quest_indicator")
             _motion_sample(row,{},kind)
         elif kind == "revive":
             row.health=1.0;row.state="idle";row.speed_mps=0.0
@@ -233,6 +255,7 @@ func _keep_corpse(oid:int,now:int)->void:
     if String(row.get("state",""))!="dead":_motion_sample(row,{},"death")
     row.health=0.0;row.health_known=true;row.state="dead";row.speed_mps=0.0
     row.targetable=false;row.show_name=false;row.combat_active=false
+    row.erase("quest_indicator")
     # Detach the server identity, retaining the same UE actor for death playback.
     oid_to_id.erase(oid)
     if row.has("motion"):

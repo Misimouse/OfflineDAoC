@@ -450,6 +450,8 @@ private:
     TArray<FString> PlayerTradeMoney;
     void ApplyPlayerTrade(TSharedPtr<FJsonObject> State);
     void ApplyQuestRewards(TSharedPtr<FJsonObject> State);
+    void UpdateNpcQuestIndicator(const FString& Id,AActor& Actor,const FJsonObject& Row);
+    TMap<FString,TWeakObjectPtr<class UProceduralMeshComponent>> NpcQuestRings;
     bool TickQuestRewardAcceptance();
     bool CloseQuestRewards(bool Notify=true);
     void RefreshQuestRewards();

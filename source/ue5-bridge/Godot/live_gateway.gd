@@ -375,7 +375,7 @@ func world_event(kind:String,data:Dictionary)->void:
     if kind in ["you","region_changed","quit"]:target_sight_id="";target_sight=false;target_sight_at=0
     interaction.consume(kind,data,adapter.entities,Engine.get_process_frames())
     if kind=="quit":status="Session saved";write_report();return
-    if kind in ["you","npc","player","move","player_move","remove","region_changed","quit","model_change","death","revive","object","combat","equipment"]:adapter.consume_world(kind,data)
+    if kind in ["you","npc","player","move","player_move","remove","region_changed","quit","model_change","death","revive","object","combat","equipment","visual_effect"]:adapter.consume_world(kind,data)
     # Publish the opened container and its inventory revision together. The original
     # Server emits exchange_open before forwarding this inventory world event.
     if kind in ["inventory","market"]:sync_inventory(Time.get_ticks_msec())

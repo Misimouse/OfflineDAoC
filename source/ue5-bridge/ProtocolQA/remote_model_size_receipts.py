@@ -5,7 +5,7 @@ from prepare_combined_expansion_data import digest
 
 def read(path):return json.loads(path.read_text(encoding='utf-8-sig'))
 
-def validate(workspace,data,check_target=True):
+def validate(workspace,data,check_target=True,successor_rows=None):
     root=workspace/'RemoteModelRoundtripLab'
     assert data['installed'] and data['phase']=='complete'
     assert not any(data[k] for k in ['database_modified','native_modified','server_rules_modified','map_modified'])
@@ -38,11 +38,17 @@ def validate(workspace,data,check_target=True):
     assert not new['server_started'] and not new['normal_installation_modified']
     assert new['source_inputs'][str(source)]==row['after_sha256']
     assert digest(green.parent/'Project/decoded_world_adapter.gd')==row['after_sha256']
-    if check_target:assert digest(Path(row['target']))==row['after_sha256']
+    if check_target:
+        expected = row['after_sha256']
+        successor = (successor_rows or {}).get(row['target'])
+        if successor:
+            assert successor['before_sha256'] == expected
+            expected = successor['after_sha256']
+        assert digest(Path(row['target'])) == expected
     return data
 
-def verify(workspace):
+def verify(workspace,successor_rows=None):
     path=workspace/'RemoteModelRoundtripLab/installed.json'
     if not path.exists():return None,{}
     data=read(path)
-    return (validate(workspace,data),{r['target']:r for r in data['files']}) if data.get('installed') else (None,{})
+    return (validate(workspace,data,successor_rows=successor_rows),{r['target']:r for r in data['files']}) if data.get('installed') else (None,{})
