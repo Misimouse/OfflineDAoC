@@ -10,7 +10,9 @@ NATIVE_TARGETS = ['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/W
         'DAoCBridgeKeyboardTurningAcceptance.inl']]
 
 
-def expected_files(workspace,proofs,verify_sources=True):
+def expected_files(workspace,proofs,verify_sources=True,successor_rows=None):
+    from player_trade_receipts import predecessor_hash
+
     lab = workspace/'KeyboardTurningLab'
     build = read(lab/'native_build.json')
     old = read(workspace/'OriginalControlsLab/native_build.json')
@@ -23,7 +25,8 @@ def expected_files(workspace,proofs,verify_sources=True):
     assert tracking['checks'] >= 35 and not tracking['failures']
     assert set(ui['reports']) == {'classic','player'} and all(r['passed'] and r['checks'] >= 68 for r in ui['reports'].values())
     assert vitals['checks'] >= 23 and not vitals['failures']
-    assert all(digest(Path(p)) == sha for p,sha in vitals['source_inputs'].items())
+    catalog_rows = {key: row for key, row in (successor_rows or {}).items() if key == str(workspace/'models.json')}
+    assert all(predecessor_hash(Path(p),catalog_rows) == sha for p,sha in vitals['source_inputs'].items())
     source = Path(__file__).resolve().parents[1]
     plugin = workspace/'Client/Plugins/DAoCVisualBridge'
     candidate = Path(build['project']).parent/'Plugins/DAoCVisualBridge'
@@ -63,7 +66,7 @@ def verify(workspace,successor_rows=None):
     assert digest(predecessor) == data['predecessor_receipt_sha256']
     assert read(predecessor)['native_after_sha256'] == data['native_before_sha256']
     assert data['evidence'] and all(digest(Path(p)) == sha for p,sha in data['evidence'].items())
-    expected = {r['target']:r for r in expected_files(workspace,data['proofs'],verify_sources=False)}
+    expected = {r['target']:r for r in expected_files(workspace,data['proofs'],verify_sources=False,successor_rows=successor_rows)}
     rows = {r['target']:r for r in data['files']}
     assert len(rows)==len(data['files'])==len(expected) and rows.keys()==expected.keys()
     for target,row in rows.items():

@@ -9,7 +9,9 @@ NATIVE_TARGETS = ['Binaries/Win64/UnrealEditor-DAoCVisualBridge.dll','Binaries/W
 GODOT_TARGETS = ['live_gateway.gd','visual_bridge.gd','weapon_sprint_state.gd']
 
 
-def expected_files(workspace,proofs,verify_sources=True):
+def expected_files(workspace,proofs,verify_sources=True,successor_rows=None):
+    from player_trade_receipts import predecessor_hash
+
     lab = workspace/'OriginalControlsLab'
     build = read(lab/'native_build.json')
     old = read(workspace/'NpcEffectsLab/native_build.json')
@@ -27,7 +29,8 @@ def expected_files(workspace,proofs,verify_sources=True):
     assert real['normal_shutdown'] and real['database_restored'] and real['normal_runtime_unchanged']
     vitals = read(Path(proofs['vitals']))
     assert vitals['passed'] and vitals['checks'] >= 23 and vitals['build_receipt_sha256'] == digest(lab/'native_build.json')
-    assert all(digest(Path(p)) == sha for p,sha in vitals['source_inputs'].items())
+    catalog_rows = {key: row for key, row in (successor_rows or {}).items() if key == str(workspace/'models.json')}
+    assert all(predecessor_hash(Path(p),catalog_rows) == sha for p,sha in vitals['source_inputs'].items())
     assert all(real['checks'][k] for k in ['both_players_ordinary','server_ack_druid_twohand',
         'server_ack_druid_standard','server_ack_ranger_ranged','server_ack_ranger_standard',
         'sprint_authorized_server_speed','sprint_off_server_speed','stale_character_cannot_sprint'])
@@ -79,7 +82,7 @@ def verify(workspace,successor_rows=None):
     assert digest(predecessor) == data['predecessor_receipt_sha256']
     assert read(predecessor)['native_after_sha256'] == data['native_before_sha256']
     assert data['evidence'] and all(digest(Path(p)) == sha for p,sha in data['evidence'].items())
-    expected = {r['target']:r for r in expected_files(workspace,data['proofs'],verify_sources=False)}
+    expected = {r['target']:r for r in expected_files(workspace,data['proofs'],verify_sources=False,successor_rows=successor_rows)}
     rows = {r['target']:r for r in data['files']}
     assert len(rows)==len(data['files'])==len(expected) and rows.keys()==expected.keys()
     for target,row in rows.items():

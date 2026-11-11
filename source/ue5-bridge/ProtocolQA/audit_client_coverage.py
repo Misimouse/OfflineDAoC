@@ -296,6 +296,17 @@ def audit(workspace,install):
             'installed_behavior_verified_owner_review_pending',
             'Ten ordinary checks on installed files. Objective hidden in character menu and on alternate character, restored from original server for its owner, then cleared on abandonment without reward or saved completion.')
         result['next_package']='CLIENT-CONNACHT-NPC-MODEL-COVERAGE: measure active Connacht NPC model coverage against original client assets and the DOL reference'
+    path=workspace/'ConnachtNpcCoverageLab/Batch1/installed.json'
+    if path.exists() and json.loads(path.read_text())['installed']:
+        from connacht_npc_batch_delivery import verify_installed as verify_npc_batch
+        assert verify_npc_batch(workspace)
+        post=workspace/'ConnachtNpcCoverageLab/audit_after_batch1.json'
+        evidence=json.loads(post.read_text());assert evidence['passed'] and not evidence['database_modified']
+        inputs[str(path)]=digest(path);inputs[str(post)]=digest(post)
+        row('First Connacht creature models installed',[],['ProtocolQA/audit_connacht_npc_models.py','ProtocolQA/verify_connacht_npc_batch.py'],
+            'installed_owner_review_pending',
+            'Three original textured and animated creature meshes cover193 registered spawns. Verified72 native replay checks and all69 Unreal packages. Pinned DOL spawn tables measured separately as reference for future world expansion.')
+        result['next_package']='CLIENT-CONNACHT-NPC-BATCH2: continue original creature imports for the remaining visible spawns, then validate humanoid variants'
     out=workspace/'Reports/client_coverage';out.mkdir(parents=True,exist_ok=True);(out/'coverage.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
     assert all(digest(Path(p))==sha for p,sha in inputs.items());return dict(passed=True,original_ui_sources=len(surfaces),bridge_actions=len(actions),metadata_fields=len(metadata),next_package=result['next_package'],report=str(out/'coverage.json'))
 if __name__=='__main__':

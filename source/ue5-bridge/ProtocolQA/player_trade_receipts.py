@@ -17,8 +17,10 @@ def verify(workspace):
     assert data['native_before_sha256']==plan['native_before_sha256']
     assert data['native_after_sha256']==plan['native_after_sha256']
     from quest_reward_delivery import verify_installed as verify_quest_rewards
+    from connacht_npc_batch_delivery import verify_installed as verify_npc_batch
     from inventory_quantity_receipts import compose
     _, successor_rows=verify_quest_rewards(workspace)
+    successor_rows=compose(successor_rows,verify_npc_batch(workspace))
     validate_plan(workspace,Path(data['install_root']),plan,after=True,successor_rows=successor_rows)
     guards=workspace/'PlayerTradeGatewayLab/delivery_guards_verified.json'
     assert digest(guards)==data['guards_sha256']
